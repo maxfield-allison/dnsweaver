@@ -1,0 +1,717 @@
+# =============================================================================
+# dnsweaver - GitLab CI/CD Pipeline
+# =============================================================================
+#
+# Pipeline Strategy (GitFlow):
+#   - Validate & test on every push (all branches)
+#   - Build artifacts on develop, main, and tags
+#   - Docker image build on develop, main, and tags
+#   - Deploy: automatic to dev (develop), manual to prod (main/tags)
+#
+# Branch Behavior:
+#   - feature/*  : lint, test only
+#   - bugfix/*   : lint, test only
+#   - develop    : lint, test, build, docker (tag: dev)
+#   - main       : lint, test, build, docker (tag: edge)
+#   - tags       : lint, test, build, docker (tag: vX.Y.Z + latest)
+#
+# Docker Tag Convention:
+#   - :latest  = most recent stable release (version tags only)
+#   - :edge    = bleeding edge from main branch
+#   - :dev     = development/integration (develop branch)
+#   - :vX.Y.Z  = specific version
+#   - :sha-XXX = specific commit
+#
+# GitLab Runner: Docker executor with socket mount
+# Registry: registry.bluewillows.net (GitLab Container Registry)
+# =============================================================================
+
+stages:
+  - validate
+  - test
+  - security
+  - build
+  - docker
+  - deploy
+  - github-release
+
+variables:
+  # Go settings
+  GOPROXY: https://proxy.golang.org,direct
+  GOFLAGS: "-mod=readonly"
+
+  # Build info
+  VERSION: ${CI_COMMIT_SHORT_SHA}
+
+  # Security scanning
+  TRIVY_SEVERITY: "HIGH,CRITICAL"
+  TRIVY_EXIT_CODE: "0"
+
+# =============================================================================
+# Workflow Rules - Control when pipelines run
+# =============================================================================
+
+workflow:
+  rules:
+    # Run on merge requests
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Run on main, develop branches
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    # Run on feature/bugfix/hotfix branches
+    - if: $CI_COMMIT_BRANCH =~ /^(feature|bugfix|hotfix)\//
+    # Run on tags
+    - if: $CI_COMMIT_TAG
+
+# =============================================================================
+# Templates
+# =============================================================================
+
+.go-base:
+  image: golang:1.23-alpine
+  before_script:
+    - apk add --no-cache git
+    - go mod download
+
+# =============================================================================
+# Validate Stage - Runs on all branches
+# =============================================================================
+
+validate:branch-name:
+  stage: validate
+  image: alpine:3.20
+  script:
+    - |
+      BRANCH="$CI_COMMIT_REF_NAME"
+
+      # Skip validation for main, develop, and tags
+      if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "develop" ]; then
+        echo "✅ Protected branch: $BRANCH"
+        exit 0
+      fi
+
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        echo "✅ Tag: $CI_COMMIT_TAG"
+        exit 0
+      fi
+
+      # Validate branch naming
+      if echo "$BRANCH" | grep -qE "^(feature|bugfix|hotfix)/[0-9]+-[a-z0-9-]+$"; then
+        echo "✅ Valid branch name: $BRANCH"
+      else
+        echo "⚠️ Non-standard branch name: $BRANCH"
+        echo "Expected: feature/[issue-number]-description"
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+  allow_failure: true
+
+validate:commit-message:
+  stage: validate
+  image: alpine:3.20
+  script:
+    - |
+      COMMIT_MSG=$(echo "$CI_COMMIT_MESSAGE" | head -1)
+
+      # Skip merge commits
+      if echo "$COMMIT_MSG" | grep -qE "^Merge "; then
+        echo "✅ Merge commit - skipping validation"
+        exit 0
+      fi
+
+      # Conventional commit pattern
+      PATTERN="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9-]+\))?: .{1,}"
+
+      if echo "$COMMIT_MSG" | grep -qE "$PATTERN"; then
+        echo "✅ Valid commit message: $COMMIT_MSG"
+      else
+        echo "⚠️ Non-conventional commit message: $COMMIT_MSG"
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+  allow_failure: true
+
+# =============================================================================
+# Test Stage - Runs on all branches
+# =============================================================================
+
+lint:
+  extends: .go-base
+  stage: test
+  script:
+    - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest || true
+    - golangci-lint run ./... || echo "Linting issues found (non-blocking)"
+  allow_failure: true
+
+test:go:
+  extends: .go-base
+  stage: test
+  script:
+    - go test -v -coverprofile=coverage.out ./...
+    - go tool cover -func=coverage.out
+  coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.out
+    expire_in: 1 week
+
+# =============================================================================
+# Security Stage - Vulnerability scanning
+# =============================================================================
+
+security:trivy:
+  stage: security
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - |
+      echo "🔍 Scanning filesystem for vulnerabilities..."
+      trivy fs --severity ${TRIVY_SEVERITY} --exit-code ${TRIVY_EXIT_CODE} --format table .
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  allow_failure: true
+
+security:govulncheck:
+  extends: .go-base
+  stage: security
+  script:
+    - go install golang.org/x/vuln/cmd/govulncheck@latest
+    - govulncheck ./... || echo "Vulnerabilities found (review above)"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  allow_failure: true
+
+# =============================================================================
+# Build Stage - Only on develop, main, and tags
+# =============================================================================
+
+build:go:
+  extends: .go-base
+  stage: build
+  script:
+    - apk add --no-cache ca-certificates tzdata
+    - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dnsweaver ./cmd/dnsweaver
+    - ls -la dnsweaver
+  artifacts:
+    paths:
+      - dnsweaver
+    expire_in: 1 day
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG
+
+# =============================================================================
+# Docker Stage - Native multi-arch builds
+# =============================================================================
+#
+# Strategy: Build each architecture natively on appropriate runners, then
+# combine into a multi-arch manifest.
+#
+# Jobs:
+#   docker:build:amd64 - Builds on x86_64 runner (docker tag)
+#   docker:build:arm64 - Builds on ARM64 runner (arm64 tag) - Pi5
+#   docker:manifest    - Creates and pushes multi-arch manifest
+# =============================================================================
+
+# Shared variables for docker jobs
+.docker-variables: &docker-variables
+  DOCKER_HOST: unix:///var/run/docker.sock
+  REGISTRY_URL: "registry.bluewillows.net"
+  REGISTRY_IMAGE: "registry.bluewillows.net/root/dnsweaver"
+
+# Shared tag calculation script
+.docker-tag-script: &docker-tag-script
+  - |
+    if [ -n "$CI_COMMIT_TAG" ]; then
+      TAG="$CI_COMMIT_TAG"
+      EXTRA_TAGS="latest"
+    elif [ "$CI_COMMIT_BRANCH" = "main" ]; then
+      TAG="edge"
+      EXTRA_TAGS=""
+    elif [ "$CI_COMMIT_BRANCH" = "develop" ]; then
+      TAG="dev"
+      EXTRA_TAGS=""
+    else
+      TAG="$CI_COMMIT_SHORT_SHA"
+      EXTRA_TAGS=""
+    fi
+    echo "TAG=$TAG" >> build.env
+    echo "EXTRA_TAGS=$EXTRA_TAGS" >> build.env
+
+# Build amd64 image natively on x86_64 runner
+docker:build:amd64:
+  stage: docker
+  image: docker:cli
+  variables:
+    <<: *docker-variables
+  before_script:
+    - docker info
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$REGISTRY_URL"
+  script:
+    - *docker-tag-script
+    - source build.env
+    - |
+      echo "Building amd64 image: $REGISTRY_IMAGE:$TAG-amd64"
+
+      docker build \
+        --platform linux/amd64 \
+        --build-arg VERSION=${CI_COMMIT_SHORT_SHA} \
+        -t $REGISTRY_IMAGE:$TAG-amd64 \
+        -t $REGISTRY_IMAGE:sha-$CI_COMMIT_SHORT_SHA-amd64 \
+        .
+
+      docker push $REGISTRY_IMAGE:$TAG-amd64
+      docker push $REGISTRY_IMAGE:sha-$CI_COMMIT_SHORT_SHA-amd64
+
+      echo "✅ Pushed $REGISTRY_IMAGE:$TAG-amd64"
+  artifacts:
+    reports:
+      dotenv: build.env
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG
+  tags:
+    - docker
+
+# Build arm64 image natively on Pi5 ARM64 runner
+docker:build:arm64:
+  stage: docker
+  image: docker:cli
+  variables:
+    <<: *docker-variables
+  before_script:
+    - docker info
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$REGISTRY_URL"
+  script:
+    - *docker-tag-script
+    - source build.env
+    - |
+      echo "Building arm64 image: $REGISTRY_IMAGE:$TAG-arm64"
+
+      docker build \
+        --platform linux/arm64 \
+        --build-arg VERSION=${CI_COMMIT_SHORT_SHA} \
+        -t $REGISTRY_IMAGE:$TAG-arm64 \
+        -t $REGISTRY_IMAGE:sha-$CI_COMMIT_SHORT_SHA-arm64 \
+        .
+
+      docker push $REGISTRY_IMAGE:$TAG-arm64
+      docker push $REGISTRY_IMAGE:sha-$CI_COMMIT_SHORT_SHA-arm64
+
+      echo "✅ Pushed $REGISTRY_IMAGE:$TAG-arm64"
+  artifacts:
+    reports:
+      dotenv: build.env
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG
+  tags:
+    - arm64
+
+# Create and push multi-arch manifest
+docker:manifest:
+  stage: docker
+  image: docker:cli
+  variables:
+    <<: *docker-variables
+  needs:
+    - job: docker:build:amd64
+      artifacts: true
+    - job: docker:build:arm64
+  before_script:
+    - docker info
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$REGISTRY_URL"
+    - docker buildx create --name manifestbuilder --use 2>/dev/null || docker buildx use manifestbuilder
+  script:
+    - |
+      # Re-calculate tags
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        TAG="$CI_COMMIT_TAG"
+        EXTRA_TAGS="latest"
+      elif [ "$CI_COMMIT_BRANCH" = "main" ]; then
+        TAG="edge"
+        EXTRA_TAGS=""
+      elif [ "$CI_COMMIT_BRANCH" = "develop" ]; then
+        TAG="dev"
+        EXTRA_TAGS=""
+      else
+        TAG="$CI_COMMIT_SHORT_SHA"
+        EXTRA_TAGS=""
+      fi
+
+      echo "Creating multi-arch manifest: $REGISTRY_IMAGE:$TAG"
+
+      # Create and push primary manifest
+      docker buildx imagetools create \
+        -t $REGISTRY_IMAGE:$TAG \
+        $REGISTRY_IMAGE:$TAG-amd64 \
+        $REGISTRY_IMAGE:$TAG-arm64
+
+      # Create SHA-tagged manifest
+      docker buildx imagetools create \
+        -t $REGISTRY_IMAGE:sha-$CI_COMMIT_SHORT_SHA \
+        $REGISTRY_IMAGE:sha-$CI_COMMIT_SHORT_SHA-amd64 \
+        $REGISTRY_IMAGE:sha-$CI_COMMIT_SHORT_SHA-arm64
+
+      # Push extra tags (e.g., latest for release tags)
+      for EXTRA in $EXTRA_TAGS; do
+        docker buildx imagetools create \
+          -t $REGISTRY_IMAGE:$EXTRA \
+          $REGISTRY_IMAGE:$TAG-amd64 \
+          $REGISTRY_IMAGE:$TAG-arm64
+        echo "Pushed manifest $REGISTRY_IMAGE:$EXTRA"
+      done
+
+      echo "✅ Pushed multi-arch manifest: $REGISTRY_IMAGE:$TAG (amd64 + arm64)"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG
+  tags:
+    - docker
+
+# =============================================================================
+# Deploy Stage
+# =============================================================================
+
+deploy:dev:
+  stage: deploy
+  image: alpine:3.20
+  variables:
+    REGISTRY_IMAGE: "registry.bluewillows.net/root/dnsweaver"
+  environment:
+    name: development
+  before_script:
+    - apk add --no-cache openssh-client
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519 || true
+    - chmod 600 ~/.ssh/id_ed25519 || true
+    - ssh-keyscan -p 22 10.1.20.220 >> ~/.ssh/known_hosts 2>/dev/null || true
+  script:
+    - |
+      if [ -z "$SSH_PRIVATE_KEY" ]; then
+        echo "SSH_PRIVATE_KEY not configured. Manual deployment required."
+        echo ""
+        echo "To deploy manually, run:"
+        echo "  ssh swarm-mgr-00 'docker service update --force --image $REGISTRY_IMAGE:dev dnsweaver_dnsweaver'"
+        exit 0
+      fi
+
+      ssh -o StrictHostKeyChecking=no administrator@10.1.20.220 \
+        "docker service update --force --image $REGISTRY_IMAGE:dev dnsweaver_dnsweaver" || \
+        echo "Service not yet deployed - skipping update"
+
+      echo "✅ Deployed $REGISTRY_IMAGE:dev to development"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: manual
+  allow_failure: true
+
+deploy:production:
+  stage: deploy
+  image: alpine:3.20
+  variables:
+    REGISTRY_IMAGE: "registry.bluewillows.net/root/dnsweaver"
+  environment:
+    name: production
+  before_script:
+    - apk add --no-cache openssh-client
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519 || true
+    - chmod 600 ~/.ssh/id_ed25519 || true
+    - ssh-keyscan -p 22 10.1.20.220 >> ~/.ssh/known_hosts 2>/dev/null || true
+  script:
+    - |
+      if [ -z "$SSH_PRIVATE_KEY" ]; then
+        echo "SSH_PRIVATE_KEY not configured. Manual deployment required."
+        echo ""
+        echo "To deploy manually, run:"
+        echo "  ssh swarm-mgr-00 'docker service update --force --image $REGISTRY_IMAGE:latest dnsweaver_dnsweaver'"
+        exit 0
+      fi
+
+      TAG="${CI_COMMIT_TAG:-edge}"
+      ssh -o StrictHostKeyChecking=no administrator@10.1.20.220 \
+        "docker service update --force --image $REGISTRY_IMAGE:$TAG dnsweaver_dnsweaver" || \
+        echo "Service not yet deployed - skipping update"
+
+      echo "✅ Deployed $REGISTRY_IMAGE:$TAG to production"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+    - if: $CI_COMMIT_TAG
+      when: manual
+  allow_failure: true
+
+# =============================================================================
+# GitHub Release Stage - Publish to GitHub Container Registry on version tags
+# =============================================================================
+#
+# This stage runs ONLY on version tags (v*) and:
+#   1. Builds and pushes multi-arch images to ghcr.io AND Docker Hub
+#   2. Creates a GitHub Release with changelog
+#
+# Required CI/CD Variables:
+#   GITHUB_TOKEN       - Personal Access Token with write:packages and repo scopes
+#   GITHUB_USERNAME    - GitHub username (e.g., maxfield-allison)
+#   GITHUB_REPO        - GitHub repository (e.g., maxfield-allison/dnsweaver)
+#   DOCKERHUB_USERNAME - Docker Hub username (e.g., maxamill)
+#   DOCKERHUB_TOKEN    - Docker Hub Personal Access Token
+# =============================================================================
+
+# Shared variables for GitHub jobs
+.github-variables: &github-variables
+  GHCR_REGISTRY: "ghcr.io"
+  DOCKERHUB_REGISTRY: "docker.io"
+
+# Build and push to ghcr.io AND Docker Hub (amd64)
+github:build:amd64:
+  stage: github-release
+  image: docker:cli
+  variables:
+    <<: *github-variables
+  before_script:
+    - docker info
+    - echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_USERNAME" --password-stdin
+    - echo "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin
+  script:
+    - |
+      TAG="$CI_COMMIT_TAG"
+      GHCR_IMAGE="ghcr.io/$GITHUB_REPO"
+      DOCKERHUB_IMAGE="docker.io/$DOCKERHUB_USERNAME/dnsweaver"
+
+      echo "Building amd64 image for GitHub and Docker Hub: $TAG-amd64"
+
+      docker build \
+        --platform linux/amd64 \
+        --build-arg VERSION=$TAG \
+        --label org.opencontainers.image.source=https://github.com/$GITHUB_REPO \
+        -t $GHCR_IMAGE:$TAG-amd64 \
+        -t $DOCKERHUB_IMAGE:$TAG-amd64 \
+        .
+
+      docker push $GHCR_IMAGE:$TAG-amd64
+      docker push $DOCKERHUB_IMAGE:$TAG-amd64
+      echo "✅ Pushed $GHCR_IMAGE:$TAG-amd64"
+      echo "✅ Pushed $DOCKERHUB_IMAGE:$TAG-amd64"
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
+  tags:
+    - docker
+
+# Build and push to ghcr.io AND Docker Hub (arm64)
+github:build:arm64:
+  stage: github-release
+  image: docker:cli
+  variables:
+    <<: *github-variables
+  before_script:
+    - docker info
+    - echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_USERNAME" --password-stdin
+    - echo "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin
+  script:
+    - |
+      TAG="$CI_COMMIT_TAG"
+      GHCR_IMAGE="ghcr.io/$GITHUB_REPO"
+      DOCKERHUB_IMAGE="docker.io/$DOCKERHUB_USERNAME/dnsweaver"
+
+      echo "Building arm64 image for GitHub and Docker Hub: $TAG-arm64"
+
+      docker build \
+        --platform linux/arm64 \
+        --build-arg VERSION=$TAG \
+        --label org.opencontainers.image.source=https://github.com/$GITHUB_REPO \
+        -t $GHCR_IMAGE:$TAG-arm64 \
+        -t $DOCKERHUB_IMAGE:$TAG-arm64 \
+        .
+
+      docker push $GHCR_IMAGE:$TAG-arm64
+      docker push $DOCKERHUB_IMAGE:$TAG-arm64
+      echo "✅ Pushed $GHCR_IMAGE:$TAG-arm64"
+      echo "✅ Pushed $DOCKERHUB_IMAGE:$TAG-arm64"
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
+  tags:
+    - arm64
+
+# Create multi-arch manifest and GitHub Release
+github:release:
+  stage: github-release
+  image: alpine:3.20
+  variables:
+    <<: *github-variables
+    DOCKER_CLI_EXPERIMENTAL: enabled
+  needs:
+    - job: github:build:amd64
+    - job: github:build:arm64
+    - job: github:mirror
+  before_script:
+    - apk add --no-cache curl jq docker-cli
+    - echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_USERNAME" --password-stdin
+    - echo "$DOCKERHUB_TOKEN" | docker login docker.io -u "$DOCKERHUB_USERNAME" --password-stdin
+  script:
+    - |
+      TAG="$CI_COMMIT_TAG"
+      GHCR_IMAGE="ghcr.io/$GITHUB_REPO"
+      DOCKERHUB_IMAGE="docker.io/$DOCKERHUB_USERNAME/dnsweaver"
+
+      echo "Creating multi-arch manifests for GHCR and Docker Hub: $TAG"
+
+      # Create and push GHCR version manifest
+      docker manifest create $GHCR_IMAGE:$TAG \
+        $GHCR_IMAGE:$TAG-amd64 \
+        $GHCR_IMAGE:$TAG-arm64
+      docker manifest push $GHCR_IMAGE:$TAG
+
+      # Create and push GHCR latest manifest
+      docker manifest create $GHCR_IMAGE:latest \
+        $GHCR_IMAGE:$TAG-amd64 \
+        $GHCR_IMAGE:$TAG-arm64
+      docker manifest push $GHCR_IMAGE:latest
+
+      # Create and push Docker Hub version manifest
+      docker manifest create $DOCKERHUB_IMAGE:$TAG \
+        $DOCKERHUB_IMAGE:$TAG-amd64 \
+        $DOCKERHUB_IMAGE:$TAG-arm64
+      docker manifest push $DOCKERHUB_IMAGE:$TAG
+
+      # Create and push Docker Hub latest manifest
+      docker manifest create $DOCKERHUB_IMAGE:latest \
+        $DOCKERHUB_IMAGE:$TAG-amd64 \
+        $DOCKERHUB_IMAGE:$TAG-arm64
+      docker manifest push $DOCKERHUB_IMAGE:latest
+
+      echo "✅ Pushed multi-arch manifests:"
+      echo "   - $GHCR_IMAGE:$TAG and :latest"
+      echo "   - $DOCKERHUB_IMAGE:$TAG and :latest"
+
+      # Create GitHub Release via API
+      echo "Creating GitHub Release for $TAG..."
+
+      RELEASE_BODY=$(cat <<EOF
+      ## Docker Images
+
+      ### Docker Hub
+      \`\`\`bash
+      docker pull $DOCKERHUB_USERNAME/dnsweaver:$TAG
+      \`\`\`
+
+      ### GitHub Container Registry
+      \`\`\`bash
+      docker pull ghcr.io/$GITHUB_REPO:$TAG
+      \`\`\`
+
+      ## What's Changed
+
+      See [README.md](https://github.com/$GITHUB_REPO#readme) for documentation.
+
+      ---
+      *Built from GitLab CI/CD*
+      EOF
+      )
+
+      # Delete existing release if it exists (for re-runs)
+      EXISTING_RELEASE=$(curl -s \
+        -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/$GITHUB_REPO/releases/tags/$TAG")
+
+      RELEASE_ID=$(echo "$EXISTING_RELEASE" | jq -r '.id // empty')
+      if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "null" ]; then
+        echo "Deleting existing release $RELEASE_ID for $TAG..."
+        curl -s -X DELETE \
+          -H "Authorization: token $GITHUB_TOKEN" \
+          "https://api.github.com/repos/$GITHUB_REPO/releases/$RELEASE_ID"
+      fi
+
+      # Create the release
+      RESPONSE=$(curl -s -X POST \
+        -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Accept: application/vnd.github.v3+json" \
+        "https://api.github.com/repos/$GITHUB_REPO/releases" \
+        -d "{
+          \"tag_name\": \"$TAG\",
+          \"name\": \"$TAG\",
+          \"body\": $(echo "$RELEASE_BODY" | jq -Rs .),
+          \"draft\": false,
+          \"prerelease\": false,
+          \"generate_release_notes\": true
+        }")
+
+      RELEASE_URL=$(echo "$RESPONSE" | jq -r '.html_url // empty')
+
+      if [ -n "$RELEASE_URL" ]; then
+        echo "Created GitHub Release: $RELEASE_URL"
+      else
+        echo "Failed to create release. Response:"
+        echo "$RESPONSE" | jq .
+        exit 1
+      fi
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
+  tags:
+    - docker
+
+# Mirror clean source code to GitHub (excludes .gitlab-ci.yml and other private files)
+# This must run BEFORE github:release so the tag exists on GitHub
+github:mirror:
+  stage: github-release
+  image: alpine:3.20
+  needs:
+    - job: github:build:amd64
+    - job: github:build:arm64
+  before_script:
+    - apk add --no-cache git
+  script:
+    - |
+      TAG="$CI_COMMIT_TAG"
+      GITLAB_MODULE="gitlab.bluewillows.net/root/dnsweaver"
+      GITHUB_MODULE="github.com/$GITHUB_REPO"
+
+      echo "Mirroring source code to GitHub (excluding private files)..."
+
+      # Configure git
+      git config --global user.email "ci@gitlab.local"
+      git config --global user.name "GitLab CI"
+      git config --global init.defaultBranch main
+
+      # Create a clean export using git archive (respects .gitattributes export-ignore)
+      mkdir -p /tmp/clean-export
+      git archive HEAD | tar -x -C /tmp/clean-export
+
+      # Rewrite Go module paths from GitLab to GitHub
+      echo "Rewriting module paths: $GITLAB_MODULE -> $GITHUB_MODULE"
+      cd /tmp/clean-export
+      find . -name "*.go" -o -name "go.mod" | xargs sed -i "s|$GITLAB_MODULE|$GITHUB_MODULE|g"
+
+      # Initialize a fresh repo from the clean export
+      git init
+      git add -A
+      git commit -m "Release $TAG"
+
+      # Tag and push to GitHub
+      git tag "$TAG"
+      git remote add github "https://$GITHUB_USERNAME:$GITHUB_TOKEN@github.com/$GITHUB_REPO.git"
+      git push github main --force
+      git push github "$TAG" --force
+
+      echo "Mirrored to GitHub: https://github.com/$GITHUB_REPO"
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
+  tags:
+    - docker

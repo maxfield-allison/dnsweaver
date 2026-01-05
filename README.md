@@ -1,93 +1,178 @@
 # dnsweaver
 
-Automatic DNS record management for Docker containers. Multi-provider, multi-source DNS synchronization for Docker and Docker Swarm.
+[![Release](https://img.shields.io/github/v/release/maxfield-allison/dnsweaver?style=flat-square)](https://github.com/maxfield-allison/dnsweaver/releases)
+[![Docker Pulls](https://img.shields.io/docker/pulls/maxamill/dnsweaver?style=flat-square)](https://hub.docker.com/r/maxamill/dnsweaver)
+[![License](https://img.shields.io/github/license/maxfield-allison/dnsweaver?style=flat-square)](LICENSE)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/maxfield-allison/dnsweaver?style=flat-square)](go.mod)
 
-## Getting started
+**Automatic DNS record management for Docker containers with multi-provider support.**
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+dnsweaver watches Docker events and automatically creates and deletes DNS records for services with reverse proxy labels (Traefik, etc.). Unlike single-provider tools, dnsweaver supports **split-horizon DNS** and **multiple DNS providers** simultaneously.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Features
 
-## Add your files
+- **Multi-Provider Support**: Route different domains to different DNS providers
+- **Split-Horizon DNS**: Internal and external records from the same container labels
+- **Docker and Swarm Support**: Works with standalone Docker and Docker Swarm clusters
+- **Traefik Integration**: Parses `traefik.http.routers.*.rule` labels to extract hostnames
+- **A and CNAME Records**: Full record type support for flexible DNS configuration
+- **Real-time Sync**: Watches Docker events and updates records instantly
+- **Startup Reconciliation**: Full sync on startup ensures consistency
+- **Prometheus Metrics**: Full observability with `dnsweaver_*` metrics
+- **Secrets Support**: Docker secrets compatible via `_FILE` suffix variables
+- **Health Endpoints**: `/health`, `/ready`, and `/metrics` for monitoring
+- **Multi-arch Images**: Supports linux/amd64 and linux/arm64
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## Quick Start
 
+### Docker Hub
+
+```bash
+docker pull maxamill/dnsweaver:latest
 ```
-cd existing_repo
-git remote add origin https://gitlab.bluewillows.net/root/dnsweaver.git
-git branch -M main
-git push -uf origin main
+
+### GitHub Container Registry
+
+```bash
+docker pull ghcr.io/maxfield-allison/dnsweaver:latest
 ```
 
-## Integrate with your tools
+### Docker Compose Example
 
-- [ ] [Set up project integrations](https://gitlab.bluewillows.net/root/dnsweaver/-/settings/integrations)
+```yaml
+services:
+  dnsweaver:
+    image: maxamill/dnsweaver:latest
+    restart: unless-stopped
+    environment:
+      # Provider configuration
+      - DNSWEAVER_PROVIDERS=internal-dns,public-dns
 
-## Collaborate with your team
+      # Internal DNS (Technitium)
+      - DNSWEAVER_INTERNAL_DNS_TYPE=technitium
+      - DNSWEAVER_INTERNAL_DNS_URL=http://dns.internal:5380
+      - DNSWEAVER_INTERNAL_DNS_TOKEN_FILE=/run/secrets/technitium_token
+      - DNSWEAVER_INTERNAL_DNS_ZONE=home.example.com
+      - DNSWEAVER_INTERNAL_DNS_RECORD_TYPE=A
+      - DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
+      - DNSWEAVER_INTERNAL_DNS_DOMAINS=*.home.example.com
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+      # Public DNS (Cloudflare) - coming in v0.2.0
+      # - DNSWEAVER_PUBLIC_DNS_TYPE=cloudflare
+      # - DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
+      # - DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.home.example.com
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    secrets:
+      - technitium_token
+    ports:
+      - "8080:8080"
 
-## Test and Deploy
+secrets:
+  technitium_token:
+    external: true
+```
 
-Use the built-in continuous integration in GitLab.
+### How It Works
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+1. A container starts with a Traefik label:
+   ```yaml
+   labels:
+     - "traefik.http.routers.myapp.rule=Host(`myapp.home.example.com`)"
+   ```
 
-***
+2. dnsweaver matches `myapp.home.example.com` against provider domain patterns
 
-# Editing this README
+3. The matching provider creates the appropriate DNS record:
+   - **A record**: `myapp.home.example.com → 10.0.0.100`
+   - **CNAME record**: `myapp.example.com → example.com`
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+4. When the container stops, the DNS record is automatically deleted
 
-## Suggestions for a good README
+## Configuration
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+All configuration is via environment variables with the `DNSWEAVER_` prefix. Variables support the `_FILE` suffix for Docker secrets.
 
-## Name
-Choose a self-explaining name for your project.
+### Global Settings
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DNSWEAVER_LOG_LEVEL` | `info` | Logging level: debug, info, warn, error |
+| `DNSWEAVER_LOG_FORMAT` | `json` | Log format: json, text |
+| `DNSWEAVER_DRY_RUN` | `false` | Log changes without applying |
+| `DNSWEAVER_DEFAULT_TTL` | `300` | Default TTL for DNS records |
+| `DNSWEAVER_RECONCILE_INTERVAL` | `60s` | Full reconciliation interval |
+| `DNSWEAVER_HEALTH_PORT` | `8080` | Port for health/metrics endpoints |
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### Docker Settings
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DNSWEAVER_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker host |
+| `DNSWEAVER_DOCKER_MODE` | `auto` | Mode: auto, swarm, standalone |
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+### Provider Configuration
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+Providers are configured using an explicit instance model:
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```bash
+# List of provider instance names (order = priority)
+DNSWEAVER_PROVIDERS=internal-dns,public-dns
+
+# Each instance requires TYPE and provider-specific settings
+DNSWEAVER_{NAME}_TYPE=technitium|cloudflare|webhook
+DNSWEAVER_{NAME}_RECORD_TYPE=A|CNAME
+DNSWEAVER_{NAME}_TARGET=<ip-or-hostname>
+DNSWEAVER_{NAME}_DOMAINS=*.example.com
+DNSWEAVER_{NAME}_EXCLUDE_DOMAINS=*.internal.example.com
+DNSWEAVER_{NAME}_TTL=300
+```
+
+### Domain Matching
+
+dnsweaver supports both **glob patterns** (default) and **regex** (opt-in):
+
+**Glob patterns:**
+```bash
+DNSWEAVER_INTERNAL_DNS_DOMAINS=*.home.example.com
+DNSWEAVER_INTERNAL_DNS_EXCLUDE_DOMAINS=admin.home.example.com
+```
+
+**Regex patterns:**
+```bash
+DNSWEAVER_INTERNAL_DNS_DOMAINS_REGEX=^[a-z0-9-]+\.home\.example\.com$
+```
+
+### Provider-Specific Settings
+
+#### Technitium
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DNSWEAVER_{NAME}_URL` | Yes | Technitium API URL |
+| `DNSWEAVER_{NAME}_TOKEN` | Yes* | API token (*or use `_FILE`) |
+| `DNSWEAVER_{NAME}_ZONE` | Yes | DNS zone to manage |
+
+## Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `/health` | Always 200 if process is running |
+| `/ready` | 503 if any provider is unreachable, 200 if healthy |
+| `/metrics` | Prometheus metrics |
 
 ## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+- **v0.1.0**: Technitium provider, Traefik source, multi-provider routing
+- **v0.2.0**: Cloudflare provider, webhook provider
+- **v0.3.0**: Caddy source, nginx-proxy source
+- **v0.4.0**: Pi-hole provider, PowerDNS provider
+- **v1.0.0**: Kubernetes source
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## Related Projects
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+- [technitium-companion](https://github.com/maxfield-allison/technitium-companion) - Single-provider predecessor focused on Technitium
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+MIT License - see [LICENSE](LICENSE) for details

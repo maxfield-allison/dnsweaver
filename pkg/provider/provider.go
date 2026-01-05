@@ -42,7 +42,11 @@ type Provider interface {
 	Delete(ctx context.Context, record Record) error
 }
 
-// TODO: Implement in Issue #3 - Provider interface
-// - Full interface documentation
-// - Error types (ErrNotFound, ErrConflict, etc.)
-// - Record comparison helpers
+// RecordEquals returns true if two records are logically equal.
+// Provider-specific IDs are not compared.
+func RecordEquals(a, b Record) bool {
+	return a.Hostname == b.Hostname &&
+		a.Type == b.Type &&
+		a.Target == b.Target &&
+		a.TTL == b.TTL
+}

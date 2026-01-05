@@ -1,7 +1,7 @@
 # DNSWeaver Architecture Decisions
 
-> **Status:** Pre-implementation alignment document  
-> **Created:** January 5, 2026  
+> **Status:** Pre-implementation alignment document
+> **Created:** January 5, 2026
 > **Authors:** @maxfield-allison
 
 This document captures architectural decisions made before implementation begins. It serves as the source of truth for design choices and their rationale.

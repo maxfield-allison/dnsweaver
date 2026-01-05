@@ -2,9 +2,15 @@ package provider
 
 import (
 	"context"
+	"net"
 
 	"gitlab.bluewillows.net/root/dnsweaver/internal/matcher"
 )
+
+// isIPAddress returns true if the given string is a valid IPv4 or IPv6 address.
+func isIPAddress(s string) bool {
+	return net.ParseIP(s) != nil
+}
 
 // ProviderInstance combines a Provider with its domain matcher and record configuration.
 // This allows each provider instance to have its own:
@@ -122,6 +128,15 @@ func (c *ProviderInstanceConfig) Validate() error {
 	if c.Target == "" {
 		return ErrConfigMissing("target")
 	}
+
+	// Validate target matches record type
+	if c.RecordType == RecordTypeCNAME && isIPAddress(c.Target) {
+		return ErrConfigInvalid("target", c.Target, "CNAME records cannot point to IP addresses; use record_type=A for IP targets")
+	}
+	if c.RecordType == RecordTypeA && !isIPAddress(c.Target) {
+		return ErrConfigInvalid("target", c.Target, "A records must point to IP addresses; use record_type=CNAME for hostname targets")
+	}
+
 	if c.TTL < 1 {
 		return ErrConfigInvalid("ttl", "", "must be at least 1")
 	}

@@ -116,6 +116,63 @@ func (r *Registry) ExtractAll(ctx context.Context, labels map[string]string) Hos
 	return allHostnames
 }
 
+// DiscoverAll queries all sources that support file-based discovery.
+//
+// Each source with SupportsDiscovery() == true is queried via Discover().
+// Results are aggregated in source registration order. Duplicate hostnames
+// are NOT removed to preserve source attribution - use Hostnames.Deduplicate()
+// if needed.
+//
+// If a source returns an error, discovery continues with remaining sources.
+// Errors are logged but not returned to allow partial results.
+func (r *Registry) DiscoverAll(ctx context.Context) Hostnames {
+	r.mu.RLock()
+	sources := make([]Source, len(r.sources))
+	copy(sources, r.sources)
+	r.mu.RUnlock()
+
+	var allHostnames Hostnames
+
+	for _, src := range sources {
+		if !src.SupportsDiscovery() {
+			continue
+		}
+
+		hostnames, err := src.Discover(ctx)
+		if err != nil {
+			r.logger.Warn("source file discovery failed",
+				slog.String("source", src.Name()),
+				slog.String("error", err.Error()),
+			)
+			continue
+		}
+
+		if len(hostnames) > 0 {
+			r.logger.Debug("source discovered hostnames from files",
+				slog.String("source", src.Name()),
+				slog.Int("count", len(hostnames)),
+			)
+			allHostnames = append(allHostnames, hostnames...)
+		}
+	}
+
+	return allHostnames
+}
+
+// DiscoverableSources returns sources that have file discovery configured.
+func (r *Registry) DiscoverableSources() []Source {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var discoverable []Source
+	for _, src := range r.sources {
+		if src.SupportsDiscovery() {
+			discoverable = append(discoverable, src)
+		}
+	}
+	return discoverable
+}
+
 // ExtractFrom queries a specific source by name.
 // Returns an error if the source is not found.
 func (r *Registry) ExtractFrom(ctx context.Context, sourceName string, labels map[string]string) (Hostnames, error) {
@@ -128,4 +185,22 @@ func (r *Registry) ExtractFrom(ctx context.Context, sourceName string, labels ma
 	}
 
 	return src.Extract(ctx, labels)
+}
+
+// DiscoverFrom queries a specific source by name for file-based discovery.
+// Returns an error if the source is not found or doesn't support discovery.
+func (r *Registry) DiscoverFrom(ctx context.Context, sourceName string) (Hostnames, error) {
+	r.mu.RLock()
+	src, exists := r.byName[sourceName]
+	r.mu.RUnlock()
+
+	if !exists {
+		return nil, ErrSourceNotFound(sourceName)
+	}
+
+	if !src.SupportsDiscovery() {
+		return nil, nil // Not an error, just no discovery configured
+	}
+
+	return src.Discover(ctx)
 }

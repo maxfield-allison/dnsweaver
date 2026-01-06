@@ -52,9 +52,12 @@ func (m *mockProvider) Delete(ctx context.Context, record provider.Record) error
 
 // mockSource implements source.Source for testing.
 type mockSource struct {
-	name       string
-	hostnames  []source.Hostname
-	extractErr error
+	name              string
+	hostnames         []source.Hostname
+	extractErr        error
+	discoverHostnames []source.Hostname
+	discoverErr       error
+	supportsDiscovery bool
 }
 
 func (m *mockSource) Name() string { return m.name }
@@ -64,6 +67,17 @@ func (m *mockSource) Extract(ctx context.Context, labels map[string]string) ([]s
 		return nil, m.extractErr
 	}
 	return m.hostnames, nil
+}
+
+func (m *mockSource) Discover(ctx context.Context) ([]source.Hostname, error) {
+	if m.discoverErr != nil {
+		return nil, m.discoverErr
+	}
+	return m.discoverHostnames, nil
+}
+
+func (m *mockSource) SupportsDiscovery() bool {
+	return m.supportsDiscovery
 }
 
 func TestDefaultConfig(t *testing.T) {

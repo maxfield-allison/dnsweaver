@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/source"
 )
@@ -189,5 +190,75 @@ func TestTraefik_RegistryIntegration(t *testing.T) {
 
 	if hostnames[0].Name != "app.example.com" {
 		t.Errorf("Name = %q, want %q", hostnames[0].Name, "app.example.com")
+	}
+}
+
+func TestTraefik_SupportsDiscovery_Default(t *testing.T) {
+	src := New()
+
+	// Without file config, should not support discovery
+	if src.SupportsDiscovery() {
+		t.Error("expected SupportsDiscovery() = false without file config")
+	}
+}
+
+func TestTraefik_SupportsDiscovery_WithConfig(t *testing.T) {
+	src := New(
+		WithFileDiscovery(source.FileDiscoveryConfig{
+			FilePaths: []string{"/rules"},
+		}),
+	)
+
+	if !src.SupportsDiscovery() {
+		t.Error("expected SupportsDiscovery() = true with file paths configured")
+	}
+}
+
+func TestTraefik_Discover_NoConfig(t *testing.T) {
+	src := New()
+
+	hostnames, err := src.Discover(context.Background())
+	if err != nil {
+		t.Fatalf("Discover returned error: %v", err)
+	}
+
+	if hostnames != nil {
+		t.Errorf("expected nil, got %v", hostnames)
+	}
+}
+
+func TestTraefik_FileConfig(t *testing.T) {
+	config := source.FileDiscoveryConfig{
+		FilePaths:    []string{"/rules", "/configs"},
+		FilePattern:  "*.yaml",
+		PollInterval: 30 * time.Second,
+		WatchMethod:  "poll",
+	}
+
+	src := New(WithFileDiscovery(config))
+
+	got := src.FileConfig()
+
+	if len(got.FilePaths) != 2 {
+		t.Errorf("FilePaths = %v, want 2 paths", got.FilePaths)
+	}
+	if got.PollInterval != 30*time.Second {
+		t.Errorf("PollInterval = %v, want 30s", got.PollInterval)
+	}
+}
+
+func TestTraefik_WithFileDiscovery_DefaultPattern(t *testing.T) {
+	src := New(
+		WithFileDiscovery(source.FileDiscoveryConfig{
+			FilePaths: []string{"/rules"},
+			// FilePattern is empty
+		}),
+	)
+
+	config := src.FileConfig()
+
+	// Should apply default pattern
+	if config.FilePattern != DefaultFilePattern {
+		t.Errorf("FilePattern = %q, want %q", config.FilePattern, DefaultFilePattern)
 	}
 }

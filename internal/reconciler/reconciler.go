@@ -164,6 +164,18 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 		}
 	}
 
+	// Step 2b: Discover hostnames from static config files (Traefik YAML, etc.)
+	fileHostnames := r.sources.DiscoverAll(ctx)
+	if len(fileHostnames) > 0 {
+		r.logger.Debug("discovered hostnames from files",
+			slog.Int("count", len(fileHostnames)),
+			slog.Any("hostnames", fileHostnames.Names()),
+		)
+		for _, hostname := range fileHostnames {
+			discoveredHostnames[hostname.Name] = struct{}{}
+		}
+	}
+
 	result.HostnamesDiscovered = len(discoveredHostnames)
 
 	r.logger.Info("hostname extraction complete",

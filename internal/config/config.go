@@ -25,6 +25,10 @@ type Config struct {
 	// ProviderInstances contains configuration for each provider.
 	// The order matches ProviderNames.
 	ProviderInstances []*ProviderInstanceConfig
+
+	// Sources contains configuration for hostname sources (traefik, caddy, etc.).
+	// Includes file-based discovery configuration per source.
+	Sources *SourceConfig
 }
 
 // Load reads configuration from environment variables and validates it.
@@ -53,10 +57,14 @@ func Load() (*Config, error) {
 		instances = append(instances, inst)
 	}
 
+	// Load source configuration (traefik, caddy, etc.)
+	sources := loadSourceConfig()
+
 	cfg := &Config{
 		Global:            global,
 		ProviderNames:     providerNames,
 		ProviderInstances: instances,
+		Sources:           sources,
 	}
 
 	// Run cross-field validation
@@ -119,13 +127,39 @@ func (c *Config) GetProviderInstance(name string) (*ProviderInstanceConfig, bool
 	return nil, false
 }
 
+// GetSourceInstance returns the configuration for a specific source by name.
+func (c *Config) GetSourceInstance(name string) *SourceInstanceConfig {
+	if c.Sources == nil {
+		return nil
+	}
+	return c.Sources.GetSourceInstance(name)
+}
+
+// SourceNames returns the list of configured source names.
+func (c *Config) SourceNames() []string {
+	if c.Sources == nil {
+		return nil
+	}
+	return c.Sources.Names
+}
+
+// HasFileDiscovery returns true if any source has file discovery configured.
+func (c *Config) HasFileDiscovery() bool {
+	return c.Sources != nil && c.Sources.HasFileDiscovery()
+}
+
 // String returns a summary of the configuration (without secrets).
 func (c *Config) String() string {
+	sourceNames := "[]"
+	if c.Sources != nil {
+		sourceNames = fmt.Sprintf("%v", c.Sources.Names)
+	}
 	return fmt.Sprintf(
-		"Config{LogLevel=%s, DryRun=%v, ReconcileInterval=%s, Providers=%v}",
+		"Config{LogLevel=%s, DryRun=%v, ReconcileInterval=%s, Providers=%v, Sources=%s}",
 		c.Global.LogLevel,
 		c.Global.DryRun,
 		c.Global.ReconcileInterval,
 		c.ProviderNames,
+		sourceNames,
 	)
 }

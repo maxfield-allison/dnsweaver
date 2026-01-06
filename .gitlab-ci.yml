@@ -68,7 +68,7 @@ workflow:
 # =============================================================================
 
 .go-base:
-  image: golang:1.23-alpine
+  image: golang:1.24-alpine
   before_script:
     - apk add --no-cache git
     - go mod download

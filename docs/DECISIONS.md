@@ -29,7 +29,7 @@ This document captures architectural decisions made before implementation begins
 | **Go module (public release)** | `github.com/maxfield-allison/dnsweaver` |
 | **Docker images** | `maxamill/dnsweaver` (Docker Hub), `ghcr.io/maxfield-allison/dnsweaver` (GitHub) |
 | **License** | MIT |
-| **Minimum Go version** | 1.23+ |
+| **Minimum Go version** | 1.24+ (Docker SDK requirement) |
 
 ### Rationale
 

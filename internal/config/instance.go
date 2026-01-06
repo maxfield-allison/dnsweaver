@@ -158,6 +158,7 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 		{"ZONE_ID", false, false},
 		{"API_KEY", true, false},
 		{"API_EMAIL", false, false},
+		{"PROXIED", false, false}, // Cloudflare-specific
 	}
 
 	for _, field := range providerFields {

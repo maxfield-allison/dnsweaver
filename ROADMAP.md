@@ -13,7 +13,7 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 | Version | Theme | Key Deliverables |
 |---------|-------|------------------|
 | v0.1.x | Foundation | Technitium, Traefik, Docker/Swarm, TOML support |
-| v0.2.x | Public DNS + Escape Hatch | Cloudflare, Webhook |
+| v0.2.x | Cloudflare + Webhook | Cloudflare, Webhook (custom integrations) |
 | v0.3.x | Labels + nginx | Native dnsweaver labels, nginx source |
 | v0.4.x | Interleaved Providers | Route53, Pi-hole |
 | v0.5.x | Sources + Private DNS | Caddy, dnsmasq, unbound |
@@ -45,11 +45,11 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 
 ---
 
-## v0.2.x - Public DNS + Escape Hatch
+## v0.2.x - Cloudflare + Webhook ✅
 
 **Theme:** First public DNS provider and webhook for custom integrations
 
-### Planned
+### v0.2.0 (Released)
 - Cloudflare DNS provider (#24)
 - Webhook provider for custom integrations (#26)
 

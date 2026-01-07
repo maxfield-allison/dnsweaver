@@ -343,11 +343,14 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action
 					// Still ensure ownership record exists for idempotency
 					if r.config.OwnershipTracking {
 						if ownerErr := inst.CreateOwnershipRecord(ctx, hostname); ownerErr != nil {
-							r.logger.Warn("failed to create ownership record",
-								slog.String("hostname", hostname),
-								slog.String("provider", inst.Name()),
-								slog.String("error", ownerErr.Error()),
-							)
+							// Don't warn if ownership record already exists - that's expected
+							if !provider.IsConflict(ownerErr) {
+								r.logger.Warn("failed to create ownership record",
+									slog.String("hostname", hostname),
+									slog.String("provider", inst.Name()),
+									slog.String("error", ownerErr.Error()),
+								)
+							}
 						}
 					}
 				} else {
@@ -371,11 +374,14 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action
 				// Create ownership TXT record if tracking is enabled
 				if r.config.OwnershipTracking {
 					if ownerErr := inst.CreateOwnershipRecord(ctx, hostname); ownerErr != nil {
-						r.logger.Warn("failed to create ownership record",
-							slog.String("hostname", hostname),
-							slog.String("provider", inst.Name()),
-							slog.String("error", ownerErr.Error()),
-						)
+						// Don't warn if ownership record already exists (race condition)
+						if !provider.IsConflict(ownerErr) {
+							r.logger.Warn("failed to create ownership record",
+								slog.String("hostname", hostname),
+								slog.String("provider", inst.Name()),
+								slog.String("error", ownerErr.Error()),
+							)
+						}
 					} else {
 						r.logger.Debug("created ownership record",
 							slog.String("hostname", hostname),

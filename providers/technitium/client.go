@@ -327,7 +327,9 @@ func (c *Client) GetRecords(ctx context.Context, zone, hostname string) ([]apiRe
 func (c *Client) ListZoneRecords(ctx context.Context, zone string) ([]apiRecord, error) {
 	params := url.Values{}
 	params.Set("zone", zone)
-	// Omit domain to get all records in the zone
+	// The domain parameter is required by the API even with listZone=true
+	// Setting it to the zone apex returns all records in the zone
+	params.Set("domain", zone)
 	params.Set("listZone", "true")
 
 	apiResp, err := c.doRequest(ctx, "/api/zones/records/get", params)

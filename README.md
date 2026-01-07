@@ -14,7 +14,9 @@ dnsweaver watches Docker events and automatically creates and deletes DNS record
 - **Multi-Provider Support**: Route different domains to different DNS providers
 - **Split-Horizon DNS**: Internal and external records from the same container labels
 - **Docker and Swarm Support**: Works with standalone Docker and Docker Swarm clusters
+- **Socket Proxy Compatible**: Connect via TCP to a Docker socket proxy for improved security
 - **Traefik Integration**: Parses `traefik.http.routers.*.rule` labels to extract hostnames
+- **Static File Discovery**: Parse Traefik dynamic configuration files (YAML) for hostnames not defined in container labels
 - **A and CNAME Records**: Full record type support for flexible DNS configuration
 - **Real-time Sync**: Watches Docker events and updates records instantly
 - **Startup Reconciliation**: Full sync on startup ensures consistency
@@ -108,8 +110,19 @@ All configuration is via environment variables with the `DNSWEAVER_` prefix. Var
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DNSWEAVER_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker host |
+| `DNSWEAVER_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker host (socket path or TCP URL) |
 | `DNSWEAVER_DOCKER_MODE` | `auto` | Mode: auto, swarm, standalone |
+
+**Socket Proxy Support**
+
+For improved security, dnsweaver can connect to a Docker socket proxy instead of mounting the Docker socket directly:
+
+```yaml
+environment:
+  - DNSWEAVER_DOCKER_HOST=tcp://socket-proxy:2375
+```
+
+This is the recommended approach for production deployments. The socket proxy only needs to expose read-only access to containers, services, and events.
 
 ### Provider Configuration
 
@@ -153,6 +166,35 @@ DNSWEAVER_INTERNAL_DNS_DOMAINS_REGEX=^[a-z0-9-]+\.home\.example\.com$
 | `DNSWEAVER_{NAME}_TOKEN` | Yes* | API token (*or use `_FILE`) |
 | `DNSWEAVER_{NAME}_ZONE` | Yes | DNS zone to manage |
 
+### Source Configuration
+
+dnsweaver discovers hostnames from Docker container labels by default. Additionally, you can configure **static file discovery** to parse Traefik configuration files for Host rules.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DNSWEAVER_SOURCES` | `traefik` | Comma-separated list of source types |
+| `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS` | *(none)* | Comma-separated paths to Traefik config directories or files |
+| `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATTERN` | `*.yml,*.yaml` | Glob pattern for config files |
+| `DNSWEAVER_SOURCE_TRAEFIK_POLL_INTERVAL` | `60s` | How often to re-scan files for changes |
+| `DNSWEAVER_SOURCE_TRAEFIK_WATCH_METHOD` | `auto` | File watching method: `auto`, `inotify`, `poll` |
+
+**Example: Static File Discovery**
+
+```yaml
+environment:
+  # Enable file discovery by specifying paths
+  - DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS=/traefik/rules,/traefik/dynamic
+  - DNSWEAVER_SOURCE_TRAEFIK_FILE_PATTERN=*.yml
+volumes:
+  # Mount Traefik config directory
+  - /path/to/traefik/rules:/traefik/rules:ro
+```
+
+With file discovery enabled, dnsweaver parses Traefik dynamic configuration files for `Host()` rules and creates DNS records for discovered hostnames. This is useful for:
+- Hostnames defined in static Traefik files (not container labels)
+- External services routed through Traefik
+- Pre-provisioning DNS before container deployment
+
 ## Endpoints
 
 | Endpoint | Description |
@@ -161,17 +203,9 @@ DNSWEAVER_INTERNAL_DNS_DOMAINS_REGEX=^[a-z0-9-]+\.home\.example\.com$
 | `/ready` | 503 if any provider is unreachable, 200 if healthy |
 | `/metrics` | Prometheus metrics |
 
-## Roadmap
-
-- **v0.1.0**: Technitium provider, Traefik source, multi-provider routing
-- **v0.2.0**: Cloudflare provider, webhook provider
-- **v0.3.0**: Caddy source, nginx-proxy source
-- **v0.4.0**: Pi-hole provider, PowerDNS provider
-- **v1.0.0**: Kubernetes source
-
 ## Related Projects
 
-- [technitium-companion](https://github.com/maxfield-allison/technitium-companion) - Single-provider predecessor focused on Technitium
+- [technitium-companion](https://github.com/maxfield-allison/technitium-companion) - **Superseded by dnsweaver.** Single-provider predecessor for Technitium-only setups. dnsweaver provides the same functionality plus multi-provider support, static file discovery, and improved observability.
 
 ## License
 

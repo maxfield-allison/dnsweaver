@@ -324,13 +324,24 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action
 		} else {
 			err := inst.CreateRecord(ctx, hostname)
 			if err != nil {
-				action.Status = StatusFailed
-				action.Error = err.Error()
-				r.logger.Error("failed to create record",
-					slog.String("hostname", hostname),
-					slog.String("provider", inst.Name()),
-					slog.String("error", err.Error()),
-				)
+				// If record already exists, treat as skip (idempotent)
+				if provider.IsConflict(err) {
+					action.Type = ActionSkip
+					action.Status = StatusSkipped
+					action.Error = "record already exists"
+					r.logger.Debug("record already exists, skipping",
+						slog.String("hostname", hostname),
+						slog.String("provider", inst.Name()),
+					)
+				} else {
+					action.Status = StatusFailed
+					action.Error = err.Error()
+					r.logger.Error("failed to create record",
+						slog.String("hostname", hostname),
+						slog.String("provider", inst.Name()),
+						slog.String("error", err.Error()),
+					)
+				}
 			} else {
 				action.Status = StatusSuccess
 				r.logger.Info("created record",

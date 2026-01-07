@@ -10,7 +10,10 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
+
+	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
 )
 
 // apiRecord represents a DNS record from the Technitium API.
@@ -135,6 +138,10 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, params url.Valu
 	}
 
 	if apiResp.Status == "error" {
+		// Detect "record already exists" error and return ErrConflict
+		if strings.Contains(strings.ToLower(apiResp.ErrorMessage), "record already exists") {
+			return nil, fmt.Errorf("API error: %s: %w", apiResp.ErrorMessage, provider.ErrConflict)
+		}
 		return nil, fmt.Errorf("API error: %s", apiResp.ErrorMessage)
 	}
 

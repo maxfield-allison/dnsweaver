@@ -22,7 +22,9 @@ import (
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/source"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/source/traefik"
+	"gitlab.bluewillows.net/root/dnsweaver/providers/cloudflare"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/technitium"
+	"gitlab.bluewillows.net/root/dnsweaver/providers/webhook"
 )
 
 // Version and BuildDate are set via ldflags during build.
@@ -290,7 +292,7 @@ func createTraefikSource(cfg *config.Config, logger *slog.Logger) *traefik.Traef
 }
 
 func registerProviderFactories(registry *provider.Registry) {
-	// Register Technitium provider factory
+	// Register Technitium provider factory (private DNS)
 	registry.RegisterFactory("technitium", func(name string, config map[string]string) (provider.Provider, error) {
 		cfg, err := technitium.LoadConfigFromMap(name, config)
 		if err != nil {
@@ -299,9 +301,11 @@ func registerProviderFactories(registry *provider.Registry) {
 		return technitium.New(name, cfg)
 	})
 
-	// TODO: Register additional provider factories as implemented
-	// registry.RegisterFactory("cloudflare", ...)
-	// registry.RegisterFactory("webhook", ...)
+	// Register Cloudflare provider factory (public DNS)
+	registry.RegisterFactory("cloudflare", cloudflare.Factory())
+
+	// Register Webhook provider factory (custom integrations)
+	registry.RegisterFactory("webhook", webhook.Factory())
 }
 
 func createProviderInstances(registry *provider.Registry, cfg *config.Config) error {

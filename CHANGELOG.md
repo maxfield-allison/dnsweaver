@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Cloudflare DNS Provider**: Public DNS management via Cloudflare API (#24)
+  - API token authentication (scoped tokens supported)
+  - Zone ID or zone name lookup
+  - A and CNAME record support
+  - Proxied/unproxied records with `PROXIED` setting
+  - Rate limiting awareness
+- **Webhook Provider**: Generic webhook for custom DNS integrations (#26)
+  - Configurable endpoints for create/delete operations
+  - Authentication via custom headers
+  - Retry logic with configurable backoff
+  - Enables integration with any DNS provider via HTTP API
+
 ## [0.1.1] - 2026-01-07
 
 ### Added

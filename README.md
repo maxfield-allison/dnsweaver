@@ -173,6 +173,52 @@ DNSWEAVER_INTERNAL_DNS_DOMAINS_REGEX=^[a-z0-9-]+\.home\.example\.com$
 | `DNSWEAVER_{NAME}_TOKEN` | Yes* | API token (*or use `_FILE`) |
 | `DNSWEAVER_{NAME}_ZONE` | Yes | DNS zone to manage |
 
+#### Cloudflare
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DNSWEAVER_{NAME}_TOKEN` | Yes* | Cloudflare API token (*or use `_FILE`) |
+| `DNSWEAVER_{NAME}_ZONE_ID` | Yes** | Zone ID (**or use `ZONE`) |
+| `DNSWEAVER_{NAME}_ZONE` | Yes** | Zone name for lookup (**or use `ZONE_ID`) |
+| `DNSWEAVER_{NAME}_TTL` | No | Record TTL, default 300 (1 = automatic when proxied) |
+| `DNSWEAVER_{NAME}_PROXIED` | No | Enable Cloudflare proxy (default: false) |
+
+**Example:**
+```bash
+DNSWEAVER_PUBLIC_DNS_TYPE=cloudflare
+DNSWEAVER_PUBLIC_DNS_TOKEN_FILE=/run/secrets/cloudflare_token
+DNSWEAVER_PUBLIC_DNS_ZONE=example.com
+DNSWEAVER_PUBLIC_DNS_PROXIED=false
+DNSWEAVER_PUBLIC_DNS_RECORD_TYPE=CNAME
+DNSWEAVER_PUBLIC_DNS_TARGET=proxy.example.com
+DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
+DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.home.example.com
+```
+
+#### Webhook
+
+Generic webhook provider for custom DNS integrations.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DNSWEAVER_{NAME}_URL` | Yes | Base URL for webhook endpoint |
+| `DNSWEAVER_{NAME}_AUTH_HEADER` | No | Custom auth header name (e.g., `Authorization`) |
+| `DNSWEAVER_{NAME}_AUTH_TOKEN` | No* | Auth token value (*or use `_FILE`) |
+| `DNSWEAVER_{NAME}_TIMEOUT` | No | HTTP timeout (default: 30s) |
+| `DNSWEAVER_{NAME}_RETRIES` | No | Retry attempts (default: 3) |
+| `DNSWEAVER_{NAME}_RETRY_DELAY` | No | Base delay between retries (default: 1s) |
+
+**Webhook API Contract:**
+
+dnsweaver sends the following HTTP requests to your webhook:
+
+| Operation | Method | Path | Body |
+|-----------|--------|------|------|
+| Ping | GET | `/ping` | — |
+| List | GET | `/records` | — |
+| Create | POST | `/records` | `{"hostname": "...", "type": "A", "value": "...", "ttl": 300}` |
+| Delete | DELETE | `/records/{hostname}/{type}` | — |
+
 ### Source Configuration
 
 dnsweaver discovers hostnames from Docker container labels by default. Additionally, you can configure **static file discovery** to parse Traefik configuration files for Host rules.

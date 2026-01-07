@@ -218,13 +218,21 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 	if ttl <= 0 {
 		ttl = p.ttl
 	}
+
+	// Determine if record should be proxied
+	// TXT records cannot be proxied by Cloudflare
+	proxied := p.proxied
+	if record.Type == provider.RecordTypeTXT {
+		proxied = false
+	}
+
 	// Cloudflare uses TTL=1 for "automatic" (when proxied)
-	if p.proxied && ttl < 60 {
+	if proxied && ttl < 60 {
 		ttl = 1
 	}
 
 	recordType := string(record.Type)
-	err = p.client.CreateRecord(ctx, zoneID, recordType, record.Hostname, record.Target, ttl, p.proxied)
+	err = p.client.CreateRecord(ctx, zoneID, recordType, record.Hostname, record.Target, ttl, proxied)
 	if err != nil {
 		return fmt.Errorf("creating %s record: %w", recordType, err)
 	}
@@ -235,7 +243,7 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 		slog.String("type", recordType),
 		slog.String("target", record.Target),
 		slog.Int("ttl", ttl),
-		slog.Bool("proxied", p.proxied),
+		slog.Bool("proxied", proxied),
 	)
 
 	return nil

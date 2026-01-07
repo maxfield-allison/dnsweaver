@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
 )
 
 const (
@@ -157,7 +159,13 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 		// Try to parse as API response for error details
 		var apiResp apiResponse
 		if err := json.Unmarshal(respBody, &apiResp); err == nil && len(apiResp.Errors) > 0 {
-			return nil, fmt.Errorf("API error: %s (code: %d)", apiResp.Errors[0].Message, apiResp.Errors[0].Code)
+			errCode := apiResp.Errors[0].Code
+			errMsg := apiResp.Errors[0].Message
+			// Error code 81053 = "record already exists"
+			if errCode == 81053 {
+				return nil, provider.ErrConflict
+			}
+			return nil, fmt.Errorf("API error: %s (code: %d)", errMsg, errCode)
 		}
 		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(respBody))
 	}

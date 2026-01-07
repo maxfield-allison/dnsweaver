@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
@@ -16,6 +15,8 @@ import (
 
 	"gitlab.bluewillows.net/root/dnsweaver/internal/config"
 	"gitlab.bluewillows.net/root/dnsweaver/internal/docker"
+	"gitlab.bluewillows.net/root/dnsweaver/internal/health"
+	"gitlab.bluewillows.net/root/dnsweaver/internal/metrics"
 	"gitlab.bluewillows.net/root/dnsweaver/internal/reconciler"
 	"gitlab.bluewillows.net/root/dnsweaver/internal/watcher"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
@@ -48,6 +49,9 @@ func run() error {
 	// Set up structured logging
 	logger := setupLogger(cfg.LogLevel(), cfg.LogFormat())
 	slog.SetDefault(logger)
+
+	// Set build info metrics
+	metrics.SetBuildInfo(Version, runtime.Version())
 
 	logger.Info("dnsweaver starting",
 		slog.String("version", Version),
@@ -141,8 +145,22 @@ func run() error {
 		)
 	}
 
-	// Start health server
-	healthServer := startHealthServer(cfg.HealthPort(), logger)
+	// Start health server with provider health checkers (#10)
+	healthServer := health.New(cfg.HealthPort(),
+		health.WithLogger(logger),
+	)
+
+	// Register provider health checkers for /ready endpoint
+	for _, inst := range providerRegistry.All() {
+		inst := inst // capture for closure
+		healthServer.RegisterChecker("provider:"+inst.Name(), func(ctx context.Context) error {
+			return inst.Ping(ctx)
+		})
+	}
+
+	if err := healthServer.Start(); err != nil {
+		return fmt.Errorf("starting health server: %w", err)
+	}
 
 	// Start watchers
 	if err := dockerWatcher.Start(ctx); err != nil {
@@ -294,37 +312,6 @@ func createProviderInstances(registry *provider.Registry, cfg *config.Config) er
 		}
 	}
 	return nil
-}
-
-func startHealthServer(port int, logger *slog.Logger) *http.Server {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"healthy"}`))
-	})
-
-	mux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Add provider connectivity checks
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ready"}`))
-	})
-
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: mux,
-	}
-
-	go func() {
-		logger.Info("health server starting", slog.Int("port", port))
-		if err := server.ListenAndServe(); err != http.ErrServerClosed {
-			logger.Error("health server error", slog.String("error", err.Error()))
-		}
-	}()
-
-	return server
 }
 
 // printUsage outputs help information.

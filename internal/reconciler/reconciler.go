@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gitlab.bluewillows.net/root/dnsweaver/internal/docker"
+	"gitlab.bluewillows.net/root/dnsweaver/internal/metrics"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/source"
 )
@@ -205,6 +206,9 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	r.mu.Unlock()
 
 	result.Complete()
+
+	// Record metrics
+	r.recordMetrics(result)
 
 	r.logger.Info("reconciliation complete",
 		slog.Int("created", result.CreatedCount()),
@@ -448,4 +452,49 @@ func (r *Reconciler) KnownHostnames() []string {
 		hostnames = append(hostnames, h)
 	}
 	return hostnames
+}
+
+// recordMetrics records Prometheus metrics from a reconciliation result.
+func (r *Reconciler) recordMetrics(result *Result) {
+	// Record reconciliation outcome
+	status := "success"
+	if result.HasErrors() {
+		status = "error"
+	}
+	metrics.ReconciliationsTotal.WithLabelValues(status).Inc()
+
+	// Record duration
+	metrics.ReconciliationDuration.Observe(result.Duration().Seconds())
+
+	// Record workload and hostname counts
+	metrics.WorkloadsScanned.Set(float64(result.WorkloadsScanned))
+	metrics.HostnamesDiscovered.Set(float64(result.HostnamesDiscovered))
+
+	// Record per-action metrics
+	for _, action := range result.Actions {
+		switch action.Type {
+		case ActionCreate:
+			if action.Status == StatusSuccess {
+				metrics.RecordsCreatedTotal.WithLabelValues(action.Provider).Inc()
+			} else if action.Status == StatusFailed {
+				metrics.RecordsFailedTotal.WithLabelValues(action.Provider, "create").Inc()
+			}
+		case ActionDelete:
+			if action.Status == StatusSuccess {
+				metrics.RecordsDeletedTotal.WithLabelValues(action.Provider).Inc()
+			} else if action.Status == StatusFailed {
+				metrics.RecordsFailedTotal.WithLabelValues(action.Provider, "delete").Inc()
+			}
+		case ActionSkip:
+			reason := "unknown"
+			if action.Error != "" {
+				reason = action.Error
+			}
+			// Normalize common skip reasons
+			if reason == "no matching provider" {
+				reason = "no_provider"
+			}
+			metrics.RecordsSkippedTotal.WithLabelValues(reason).Inc()
+		}
+	}
 }

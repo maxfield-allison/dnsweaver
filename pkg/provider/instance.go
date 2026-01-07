@@ -3,8 +3,10 @@ package provider
 import (
 	"context"
 	"net"
+	"time"
 
 	"gitlab.bluewillows.net/root/dnsweaver/internal/matcher"
+	"gitlab.bluewillows.net/root/dnsweaver/internal/metrics"
 )
 
 // isIPAddress returns true if the given string is a valid IPv4 or IPv6 address.
@@ -61,7 +63,20 @@ func (pi *ProviderInstance) CreateRecord(ctx context.Context, hostname string) e
 		Target:   pi.Target,
 		TTL:      pi.TTL,
 	}
-	return pi.Provider.Create(ctx, record)
+
+	start := time.Now()
+	err := pi.Provider.Create(ctx, record)
+	duration := time.Since(start).Seconds()
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "create", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "create").Observe(duration)
+
+	return err
 }
 
 // DeleteRecord removes the DNS record for the given hostname.
@@ -71,12 +86,40 @@ func (pi *ProviderInstance) DeleteRecord(ctx context.Context, hostname string) e
 		Type:     pi.RecordType,
 		Target:   pi.Target,
 	}
-	return pi.Provider.Delete(ctx, record)
+
+	start := time.Now()
+	err := pi.Provider.Delete(ctx, record)
+	duration := time.Since(start).Seconds()
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete").Observe(duration)
+
+	return err
 }
 
 // Ping checks connectivity to the provider.
 func (pi *ProviderInstance) Ping(ctx context.Context) error {
-	return pi.Provider.Ping(ctx)
+	start := time.Now()
+	err := pi.Provider.Ping(ctx)
+	duration := time.Since(start).Seconds()
+
+	status := "success"
+	healthy := float64(1)
+	if err != nil {
+		status = "error"
+		healthy = 0
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "ping", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "ping").Observe(duration)
+	metrics.ProviderHealthy.WithLabelValues(pi.Name()).Set(healthy)
+
+	return err
 }
 
 // ProviderInstanceConfig holds configuration for creating a ProviderInstance.

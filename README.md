@@ -133,12 +133,19 @@ Providers are configured using an explicit instance model:
 DNSWEAVER_PROVIDERS=internal-dns,public-dns
 
 # Each instance requires TYPE and provider-specific settings
-DNSWEAVER_{NAME}_TYPE=technitium|cloudflare|webhook
-DNSWEAVER_{NAME}_RECORD_TYPE=A|CNAME
-DNSWEAVER_{NAME}_TARGET=<ip-or-hostname>
-DNSWEAVER_{NAME}_DOMAINS=*.example.com
-DNSWEAVER_{NAME}_EXCLUDE_DOMAINS=*.internal.example.com
-DNSWEAVER_{NAME}_TTL=300
+# Note: Dashes in names become underscores in env vars
+# Example: "internal-dns" → DNSWEAVER_INTERNAL_DNS_*
+DNSWEAVER_INTERNAL_DNS_TYPE=technitium
+DNSWEAVER_INTERNAL_DNS_RECORD_TYPE=A
+DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
+DNSWEAVER_INTERNAL_DNS_DOMAINS=*.home.example.com
+DNSWEAVER_INTERNAL_DNS_TTL=300
+
+DNSWEAVER_PUBLIC_DNS_TYPE=cloudflare
+DNSWEAVER_PUBLIC_DNS_RECORD_TYPE=CNAME
+DNSWEAVER_PUBLIC_DNS_TARGET=example.com
+DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
+DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.home.example.com
 ```
 
 ### Domain Matching

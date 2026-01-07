@@ -161,8 +161,9 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 		if err := json.Unmarshal(respBody, &apiResp); err == nil && len(apiResp.Errors) > 0 {
 			errCode := apiResp.Errors[0].Code
 			errMsg := apiResp.Errors[0].Message
-			// Error code 81053 = "record already exists"
-			if errCode == 81053 {
+			// Error code 81053 = "record with that host already exists"
+			// Error code 81058 = "An identical record already exists"
+			if errCode == 81053 || errCode == 81058 {
 				return nil, provider.ErrConflict
 			}
 			return nil, fmt.Errorf("API error: %s (code: %d)", errMsg, errCode)

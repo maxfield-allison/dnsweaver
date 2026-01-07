@@ -102,6 +102,8 @@ All configuration is via environment variables with the `DNSWEAVER_` prefix. Var
 | `DNSWEAVER_LOG_LEVEL` | `info` | Logging level: debug, info, warn, error |
 | `DNSWEAVER_LOG_FORMAT` | `json` | Log format: json, text |
 | `DNSWEAVER_DRY_RUN` | `false` | Log changes without applying |
+| `DNSWEAVER_CLEANUP_ORPHANS` | `true` | Delete DNS records when workloads are removed |
+| `DNSWEAVER_OWNERSHIP_TRACKING` | `true` | Use TXT records to track record ownership (prevents deletion of manually-created records) |
 | `DNSWEAVER_DEFAULT_TTL` | `300` | Default TTL for DNS records |
 | `DNSWEAVER_RECONCILE_INTERVAL` | `60s` | Full reconciliation interval |
 | `DNSWEAVER_HEALTH_PORT` | `8080` | Port for health/metrics endpoints |

@@ -9,7 +9,14 @@ type RecordType string
 const (
 	RecordTypeA     RecordType = "A"
 	RecordTypeCNAME RecordType = "CNAME"
+	RecordTypeTXT   RecordType = "TXT"
 )
+
+// OwnershipPrefix is the default prefix for ownership TXT records.
+const OwnershipPrefix = "_dnsweaver"
+
+// OwnershipValue is the content of ownership TXT records.
+const OwnershipValue = "heritage=dnsweaver"
 
 // Record represents a DNS record to be managed.
 type Record struct {
@@ -49,4 +56,26 @@ func RecordEquals(a, b Record) bool {
 		a.Type == b.Type &&
 		a.Target == b.Target &&
 		a.TTL == b.TTL
+}
+
+// OwnershipRecordName returns the TXT record name for ownership tracking.
+// Example: "app.example.com" -> "_dnsweaver.app.example.com"
+func OwnershipRecordName(hostname string) string {
+	return OwnershipPrefix + "." + hostname
+}
+
+// IsOwnershipRecord returns true if the hostname is an ownership TXT record.
+func IsOwnershipRecord(hostname string) bool {
+	return len(hostname) > len(OwnershipPrefix)+1 &&
+		hostname[:len(OwnershipPrefix)+1] == OwnershipPrefix+"."
+}
+
+// OwnershipRecord creates a TXT record for ownership tracking.
+func OwnershipRecord(hostname string, ttl int) Record {
+	return Record{
+		Hostname: OwnershipRecordName(hostname),
+		Type:     RecordTypeTXT,
+		Target:   OwnershipValue,
+		TTL:      ttl,
+	}
 }

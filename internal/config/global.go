@@ -9,15 +9,17 @@ import (
 
 // Global configuration defaults.
 const (
-	DefaultLogLevel          = "info"
-	DefaultLogFormat         = "json"
-	DefaultDryRun            = false
-	DefaultTTL               = 300
-	DefaultReconcileInterval = 60 * time.Second
-	DefaultHealthPort        = 8080
-	DefaultDockerHost        = "unix:///var/run/docker.sock"
-	DefaultDockerMode        = "auto"
-	DefaultSource            = "traefik"
+	DefaultLogLevel           = "info"
+	DefaultLogFormat          = "json"
+	DefaultDryRun             = false
+	DefaultCleanupOrphans     = true
+	DefaultOwnershipTracking  = true
+	DefaultTTL                = 300
+	DefaultReconcileInterval  = 60 * time.Second
+	DefaultHealthPort         = 8080
+	DefaultDockerHost         = "unix:///var/run/docker.sock"
+	DefaultDockerMode         = "auto"
+	DefaultSource             = "traefik"
 )
 
 // GlobalConfig holds application-wide settings.
@@ -29,6 +31,8 @@ type GlobalConfig struct {
 
 	// Behavior
 	DryRun            bool          // If true, don't make actual DNS changes
+	CleanupOrphans    bool          // If true, delete DNS records for removed workloads
+	OwnershipTracking bool          // If true, use TXT records to track record ownership
 	DefaultTTL        int           // Default TTL for records if not specified per-provider
 	ReconcileInterval time.Duration // How often to reconcile DNS records
 	HealthPort        int           // Port for health/metrics endpoints
@@ -103,6 +107,20 @@ func loadGlobalConfig() (*GlobalConfig, []string) {
 		cfg.DryRun = parseBool(dryRunStr, DefaultDryRun)
 	} else {
 		cfg.DryRun = DefaultDryRun
+	}
+
+	// Parse CLEANUP_ORPHANS
+	if cleanupStr := getEnv("DNSWEAVER_CLEANUP_ORPHANS"); cleanupStr != "" {
+		cfg.CleanupOrphans = parseBool(cleanupStr, DefaultCleanupOrphans)
+	} else {
+		cfg.CleanupOrphans = DefaultCleanupOrphans
+	}
+
+	// Parse OWNERSHIP_TRACKING
+	if ownershipStr := getEnv("DNSWEAVER_OWNERSHIP_TRACKING"); ownershipStr != "" {
+		cfg.OwnershipTracking = parseBool(ownershipStr, DefaultOwnershipTracking)
+	} else {
+		cfg.OwnershipTracking = DefaultOwnershipTracking
 	}
 
 	// Parse DEFAULT_TTL

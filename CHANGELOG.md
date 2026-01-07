@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Authentication via custom headers
   - Retry logic with configurable backoff
   - Enables integration with any DNS provider via HTTP API
+- **TXT Record Ownership Tracking** (#37): Prevents orphan cleanup from deleting manually-created DNS records
+  - Creates `_dnsweaver.{hostname}` TXT records with `heritage=dnsweaver` value
+  - Only deletes records during orphan cleanup if ownership TXT record exists
+  - Configurable via `DNSWEAVER_OWNERSHIP_TRACKING` (default: true)
+  - All providers now support TXT records for ownership markers
+- **Orphan Cleanup Configuration**: New `DNSWEAVER_CLEANUP_ORPHANS` setting (default: true)
 
 ## [0.1.1] - 2026-01-07
 

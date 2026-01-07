@@ -102,6 +102,77 @@ func (pi *ProviderInstance) DeleteRecord(ctx context.Context, hostname string) e
 	return err
 }
 
+// CreateOwnershipRecord creates a TXT record to mark ownership of a hostname.
+// The TXT record is named "_dnsweaver.{hostname}" with value "heritage=dnsweaver".
+func (pi *ProviderInstance) CreateOwnershipRecord(ctx context.Context, hostname string) error {
+	record := OwnershipRecord(hostname, pi.TTL)
+
+	start := time.Now()
+	err := pi.Provider.Create(ctx, record)
+	duration := time.Since(start).Seconds()
+
+	status := "success"
+	if err != nil {
+		// Ignore conflict errors - ownership record may already exist
+		if IsConflict(err) {
+			return nil
+		}
+		status = "error"
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "create_ownership", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "create_ownership").Observe(duration)
+
+	return err
+}
+
+// DeleteOwnershipRecord removes the TXT ownership record for a hostname.
+func (pi *ProviderInstance) DeleteOwnershipRecord(ctx context.Context, hostname string) error {
+	record := OwnershipRecord(hostname, pi.TTL)
+
+	start := time.Now()
+	err := pi.Provider.Delete(ctx, record)
+	duration := time.Since(start).Seconds()
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete_ownership", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete_ownership").Observe(duration)
+
+	return err
+}
+
+// HasOwnershipRecord checks if an ownership TXT record exists for the given hostname.
+func (pi *ProviderInstance) HasOwnershipRecord(ctx context.Context, hostname string) (bool, error) {
+	ownershipName := OwnershipRecordName(hostname)
+
+	start := time.Now()
+	records, err := pi.Provider.List(ctx)
+	duration := time.Since(start).Seconds()
+
+	status := "success"
+	if err != nil {
+		status = "error"
+		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "list", status).Inc()
+		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "list").Observe(duration)
+		return false, err
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "list", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "list").Observe(duration)
+
+	for _, r := range records {
+		if r.Hostname == ownershipName && r.Type == RecordTypeTXT && r.Target == OwnershipValue {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 // Ping checks connectivity to the provider.
 func (pi *ProviderInstance) Ping(ctx context.Context) error {
 	start := time.Now()

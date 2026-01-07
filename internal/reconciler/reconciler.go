@@ -23,6 +23,11 @@ type Config struct {
 	// CleanupOrphans if true, removes DNS records for missing workloads.
 	CleanupOrphans bool
 
+	// OwnershipTracking if true, creates TXT records to mark ownership of DNS records.
+	// When orphan cleanup runs, only records with ownership markers will be deleted.
+	// This prevents deletion of manually-created DNS records.
+	OwnershipTracking bool
+
 	// ReconcileInterval is the interval between full reconciliation runs.
 	// Zero means no automatic reconciliation (only on-demand).
 	ReconcileInterval time.Duration
@@ -37,6 +42,7 @@ func DefaultConfig() Config {
 	return Config{
 		DryRun:            false,
 		CleanupOrphans:    true,
+		OwnershipTracking: true,
 		ReconcileInterval: 60 * time.Second,
 		Enabled:           true,
 	}
@@ -320,6 +326,7 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action
 				slog.String("provider", inst.Name()),
 				slog.String("type", string(inst.RecordType)),
 				slog.String("target", inst.Target),
+				slog.Bool("ownership_tracking", r.config.OwnershipTracking),
 			)
 		} else {
 			err := inst.CreateRecord(ctx, hostname)
@@ -333,6 +340,16 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action
 						slog.String("hostname", hostname),
 						slog.String("provider", inst.Name()),
 					)
+					// Still ensure ownership record exists for idempotency
+					if r.config.OwnershipTracking {
+						if ownerErr := inst.CreateOwnershipRecord(ctx, hostname); ownerErr != nil {
+							r.logger.Warn("failed to create ownership record",
+								slog.String("hostname", hostname),
+								slog.String("provider", inst.Name()),
+								slog.String("error", ownerErr.Error()),
+							)
+						}
+					}
 				} else {
 					action.Status = StatusFailed
 					action.Error = err.Error()
@@ -350,6 +367,22 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action
 					slog.String("type", string(inst.RecordType)),
 					slog.String("target", inst.Target),
 				)
+
+				// Create ownership TXT record if tracking is enabled
+				if r.config.OwnershipTracking {
+					if ownerErr := inst.CreateOwnershipRecord(ctx, hostname); ownerErr != nil {
+						r.logger.Warn("failed to create ownership record",
+							slog.String("hostname", hostname),
+							slog.String("provider", inst.Name()),
+							slog.String("error", ownerErr.Error()),
+						)
+					} else {
+						r.logger.Debug("created ownership record",
+							slog.String("hostname", hostname),
+							slog.String("provider", inst.Name()),
+						)
+					}
+				}
 			}
 		}
 
@@ -360,6 +393,7 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action
 }
 
 // deleteRecord removes DNS records for a hostname from all matching providers.
+// Also deletes ownership TXT records if ownership tracking is enabled.
 func (r *Reconciler) deleteRecord(ctx context.Context, hostname string) []Action {
 	var actions []Action
 
@@ -379,6 +413,7 @@ func (r *Reconciler) deleteRecord(ctx context.Context, hostname string) []Action
 			r.logger.Info("would delete record (dry-run)",
 				slog.String("hostname", hostname),
 				slog.String("provider", inst.Name()),
+				slog.Bool("ownership_tracking", r.config.OwnershipTracking),
 			)
 		} else {
 			err := inst.DeleteRecord(ctx, hostname)
@@ -393,6 +428,113 @@ func (r *Reconciler) deleteRecord(ctx context.Context, hostname string) []Action
 			} else {
 				action.Status = StatusSuccess
 				r.logger.Info("deleted record",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+				)
+
+				// Also delete ownership TXT record if tracking is enabled
+				if r.config.OwnershipTracking {
+					if ownerErr := inst.DeleteOwnershipRecord(ctx, hostname); ownerErr != nil {
+						r.logger.Warn("failed to delete ownership record",
+							slog.String("hostname", hostname),
+							slog.String("provider", inst.Name()),
+							slog.String("error", ownerErr.Error()),
+						)
+					} else {
+						r.logger.Debug("deleted ownership record",
+							slog.String("hostname", hostname),
+							slog.String("provider", inst.Name()),
+						)
+					}
+				}
+			}
+		}
+
+		actions = append(actions, action)
+	}
+
+	return actions
+}
+
+// deleteRecordWithOwnershipCheck removes DNS records only if we own them (have ownership TXT record).
+// This prevents deletion of manually-created DNS records during orphan cleanup.
+func (r *Reconciler) deleteRecordWithOwnershipCheck(ctx context.Context, hostname string) []Action {
+	var actions []Action
+
+	matchingProviders := r.providers.MatchingProviders(hostname)
+
+	for _, inst := range matchingProviders {
+		action := Action{
+			Type:       ActionDelete,
+			Provider:   inst.Name(),
+			Hostname:   hostname,
+			RecordType: string(inst.RecordType),
+			Target:     inst.Target,
+		}
+
+		if r.config.DryRun {
+			action.Status = StatusSuccess
+			r.logger.Info("would delete record if owned (dry-run)",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+			)
+			actions = append(actions, action)
+			continue
+		}
+
+		// Check if we own this record
+		hasOwnership, err := inst.HasOwnershipRecord(ctx, hostname)
+		if err != nil {
+			r.logger.Warn("failed to check ownership record, skipping deletion",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+				slog.String("error", err.Error()),
+			)
+			action.Type = ActionSkip
+			action.Status = StatusSkipped
+			action.Error = "failed to check ownership: " + err.Error()
+			actions = append(actions, action)
+			continue
+		}
+
+		if !hasOwnership {
+			r.logger.Info("skipping orphan deletion - no ownership record (manually created?)",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+			)
+			action.Type = ActionSkip
+			action.Status = StatusSkipped
+			action.Error = "no ownership record - may be manually created"
+			actions = append(actions, action)
+			continue
+		}
+
+		// We own this record, safe to delete
+		err = inst.DeleteRecord(ctx, hostname)
+		if err != nil {
+			action.Status = StatusFailed
+			action.Error = err.Error()
+			r.logger.Error("failed to delete owned record",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+				slog.String("error", err.Error()),
+			)
+		} else {
+			action.Status = StatusSuccess
+			r.logger.Info("deleted owned record",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+			)
+
+			// Also delete ownership TXT record
+			if ownerErr := inst.DeleteOwnershipRecord(ctx, hostname); ownerErr != nil {
+				r.logger.Warn("failed to delete ownership record",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("error", ownerErr.Error()),
+				)
+			} else {
+				r.logger.Debug("deleted ownership record",
 					slog.String("hostname", hostname),
 					slog.String("provider", inst.Name()),
 				)
@@ -423,8 +565,14 @@ func (r *Reconciler) cleanupOrphans(ctx context.Context, currentHostnames map[st
 				slog.String("hostname", hostname),
 			)
 
-			deleteActions := r.deleteRecord(ctx, hostname)
-			actions = append(actions, deleteActions...)
+			// If ownership tracking is enabled, only delete if we own the record
+			if r.config.OwnershipTracking {
+				deleteActions := r.deleteRecordWithOwnershipCheck(ctx, hostname)
+				actions = append(actions, deleteActions...)
+			} else {
+				deleteActions := r.deleteRecord(ctx, hostname)
+				actions = append(actions, deleteActions...)
+			}
 		}
 	}
 

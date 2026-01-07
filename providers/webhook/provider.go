@@ -139,9 +139,17 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 
 	var records []provider.Record
 	for _, r := range webhookRecords {
-		recordType := provider.RecordTypeA
-		if r.Type == "CNAME" {
+		var recordType provider.RecordType
+		switch r.Type {
+		case "A":
+			recordType = provider.RecordTypeA
+		case "CNAME":
 			recordType = provider.RecordTypeCNAME
+		case "TXT":
+			recordType = provider.RecordTypeTXT
+		default:
+			// Skip unsupported record types
+			continue
 		}
 
 		records = append(records, provider.Record{

@@ -97,7 +97,8 @@ func run() error {
 	// Initialize reconciler
 	reconcilerCfg := reconciler.Config{
 		DryRun:            cfg.DryRun(),
-		CleanupOrphans:    true,
+		CleanupOrphans:    cfg.CleanupOrphans(),
+		OwnershipTracking: cfg.OwnershipTracking(),
 		ReconcileInterval: cfg.ReconcileInterval(),
 		Enabled:           true,
 	}

@@ -29,6 +29,7 @@ type apiRecord struct {
 type apiRData struct {
 	IPAddress string `json:"ipAddress,omitempty"` // For A records
 	CName     string `json:"cname,omitempty"`     // For CNAME records
+	Text      string `json:"text,omitempty"`      // For TXT records
 }
 
 // apiResponse is the standard Technitium API response wrapper.
@@ -244,6 +245,52 @@ func (c *Client) DeleteCNAMERecord(ctx context.Context, zone, hostname, target s
 	c.logger.Info("deleted CNAME record",
 		slog.String("hostname", hostname),
 		slog.String("target", target),
+		slog.String("zone", zone),
+	)
+
+	return nil
+}
+
+// AddTXTRecord creates a TXT record in the specified zone.
+func (c *Client) AddTXTRecord(ctx context.Context, zone, hostname, text string, ttl int) error {
+	params := url.Values{}
+	params.Set("zone", zone)
+	params.Set("domain", hostname)
+	params.Set("type", "TXT")
+	params.Set("text", text)
+	params.Set("ttl", strconv.Itoa(ttl))
+
+	_, err := c.doRequest(ctx, "/api/zones/records/add", params)
+	if err != nil {
+		return fmt.Errorf("adding TXT record for %s: %w", hostname, err)
+	}
+
+	c.logger.Info("added TXT record",
+		slog.String("hostname", hostname),
+		slog.String("text", text),
+		slog.String("zone", zone),
+		slog.Int("ttl", ttl),
+	)
+
+	return nil
+}
+
+// DeleteTXTRecord removes a TXT record from the specified zone.
+func (c *Client) DeleteTXTRecord(ctx context.Context, zone, hostname, text string) error {
+	params := url.Values{}
+	params.Set("zone", zone)
+	params.Set("domain", hostname)
+	params.Set("type", "TXT")
+	params.Set("text", text)
+
+	_, err := c.doRequest(ctx, "/api/zones/records/delete", params)
+	if err != nil {
+		return fmt.Errorf("deleting TXT record for %s: %w", hostname, err)
+	}
+
+	c.logger.Info("deleted TXT record",
+		slog.String("hostname", hostname),
+		slog.String("text", text),
 		slog.String("zone", zone),
 	)
 

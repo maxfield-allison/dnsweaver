@@ -92,6 +92,16 @@ func (c *Config) DryRun() bool {
 	return c.Global.DryRun
 }
 
+// CleanupOrphans returns whether orphan cleanup is enabled.
+func (c *Config) CleanupOrphans() bool {
+	return c.Global.CleanupOrphans
+}
+
+// OwnershipTracking returns whether TXT ownership tracking is enabled.
+func (c *Config) OwnershipTracking() bool {
+	return c.Global.OwnershipTracking
+}
+
 // ReconcileInterval returns the reconciliation interval.
 func (c *Config) ReconcileInterval() time.Duration {
 	return c.Global.ReconcileInterval

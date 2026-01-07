@@ -89,7 +89,7 @@ func (p *Provider) Ping(ctx context.Context) error {
 }
 
 // List returns all managed records in the zone.
-// Currently returns A and CNAME records.
+// Currently returns A, CNAME, and TXT records.
 func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 	apiRecords, err := p.client.ListZoneRecords(ctx, p.zone)
 	if err != nil {
@@ -98,7 +98,7 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 
 	var records []provider.Record
 	for _, r := range apiRecords {
-		// Only return A and CNAME records (the types we manage)
+		// Only return A, CNAME, and TXT records (the types we manage)
 		switch r.Type {
 		case "A":
 			records = append(records, provider.Record{
@@ -115,6 +115,14 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 				Target:     r.RData.CName,
 				TTL:        r.TTL,
 				ProviderID: fmt.Sprintf("%s:%s:%s", r.Name, r.Type, r.RData.CName),
+			})
+		case "TXT":
+			records = append(records, provider.Record{
+				Hostname:   r.Name,
+				Type:       provider.RecordTypeTXT,
+				Target:     r.RData.Text,
+				TTL:        r.TTL,
+				ProviderID: fmt.Sprintf("%s:%s:%s", r.Name, r.Type, r.RData.Text),
 			})
 		}
 		// Skip other record types (NS, SOA, etc.)
@@ -145,6 +153,10 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 		if err := p.client.AddCNAMERecord(ctx, p.zone, record.Hostname, record.Target, ttl); err != nil {
 			return fmt.Errorf("creating CNAME record: %w", err)
 		}
+	case provider.RecordTypeTXT:
+		if err := p.client.AddTXTRecord(ctx, p.zone, record.Hostname, record.Target, ttl); err != nil {
+			return fmt.Errorf("creating TXT record: %w", err)
+		}
 	default:
 		return fmt.Errorf("unsupported record type: %s", record.Type)
 	}
@@ -170,6 +182,10 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 	case provider.RecordTypeCNAME:
 		if err := p.client.DeleteCNAMERecord(ctx, p.zone, record.Hostname, record.Target); err != nil {
 			return fmt.Errorf("deleting CNAME record: %w", err)
+		}
+	case provider.RecordTypeTXT:
+		if err := p.client.DeleteTXTRecord(ctx, p.zone, record.Hostname, record.Target); err != nil {
+			return fmt.Errorf("deleting TXT record: %w", err)
 		}
 	default:
 		return fmt.Errorf("unsupported record type: %s", record.Type)

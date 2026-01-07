@@ -1,4 +1,7 @@
 # Files to exclude from public GitHub mirror
 .gitlab-ci.yml export-ignore
 .gitattributes export-ignore
-docs/DECISIONS.md export-ignore
+
+# Internal documentation - NEVER publish publicly
+# Public docs go in docs/, internal docs go in internal-docs/
+internal-docs/ export-ignore

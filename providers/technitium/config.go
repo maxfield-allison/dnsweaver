@@ -126,3 +126,33 @@ func IsConfigError(err error) bool {
 	var configErr *ConfigError
 	return errors.As(err, &configErr)
 }
+
+// LoadConfigFromMap creates a Config from a map of key-value pairs.
+// This is used by the provider registry to create instances from
+// configuration that was already parsed from environment variables.
+//
+// Required keys: URL, TOKEN, ZONE
+// Optional keys: TTL (defaults to 300)
+func LoadConfigFromMap(instanceName string, configMap map[string]string) (*Config, error) {
+	config := &Config{
+		URL:   configMap["URL"],
+		Token: configMap["TOKEN"],
+		Zone:  configMap["ZONE"],
+		TTL:   DefaultTTL,
+	}
+
+	// Parse optional TTL
+	if ttlStr, ok := configMap["TTL"]; ok && ttlStr != "" {
+		ttl, err := strconv.Atoi(ttlStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid TTL value %q: %w", ttlStr, err)
+		}
+		config.TTL = ttl
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("configuration for %s: %w", instanceName, err)
+	}
+
+	return config, nil
+}

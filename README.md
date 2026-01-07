@@ -16,7 +16,7 @@ dnsweaver watches Docker events and automatically creates and deletes DNS record
 - **Docker and Swarm Support**: Works with standalone Docker and Docker Swarm clusters
 - **Socket Proxy Compatible**: Connect via TCP to a Docker socket proxy for improved security
 - **Traefik Integration**: Parses `traefik.http.routers.*.rule` labels to extract hostnames
-- **Static File Discovery**: Parse Traefik dynamic configuration files (YAML) for hostnames not defined in container labels
+- **Static File Discovery**: Parse Traefik dynamic configuration files (YAML and TOML) for hostnames not defined in container labels
 - **A and CNAME Records**: Full record type support for flexible DNS configuration
 - **Real-time Sync**: Watches Docker events and updates records instantly
 - **Startup Reconciliation**: Full sync on startup ensures consistency
@@ -181,7 +181,7 @@ dnsweaver discovers hostnames from Docker container labels by default. Additiona
 |----------|---------|-------------|
 | `DNSWEAVER_SOURCES` | `traefik` | Comma-separated list of source types |
 | `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS` | *(none)* | Comma-separated paths to Traefik config directories or files |
-| `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATTERN` | `*.yml,*.yaml` | Glob pattern for config files |
+| `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATTERN` | `*.yml,*.yaml,*.toml` | Glob pattern for config files |
 | `DNSWEAVER_SOURCE_TRAEFIK_POLL_INTERVAL` | `60s` | How often to re-scan files for changes |
 | `DNSWEAVER_SOURCE_TRAEFIK_WATCH_METHOD` | `auto` | File watching method: `auto`, `inotify`, `poll` |
 
@@ -191,7 +191,9 @@ dnsweaver discovers hostnames from Docker container labels by default. Additiona
 environment:
   # Enable file discovery by specifying paths
   - DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS=/traefik/rules,/traefik/dynamic
-  - DNSWEAVER_SOURCE_TRAEFIK_FILE_PATTERN=*.yml
+  # Default pattern includes: *.yml, *.yaml, *.toml
+  # Or specify custom pattern:
+  # - DNSWEAVER_SOURCE_TRAEFIK_FILE_PATTERN=*.yml,*.toml
 volumes:
   # Mount Traefik config directory
   - /path/to/traefik/rules:/traefik/rules:ro

@@ -28,7 +28,8 @@ import (
 const sourceName = "traefik"
 
 // DefaultFilePattern is the default glob pattern for Traefik config files.
-const DefaultFilePattern = "*.yml,*.yaml"
+// Includes YAML (.yml, .yaml) and TOML (.toml) formats.
+const DefaultFilePattern = "*.yml,*.yaml,*.toml"
 
 // Traefik implements the source.Source interface for extracting hostnames
 // from Traefik container labels and static configuration files.

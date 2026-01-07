@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned
-- **TOML File Support**: Parse Traefik TOML configuration files in addition to YAML
+## [0.1.1] - 2026-01-07
+
+### Added
+- **TOML File Support**: Parse Traefik TOML configuration files in addition to YAML (#25)
+  - Automatically detects file format by extension (`.toml`, `.yml`, `.yaml`)
+  - Default file pattern now includes `*.toml` alongside YAML patterns
+  - Mixed YAML/TOML directories fully supported
 
 ## [0.1.0] - 2026-01-07
 
@@ -33,5 +38,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitLab CI/CD pipeline with GitHub release automation
 - Docker Hub and GitHub Container Registry publishing
 
-[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/maxfield-allison/dnsweaver/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/maxfield-allison/dnsweaver/releases/tag/v0.1.0

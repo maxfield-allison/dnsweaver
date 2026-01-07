@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"gopkg.in/yaml.v3"
 )
 
@@ -74,7 +75,7 @@ func (p *Parser) DiscoverFromFiles(ctx context.Context, paths []string, pattern 
 		default:
 		}
 
-		extractions, err := p.parseYAMLFile(file)
+		extractions, err := p.parseConfigFile(file)
 		if err != nil {
 			p.logger.Warn("failed to parse traefik config file",
 				"file", file,
@@ -135,6 +136,21 @@ func (p *Parser) matchesAnyPattern(name string, patterns []string) bool {
 	return false
 }
 
+// parseConfigFile parses a Traefik config file, detecting format by extension.
+// Supports YAML (.yml, .yaml) and TOML (.toml) formats.
+func (p *Parser) parseConfigFile(path string) ([]HostnameExtraction, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".toml":
+		return p.parseTOMLFile(path)
+	case ".yml", ".yaml":
+		return p.parseYAMLFile(path)
+	default:
+		// Try YAML as fallback for unknown extensions
+		return p.parseYAMLFile(path)
+	}
+}
+
 // parseYAMLFile parses a single Traefik YAML config file.
 // Only extracts from http.routers.*.rule - ignores everything else.
 func (p *Parser) parseYAMLFile(path string) ([]HostnameExtraction, error) {
@@ -149,6 +165,28 @@ func (p *Parser) parseYAMLFile(path string) ([]HostnameExtraction, error) {
 		return nil, fmt.Errorf("parsing YAML: %w", err)
 	}
 
+	return p.extractFromConfig(&config, path)
+}
+
+// parseTOMLFile parses a single Traefik TOML config file.
+// Only extracts from [http.routers.NAME] sections - ignores everything else.
+func (p *Parser) parseTOMLFile(path string) ([]HostnameExtraction, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading file: %w", err)
+	}
+
+	// Parse TOML into a generic structure
+	var config traefikFileConfig
+	if err := toml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("parsing TOML: %w", err)
+	}
+
+	return p.extractFromConfig(&config, path)
+}
+
+// extractFromConfig extracts hostnames from a parsed Traefik config.
+func (p *Parser) extractFromConfig(config *traefikFileConfig, path string) ([]HostnameExtraction, error) {
 	var extractions []HostnameExtraction
 
 	// Only process http.routers.*.rule
@@ -178,18 +216,19 @@ func (p *Parser) parseYAMLFile(path string) ([]HostnameExtraction, error) {
 	return extractions, nil
 }
 
-// traefikFileConfig represents the structure of Traefik YAML config files.
+// traefikFileConfig represents the structure of Traefik config files.
 // We only care about http.routers.*.rule - everything else is ignored.
+// Supports both YAML and TOML formats via struct tags.
 type traefikFileConfig struct {
-	HTTP *traefikHTTPConfig `yaml:"http"`
+	HTTP *traefikHTTPConfig `yaml:"http" toml:"http"`
 }
 
 type traefikHTTPConfig struct {
-	Routers map[string]*traefikRouter `yaml:"routers"`
+	Routers map[string]*traefikRouter `yaml:"routers" toml:"routers"`
 	// Services, middlewares, etc. are intentionally ignored
 }
 
 type traefikRouter struct {
-	Rule string `yaml:"rule"`
+	Rule string `yaml:"rule" toml:"rule"`
 	// EntryPoints, Service, Middlewares, etc. are intentionally ignored
 }

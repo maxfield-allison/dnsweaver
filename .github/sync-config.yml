@@ -4,8 +4,13 @@ gitlab:
     branches: { enabled: false }
     tags: { enabled: false }
     releases: { enabled: false }
-    issues: { enabled: false }
-    pullRequests: { enabled: false }
+    issues:
+      enabled: true
+      comments: { enabled: false }
+    pullRequests:
+      enabled: true
+      autoMerge: false
+      comments: { enabled: false }
 
 github:
   enabled: true

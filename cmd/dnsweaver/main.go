@@ -107,6 +107,13 @@ func run() error {
 		reconciler.WithLogger(logger),
 	)
 
+	// Recover ownership state from DNS providers on startup (#40)
+	// This enables orphan cleanup to work for records created before a restart
+	if err := rec.RecoverOwnership(ctx); err != nil {
+		logger.Warn("failed to recover ownership state", slog.String("error", err.Error()))
+		// Continue anyway - this is not fatal, just means orphan cleanup may miss some records
+	}
+
 	// Create reconciliation trigger function
 	triggerReconcile := func() {
 		result, err := rec.Reconcile(ctx)

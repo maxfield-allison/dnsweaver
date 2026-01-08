@@ -179,6 +179,76 @@ func TestProviderInstanceConfig_Validate_CNAME_Complete(t *testing.T) {
 	}
 }
 
+func TestOwnershipRecordName(t *testing.T) {
+	tests := []struct {
+		hostname string
+		want     string
+	}{
+		{"app.example.com", "_dnsweaver.app.example.com"},
+		{"subdomain.app.example.com", "_dnsweaver.subdomain.app.example.com"},
+		{"example.com", "_dnsweaver.example.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.hostname, func(t *testing.T) {
+			got := OwnershipRecordName(tt.hostname)
+			if got != tt.want {
+				t.Errorf("OwnershipRecordName(%q) = %q, want %q", tt.hostname, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsOwnershipRecord(t *testing.T) {
+	tests := []struct {
+		hostname string
+		want     bool
+	}{
+		{"_dnsweaver.app.example.com", true},
+		{"_dnsweaver.example.com", true},
+		{"_dnsweaver.sub.app.example.com", true},
+		{"app.example.com", false},
+		{"example.com", false},
+		{"_dnsweaver", false},
+		{"_dnsweaver.", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.hostname, func(t *testing.T) {
+			got := IsOwnershipRecord(tt.hostname)
+			if got != tt.want {
+				t.Errorf("IsOwnershipRecord(%q) = %v, want %v", tt.hostname, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtractHostnameFromOwnership(t *testing.T) {
+	tests := []struct {
+		ownershipName string
+		want          string
+	}{
+		{"_dnsweaver.app.example.com", "app.example.com"},
+		{"_dnsweaver.subdomain.app.example.com", "subdomain.app.example.com"},
+		{"_dnsweaver.example.com", "example.com"},
+		// Non-ownership records should return empty
+		{"app.example.com", ""},
+		{"example.com", ""},
+		{"_dnsweaver", ""},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.ownershipName, func(t *testing.T) {
+			got := ExtractHostnameFromOwnership(tt.ownershipName)
+			if got != tt.want {
+				t.Errorf("ExtractHostnameFromOwnership(%q) = %q, want %q", tt.ownershipName, got, tt.want)
+			}
+		})
+	}
+}
+
 // containsString checks if s contains substr (simple helper to avoid importing strings).
 func containsString(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {

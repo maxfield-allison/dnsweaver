@@ -173,6 +173,39 @@ func (pi *ProviderInstance) HasOwnershipRecord(ctx context.Context, hostname str
 	return false, nil
 }
 
+// RecoverOwnedHostnames scans the provider for ownership TXT records and returns
+// the list of hostnames that dnsweaver previously created. This is used on startup
+// to recover state and enable orphan cleanup for records created before a restart.
+func (pi *ProviderInstance) RecoverOwnedHostnames(ctx context.Context) ([]string, error) {
+	start := time.Now()
+	records, err := pi.Provider.List(ctx)
+	duration := time.Since(start).Seconds()
+
+	status := "success"
+	if err != nil {
+		status = "error"
+		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "list", status).Inc()
+		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "list").Observe(duration)
+		return nil, err
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "list", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "list").Observe(duration)
+
+	var hostnames []string
+	for _, r := range records {
+		// Look for ownership TXT records with the correct value
+		if r.Type == RecordTypeTXT && r.Target == OwnershipValue && IsOwnershipRecord(r.Hostname) {
+			hostname := ExtractHostnameFromOwnership(r.Hostname)
+			if hostname != "" {
+				hostnames = append(hostnames, hostname)
+			}
+		}
+	}
+
+	return hostnames, nil
+}
+
 // Ping checks connectivity to the provider.
 func (pi *ProviderInstance) Ping(ctx context.Context) error {
 	start := time.Now()

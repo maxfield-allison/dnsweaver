@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Only deletes records during orphan cleanup if ownership TXT record exists
   - Configurable via `DNSWEAVER_OWNERSHIP_TRACKING` (default: true)
   - All providers now support TXT records for ownership markers
+- **Ownership State Recovery** (#40): Recover ownership state from DNS on startup
+  - Scans all providers for `_dnsweaver.*` TXT records at startup
+  - Repopulates known hostnames so orphan cleanup works after restarts
+  - No manual intervention needed—dnsweaver remembers what it manages
 - **Orphan Cleanup Configuration**: New `DNSWEAVER_CLEANUP_ORPHANS` setting (default: true)
 - **Domain Exclusion**: `DNSWEAVER_<PROVIDER>_EXCLUDE_DOMAINS` for excluding domains from a provider
 

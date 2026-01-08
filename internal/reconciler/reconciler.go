@@ -619,6 +619,55 @@ func (r *Reconciler) KnownHostnames() []string {
 	return hostnames
 }
 
+// RecoverOwnership scans all providers for ownership TXT records and populates
+// the knownHostnames map. This should be called once on startup before the first
+// reconciliation to enable orphan cleanup for records created before a restart.
+//
+// Only runs if both CleanupOrphans and OwnershipTracking are enabled.
+func (r *Reconciler) RecoverOwnership(ctx context.Context) error {
+	if !r.config.CleanupOrphans || !r.config.OwnershipTracking {
+		r.logger.Debug("ownership recovery skipped",
+			slog.Bool("cleanup_orphans", r.config.CleanupOrphans),
+			slog.Bool("ownership_tracking", r.config.OwnershipTracking),
+		)
+		return nil
+	}
+
+	r.logger.Info("recovering ownership state from DNS providers")
+
+	totalRecovered := 0
+	for _, inst := range r.providers.All() {
+		hostnames, err := inst.RecoverOwnedHostnames(ctx)
+		if err != nil {
+			r.logger.Warn("failed to recover ownership from provider",
+				slog.String("provider", inst.Name()),
+				slog.String("error", err.Error()),
+			)
+			continue
+		}
+
+		if len(hostnames) > 0 {
+			r.mu.Lock()
+			for _, hostname := range hostnames {
+				r.knownHostnames[hostname] = struct{}{}
+			}
+			r.mu.Unlock()
+
+			r.logger.Info("recovered ownership records",
+				slog.String("provider", inst.Name()),
+				slog.Int("count", len(hostnames)),
+			)
+			totalRecovered += len(hostnames)
+		}
+	}
+
+	r.logger.Info("ownership recovery complete",
+		slog.Int("total_hostnames", totalRecovered),
+	)
+
+	return nil
+}
+
 // recordMetrics records Prometheus metrics from a reconciliation result.
 func (r *Reconciler) recordMetrics(result *Result) {
 	// Record reconciliation outcome

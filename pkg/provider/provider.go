@@ -70,6 +70,16 @@ func IsOwnershipRecord(hostname string) bool {
 		hostname[:len(OwnershipPrefix)+1] == OwnershipPrefix+"."
 }
 
+// ExtractHostnameFromOwnership extracts the original hostname from an ownership record name.
+// Example: "_dnsweaver.app.example.com" -> "app.example.com"
+// Returns empty string if the hostname is not an ownership record.
+func ExtractHostnameFromOwnership(ownershipName string) string {
+	if !IsOwnershipRecord(ownershipName) {
+		return ""
+	}
+	return ownershipName[len(OwnershipPrefix)+1:]
+}
+
 // OwnershipRecord creates a TXT record for ownership tracking.
 func OwnershipRecord(hostname string, ttl int) Record {
 	return Record{

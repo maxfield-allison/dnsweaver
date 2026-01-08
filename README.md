@@ -59,19 +59,26 @@ services:
       - DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
       - DNSWEAVER_INTERNAL_DNS_DOMAINS=*.home.example.com
 
-      # Public DNS (Cloudflare) - coming in v0.2.0
-      # - DNSWEAVER_PUBLIC_DNS_TYPE=cloudflare
-      # - DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
-      # - DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.home.example.com
+      # Public DNS (Cloudflare)
+      - DNSWEAVER_PUBLIC_DNS_TYPE=cloudflare
+      - DNSWEAVER_PUBLIC_DNS_TOKEN_FILE=/run/secrets/cloudflare_token
+      - DNSWEAVER_PUBLIC_DNS_ZONE=example.com
+      - DNSWEAVER_PUBLIC_DNS_RECORD_TYPE=CNAME
+      - DNSWEAVER_PUBLIC_DNS_TARGET=proxy.example.com
+      - DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
+      - DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.home.example.com
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     secrets:
       - technitium_token
+      - cloudflare_token
     ports:
       - "8080:8080"
 
 secrets:
   technitium_token:
+    external: true
+  cloudflare_token:
     external: true
 ```
 

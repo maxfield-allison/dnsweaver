@@ -712,15 +712,37 @@ github:mirror:
       cd /tmp/clean-export
       find . -name "*.go" -o -name "go.mod" | xargs sed -i "s|$GITLAB_MODULE|$GITHUB_MODULE|g"
 
-      # Initialize a fresh repo from the clean export
-      git init
-      git add -A
-      git commit -m "Release $TAG"
+      # Clone existing GitHub repo to preserve history
+      mkdir -p /tmp/github-repo
+      cd /tmp/github-repo
+      if git clone --depth=50 "https://$GITHUB_USERNAME:$GITHUB_TOKEN@github.com/$GITHUB_REPO.git" .; then
+        echo "Cloned existing GitHub repo, will preserve history"
+        # Remove all tracked files (but keep .git)
+        git rm -rf . || true
+        # Copy clean export into repo
+        cp -r /tmp/clean-export/. .
+        git add -A
+        # Check if there are changes to commit
+        if git diff --cached --quiet; then
+          echo "No changes to commit (source identical to GitHub)"
+        else
+          git commit -m "Release $TAG"
+        fi
+      else
+        echo "GitHub repo empty or doesn't exist, initializing fresh"
+        git init
+        cp -r /tmp/clean-export/. .
+        git add -A
+        git commit -m "Release $TAG"
+      fi
 
-      # Tag and push to GitHub
-      git tag "$TAG"
+      # Tag (force in case re-releasing same version)
+      git tag -f "$TAG"
+      git remote remove github 2>/dev/null || true
       git remote add github "https://$GITHUB_USERNAME:$GITHUB_TOKEN@github.com/$GITHUB_REPO.git"
-      git push github main --force
+      
+      # Push branch normally (preserves history), force push only the tag
+      git push github main
       git push github "$TAG" --force
 
       echo "Mirrored to GitHub: https://github.com/$GITHUB_REPO"

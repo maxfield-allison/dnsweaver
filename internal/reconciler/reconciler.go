@@ -218,6 +218,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 
 	r.logger.Info("reconciliation complete",
 		slog.Int("created", result.CreatedCount()),
+		slog.Int("updated", result.UpdatedCount()),
 		slog.Int("deleted", result.DeletedCount()),
 		slog.Int("failed", result.FailedCount()),
 		slog.Int("skipped", len(result.Skipped())),
@@ -292,6 +293,11 @@ func (r *Reconciler) RemoveHostname(ctx context.Context, hostname string) (*Resu
 }
 
 // ensureRecord creates DNS records for a hostname in all matching providers.
+// It uses a List+Compare approach to handle IP changes and type conflicts:
+// 1. Check if record exists for hostname
+// 2. If exists with same target → skip (idempotent)
+// 3. If exists with different target (same type) → delete old, create new
+// 4. If exists with different type → log warning, skip (don't delete manual records)
 func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action {
 	var actions []Action
 
@@ -311,91 +317,192 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action
 	}
 
 	for _, inst := range matchingProviders {
-		action := Action{
-			Type:       ActionCreate,
-			Provider:   inst.Name(),
-			Hostname:   hostname,
-			RecordType: string(inst.RecordType),
-			Target:     inst.Target,
-		}
-
-		if r.config.DryRun {
-			action.Status = StatusSuccess
-			r.logger.Info("would create record (dry-run)",
-				slog.String("hostname", hostname),
-				slog.String("provider", inst.Name()),
-				slog.String("type", string(inst.RecordType)),
-				slog.String("target", inst.Target),
-				slog.Bool("ownership_tracking", r.config.OwnershipTracking),
-			)
-		} else {
-			err := inst.CreateRecord(ctx, hostname)
-			if err != nil {
-				// If record already exists, treat as skip (idempotent)
-				if provider.IsConflict(err) {
-					action.Type = ActionSkip
-					action.Status = StatusSkipped
-					action.Error = "record already exists"
-					r.logger.Debug("record already exists, skipping",
-						slog.String("hostname", hostname),
-						slog.String("provider", inst.Name()),
-					)
-					// Still ensure ownership record exists for idempotency
-					if r.config.OwnershipTracking {
-						if ownerErr := inst.CreateOwnershipRecord(ctx, hostname); ownerErr != nil {
-							// Don't warn if ownership record already exists - that's expected
-							if !provider.IsConflict(ownerErr) {
-								r.logger.Warn("failed to create ownership record",
-									slog.String("hostname", hostname),
-									slog.String("provider", inst.Name()),
-									slog.String("error", ownerErr.Error()),
-								)
-							}
-						}
-					}
-				} else {
-					action.Status = StatusFailed
-					action.Error = err.Error()
-					r.logger.Error("failed to create record",
-						slog.String("hostname", hostname),
-						slog.String("provider", inst.Name()),
-						slog.String("error", err.Error()),
-					)
-				}
-			} else {
-				action.Status = StatusSuccess
-				r.logger.Info("created record",
-					slog.String("hostname", hostname),
-					slog.String("provider", inst.Name()),
-					slog.String("type", string(inst.RecordType)),
-					slog.String("target", inst.Target),
-				)
-
-				// Create ownership TXT record if tracking is enabled
-				if r.config.OwnershipTracking {
-					if ownerErr := inst.CreateOwnershipRecord(ctx, hostname); ownerErr != nil {
-						// Don't warn if ownership record already exists (race condition)
-						if !provider.IsConflict(ownerErr) {
-							r.logger.Warn("failed to create ownership record",
-								slog.String("hostname", hostname),
-								slog.String("provider", inst.Name()),
-								slog.String("error", ownerErr.Error()),
-							)
-						}
-					} else {
-						r.logger.Debug("created ownership record",
-							slog.String("hostname", hostname),
-							slog.String("provider", inst.Name()),
-						)
-					}
-				}
-			}
-		}
-
+		action := r.ensureRecordForProvider(ctx, hostname, inst)
 		actions = append(actions, action)
 	}
 
 	return actions
+}
+
+// ensureRecordForProvider handles record creation for a single provider with List+Compare logic.
+func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname string, inst *provider.ProviderInstance) Action {
+	action := Action{
+		Type:       ActionCreate,
+		Provider:   inst.Name(),
+		Hostname:   hostname,
+		RecordType: string(inst.RecordType),
+		Target:     inst.Target,
+	}
+
+	if r.config.DryRun {
+		action.Status = StatusSuccess
+		r.logger.Info("would create record (dry-run)",
+			slog.String("hostname", hostname),
+			slog.String("provider", inst.Name()),
+			slog.String("type", string(inst.RecordType)),
+			slog.String("target", inst.Target),
+			slog.Bool("ownership_tracking", r.config.OwnershipTracking),
+		)
+		return action
+	}
+
+	// Step 1: Check existing records for this hostname
+	existingRecords, err := inst.GetExistingRecords(ctx, hostname)
+	if err != nil {
+		r.logger.Warn("failed to list existing records, proceeding with create",
+			slog.String("hostname", hostname),
+			slog.String("provider", inst.Name()),
+			slog.String("error", err.Error()),
+		)
+		// Fall through to try create anyway
+		existingRecords = nil
+	}
+
+	// Step 2: Analyze existing records
+	var sameTypeRecords []provider.Record
+	var conflictingTypeRecords []provider.Record
+
+	for _, existing := range existingRecords {
+		if existing.Type == inst.RecordType {
+			sameTypeRecords = append(sameTypeRecords, existing)
+		} else {
+			conflictingTypeRecords = append(conflictingTypeRecords, existing)
+		}
+	}
+
+	// Step 3: Handle type conflicts (A vs CNAME)
+	if len(conflictingTypeRecords) > 0 {
+		conflictTypes := make([]string, 0, len(conflictingTypeRecords))
+		for _, r := range conflictingTypeRecords {
+			conflictTypes = append(conflictTypes, string(r.Type))
+		}
+		action.Type = ActionSkip
+		action.Status = StatusSkipped
+		action.Error = fmt.Sprintf("type conflict: existing %v record(s) conflict with %s",
+			conflictTypes, inst.RecordType)
+		r.logger.Warn("skipping due to record type conflict",
+			slog.String("hostname", hostname),
+			slog.String("provider", inst.Name()),
+			slog.String("desired_type", string(inst.RecordType)),
+			slog.Any("existing_types", conflictTypes),
+		)
+		return action
+	}
+
+	// Step 4: Check if record with correct target already exists
+	for _, existing := range sameTypeRecords {
+		if existing.Target == inst.Target {
+			// Perfect match - record already exists with correct target
+			action.Type = ActionSkip
+			action.Status = StatusSkipped
+			action.Error = "record already exists"
+			r.logger.Debug("record already exists with correct target",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+				slog.String("target", inst.Target),
+			)
+			// Ensure ownership record exists
+			r.ensureOwnershipRecord(ctx, hostname, inst)
+			return action
+		}
+	}
+
+	// Step 5: Delete records with wrong targets (IP changed)
+	for _, existing := range sameTypeRecords {
+		r.logger.Info("target changed, deleting old record",
+			slog.String("hostname", hostname),
+			slog.String("provider", inst.Name()),
+			slog.String("old_target", existing.Target),
+			slog.String("new_target", inst.Target),
+		)
+		if err := inst.DeleteRecordByTarget(ctx, hostname, existing.Type, existing.Target); err != nil {
+			r.logger.Error("failed to delete old record before update",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+				slog.String("target", existing.Target),
+				slog.String("error", err.Error()),
+			)
+			// Continue anyway - try to create the new record
+		}
+	}
+
+	// Step 6: Create the record with the desired target
+	err = inst.CreateRecord(ctx, hostname)
+	if err != nil {
+		// Handle conflict error (shouldn't happen after our checks, but be safe)
+		if provider.IsConflict(err) {
+			action.Type = ActionSkip
+			action.Status = StatusSkipped
+			action.Error = "record already exists"
+			r.logger.Debug("record already exists, skipping",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+			)
+			r.ensureOwnershipRecord(ctx, hostname, inst)
+		} else if provider.IsTypeConflict(err) {
+			action.Type = ActionSkip
+			action.Status = StatusSkipped
+			action.Error = "record type conflict"
+			r.logger.Warn("record type conflict detected",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+				slog.String("type", string(inst.RecordType)),
+			)
+		} else {
+			action.Status = StatusFailed
+			action.Error = err.Error()
+			r.logger.Error("failed to create record",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+				slog.String("error", err.Error()),
+			)
+		}
+	} else {
+		// Determine if this was an update (we deleted old records) or new create
+		if len(sameTypeRecords) > 0 {
+			action.Type = ActionUpdate
+			r.logger.Info("updated record",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+				slog.String("type", string(inst.RecordType)),
+				slog.String("target", inst.Target),
+			)
+		} else {
+			r.logger.Info("created record",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+				slog.String("type", string(inst.RecordType)),
+				slog.String("target", inst.Target),
+			)
+		}
+		action.Status = StatusSuccess
+		r.ensureOwnershipRecord(ctx, hostname, inst)
+	}
+
+	return action
+}
+
+// ensureOwnershipRecord creates the ownership TXT record if tracking is enabled.
+func (r *Reconciler) ensureOwnershipRecord(ctx context.Context, hostname string, inst *provider.ProviderInstance) {
+	if !r.config.OwnershipTracking {
+		return
+	}
+
+	if err := inst.CreateOwnershipRecord(ctx, hostname); err != nil {
+		// Don't warn if ownership record already exists
+		if !provider.IsConflict(err) {
+			r.logger.Warn("failed to create ownership record",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+				slog.String("error", err.Error()),
+			)
+		}
+	} else {
+		r.logger.Debug("created ownership record",
+			slog.String("hostname", hostname),
+			slog.String("provider", inst.Name()),
+		)
+	}
 }
 
 // deleteRecord removes DNS records for a hostname from all matching providers.

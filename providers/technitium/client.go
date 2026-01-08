@@ -148,6 +148,11 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, params url.Valu
 			strings.Contains(errLower, "identical record") {
 			return nil, fmt.Errorf("API error: %s: %w", apiResp.ErrorMessage, provider.ErrConflict)
 		}
+		// Detect CNAME type conflicts.
+		// Technitium returns: "a CNAME record cannot exists with other record types"
+		if strings.Contains(errLower, "cname record cannot") {
+			return nil, fmt.Errorf("API error: %s: %w", apiResp.ErrorMessage, provider.ErrTypeConflict)
+		}
 		return nil, fmt.Errorf("API error: %s", apiResp.ErrorMessage)
 	}
 

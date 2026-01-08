@@ -166,6 +166,11 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 			if errCode == 81053 || errCode == 81058 {
 				return nil, provider.ErrConflict
 			}
+			// Error code 81057 = "CNAME and the record type cannot be used together"
+			// Also check message for CNAME conflicts (defensive)
+			if errCode == 81057 || strings.Contains(strings.ToLower(errMsg), "cname") && strings.Contains(strings.ToLower(errMsg), "cannot") {
+				return nil, provider.ErrTypeConflict
+			}
 			return nil, fmt.Errorf("API error: %s (code: %d)", errMsg, errCode)
 		}
 		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(respBody))

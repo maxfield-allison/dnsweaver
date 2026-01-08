@@ -102,6 +102,61 @@ func (pi *ProviderInstance) DeleteRecord(ctx context.Context, hostname string) e
 	return err
 }
 
+// GetExistingRecords returns all A/CNAME records that exist for a given hostname.
+// This is used by the reconciler to detect if the target has changed or if there's
+// a type conflict before creating a new record.
+func (pi *ProviderInstance) GetExistingRecords(ctx context.Context, hostname string) ([]Record, error) {
+	start := time.Now()
+	allRecords, err := pi.Provider.List(ctx)
+	duration := time.Since(start).Seconds()
+
+	status := "success"
+	if err != nil {
+		status = "error"
+		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "list", status).Inc()
+		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "list").Observe(duration)
+		return nil, err
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "list", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "list").Observe(duration)
+
+	var matching []Record
+	for _, r := range allRecords {
+		// Only return A and CNAME records for the hostname (skip TXT, etc.)
+		if r.Hostname == hostname && (r.Type == RecordTypeA || r.Type == RecordTypeCNAME) {
+			matching = append(matching, r)
+		}
+	}
+
+	return matching, nil
+}
+
+// DeleteRecordByTarget removes a specific DNS record by hostname and target.
+// Unlike DeleteRecord, this allows specifying the target to delete (for cleanup
+// of records with changed targets).
+func (pi *ProviderInstance) DeleteRecordByTarget(ctx context.Context, hostname string, recordType RecordType, target string) error {
+	record := Record{
+		Hostname: hostname,
+		Type:     recordType,
+		Target:   target,
+	}
+
+	start := time.Now()
+	err := pi.Provider.Delete(ctx, record)
+	duration := time.Since(start).Seconds()
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete").Observe(duration)
+
+	return err
+}
+
 // CreateOwnershipRecord creates a TXT record to mark ownership of a hostname.
 // The TXT record is named "_dnsweaver.{hostname}" with value "heritage=dnsweaver".
 func (pi *ProviderInstance) CreateOwnershipRecord(ctx context.Context, hostname string) error {

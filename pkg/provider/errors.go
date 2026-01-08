@@ -10,8 +10,12 @@ var (
 	// ErrNotFound indicates a record was not found.
 	ErrNotFound = errors.New("record not found")
 
-	// ErrConflict indicates a record already exists.
+	// ErrConflict indicates a record already exists with the same hostname, type, and target.
 	ErrConflict = errors.New("record already exists")
+
+	// ErrTypeConflict indicates a record exists with a different type that conflicts.
+	// For example, a CNAME cannot coexist with an A record at the same hostname.
+	ErrTypeConflict = errors.New("record type conflict")
 
 	// ErrUnauthorized indicates authentication failed.
 	ErrUnauthorized = errors.New("unauthorized")
@@ -86,6 +90,13 @@ func IsNotFound(err error) bool {
 // IsConflict returns true if the error indicates a record already exists.
 func IsConflict(err error) bool {
 	return errors.Is(err, ErrConflict)
+}
+
+// IsTypeConflict returns true if the error indicates a record type conflict.
+// This occurs when trying to create a record that conflicts with an existing
+// record of a different type (e.g., CNAME cannot coexist with A/AAAA).
+func IsTypeConflict(err error) bool {
+	return errors.Is(err, ErrTypeConflict)
 }
 
 // IsUnauthorized returns true if the error indicates authentication failed.

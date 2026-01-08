@@ -14,6 +14,8 @@ type ActionType string
 const (
 	// ActionCreate indicates a record will be/was created.
 	ActionCreate ActionType = "create"
+	// ActionUpdate indicates a record will be/was updated (target changed).
+	ActionUpdate ActionType = "update"
 	// ActionDelete indicates a record will be/was deleted.
 	ActionDelete ActionType = "delete"
 	// ActionSkip indicates a record was skipped (already exists/not found).
@@ -131,6 +133,11 @@ func (r *Result) Created() []Action {
 	return r.filterActions(ActionCreate, StatusSuccess)
 }
 
+// Updated returns all successful update actions.
+func (r *Result) Updated() []Action {
+	return r.filterActions(ActionUpdate, StatusSuccess)
+}
+
 // Deleted returns all successful delete actions.
 func (r *Result) Deleted() []Action {
 	return r.filterActions(ActionDelete, StatusSuccess)
@@ -173,6 +180,11 @@ func (r *Result) CreatedCount() int {
 	return len(r.Created())
 }
 
+// UpdatedCount returns the number of records updated (target changed).
+func (r *Result) UpdatedCount() int {
+	return len(r.Updated())
+}
+
 // DeletedCount returns the number of records deleted (or would be in dry-run).
 func (r *Result) DeletedCount() int {
 	return len(r.Deleted())
@@ -201,6 +213,7 @@ func (r *Result) Summary() string {
 	fmt.Fprintf(&sb, "  Workloads scanned: %d\n", r.WorkloadsScanned)
 	fmt.Fprintf(&sb, "  Hostnames discovered: %d\n", r.HostnamesDiscovered)
 	fmt.Fprintf(&sb, "  Records created: %d\n", r.CreatedCount())
+	fmt.Fprintf(&sb, "  Records updated: %d\n", r.UpdatedCount())
 	fmt.Fprintf(&sb, "  Records deleted: %d\n", r.DeletedCount())
 	fmt.Fprintf(&sb, "  Skipped: %d\n", len(r.Skipped()))
 

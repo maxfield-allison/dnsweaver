@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-01-07
+
 ### Added
 - **Cloudflare DNS Provider**: Public DNS management via Cloudflare API (#24)
   - API token authentication (scoped tokens supported)
@@ -25,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configurable via `DNSWEAVER_OWNERSHIP_TRACKING` (default: true)
   - All providers now support TXT records for ownership markers
 - **Orphan Cleanup Configuration**: New `DNSWEAVER_CLEANUP_ORPHANS` setting (default: true)
+- **Domain Exclusion**: `DNSWEAVER_<PROVIDER>_EXCLUDE_DOMAINS` for excluding domains from a provider
+
+### Fixed
+- **Cloudflare**: Return ErrConflict for duplicate records (error codes 81053, 81058)
+- **Cloudflare**: Don't proxy TXT records (fixes error 9004)
+- **Technitium**: Add required `domain` parameter when listing zone records
+- **Reconciler**: Silence warnings when ownership TXT record already exists (expected case)
 
 ## [0.1.1] - 2026-01-07
 
@@ -57,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitLab CI/CD pipeline with GitHub release automation
 - Docker Hub and GitHub Container Registry publishing
 
-[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/maxfield-allison/dnsweaver/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/maxfield-allison/dnsweaver/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/maxfield-allison/dnsweaver/releases/tag/v0.1.0

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-01-07
+
+### Fixed
+- **CI/CD**: GitHub mirror now preserves commit history instead of force-pushing
+  - Clones existing GitHub repo before applying changes
+  - Only force-pushes tags (for re-releases), not the main branch
+  - New releases now appear as proper commits on top of history
+
 ## [0.2.0] - 2026-01-07
 
 ### Added

@@ -1,0 +1,38 @@
+# Build artifacts
+/dnsweaver
+*.exe
+
+# Binaries
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+/bin/
+/dist/
+
+# Environment files (may contain secrets)
+.env
+.env.local
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db

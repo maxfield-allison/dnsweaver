@@ -1,0 +1,33 @@
+name: Sync Issues
+
+on:
+  issues:
+    types: [opened, closed, reopened, edited, labeled]
+  issue_comment:
+    types: [created, edited]
+  pull_request:
+    types: [opened, closed, reopened, synchronize, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  schedule:
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: OpenSaucedHub/advanced-git-sync@v1.5.1
+        with:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+        env:
+          GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
+          GITLAB_PROJECT_ID: ${{ secrets.GITLAB_PROJECT_ID }}

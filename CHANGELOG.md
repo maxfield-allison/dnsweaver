@@ -1,0 +1,76 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.2.0] - 2026-01-07
+
+### Added
+- **Cloudflare DNS Provider**: Public DNS management via Cloudflare API (#24)
+  - API token authentication (scoped tokens supported)
+  - Zone ID or zone name lookup
+  - A and CNAME record support
+  - Proxied/unproxied records with `PROXIED` setting
+  - Rate limiting awareness
+- **Webhook Provider**: Generic webhook for custom DNS integrations (#26)
+  - Configurable endpoints for create/delete operations
+  - Authentication via custom headers
+  - Retry logic with configurable backoff
+  - Enables integration with any DNS provider via HTTP API
+- **TXT Record Ownership Tracking** (#37): Prevents orphan cleanup from deleting manually-created DNS records
+  - Creates `_dnsweaver.{hostname}` TXT records with `heritage=dnsweaver` value
+  - Only deletes records during orphan cleanup if ownership TXT record exists
+  - Configurable via `DNSWEAVER_OWNERSHIP_TRACKING` (default: true)
+  - All providers now support TXT records for ownership markers
+- **Ownership State Recovery** (#40): Recover ownership state from DNS on startup
+  - Scans all providers for `_dnsweaver.*` TXT records at startup
+  - Repopulates known hostnames so orphan cleanup works after restarts
+  - No manual intervention needed—dnsweaver remembers what it manages
+- **Orphan Cleanup Configuration**: New `DNSWEAVER_CLEANUP_ORPHANS` setting (default: true)
+- **Domain Exclusion**: `DNSWEAVER_<PROVIDER>_EXCLUDE_DOMAINS` for excluding domains from a provider
+
+### Fixed
+- **Cloudflare**: Return ErrConflict for duplicate records (error codes 81053, 81058)
+- **Cloudflare**: Don't proxy TXT records (fixes error 9004)
+- **Technitium**: Add required `domain` parameter when listing zone records
+- **Reconciler**: Silence warnings when ownership TXT record already exists (expected case)
+
+## [0.1.1] - 2026-01-07
+
+### Added
+- **TOML File Support**: Parse Traefik TOML configuration files in addition to YAML (#25)
+  - Automatically detects file format by extension (`.toml`, `.yml`, `.yaml`)
+  - Default file pattern now includes `*.toml` alongside YAML patterns
+  - Mixed YAML/TOML directories fully supported
+
+## [0.1.0] - 2026-01-07
+
+### Added
+- **Technitium DNS Provider**: Full implementation with create, update, delete operations
+- **Traefik Source**: Extract hostnames from `traefik.http.routers.*.rule` Docker labels
+- **Static File Discovery**: Parse Traefik dynamic configuration YAML files for Host rules
+- **Multi-Provider Routing**: Route different domains to different DNS providers with glob/regex patterns
+- **Split-Horizon DNS**: Support for internal and external records from the same container labels
+- **Docker Swarm Support**: Full support for Docker Swarm services alongside standalone containers
+- **Socket Proxy Support**: Connect via TCP to Docker socket proxy for improved security
+- **Reconciliation Engine**: Periodic full sync ensures DNS records match running containers
+- **Event-Driven Updates**: Real-time DNS updates on container start/stop events
+- **Health Endpoints**: `/health`, `/ready`, and `/metrics` for monitoring and orchestration
+- **Prometheus Metrics**: `dnsweaver_*` metrics for observability
+- **Docker Secrets Support**: `_FILE` suffix for all sensitive environment variables
+- **Multi-arch Images**: linux/amd64 and linux/arm64 Docker images
+
+### Infrastructure
+- Go module: `gitlab.bluewillows.net/root/dnsweaver`
+- Minimum Go version: 1.23
+- GitLab CI/CD pipeline with GitHub release automation
+- Docker Hub and GitHub Container Registry publishing
+
+[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/maxfield-allison/dnsweaver/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/maxfield-allison/dnsweaver/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/maxfield-allison/dnsweaver/releases/tag/v0.1.0

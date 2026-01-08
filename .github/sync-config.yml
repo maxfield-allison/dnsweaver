@@ -1,0 +1,27 @@
+gitlab:
+  enabled: true
+  sync:
+    branches: { enabled: false }
+    tags: { enabled: false }
+    releases: { enabled: false }
+    issues:
+      enabled: true
+      comments: { enabled: false }
+    pullRequests:
+      enabled: true
+      autoMerge: false
+      comments: { enabled: false }
+
+github:
+  enabled: true
+  sync:
+    branches: { enabled: false }
+    tags: { enabled: false }
+    releases: { enabled: false }
+    issues:
+      enabled: true
+      comments: { enabled: true }
+    pullRequests:
+      enabled: true
+      autoMerge: false
+      comments: { enabled: true }

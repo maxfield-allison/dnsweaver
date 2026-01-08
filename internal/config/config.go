@@ -18,8 +18,8 @@ type Config struct {
 	// Global contains application-wide settings.
 	Global *GlobalConfig
 
-	// ProviderNames is the ordered list of provider instance names
-	// from DNSWEAVER_PROVIDERS. Order determines matching priority.
+	// ProviderNames is the ordered list of instance names
+	// from DNSWEAVER_INSTANCES. Order determines matching priority.
 	ProviderNames []string
 
 	// ProviderInstances contains configuration for each provider.
@@ -43,10 +43,10 @@ func Load() (*Config, error) {
 	global, globalErrs := loadGlobalConfig()
 	allErrors = append(allErrors, globalErrs...)
 
-	// Parse provider instance names
-	providerNames := parseProviders()
+	// Parse instance names
+	providerNames := parseInstances()
 	if len(providerNames) == 0 {
-		allErrors = append(allErrors, "DNSWEAVER_PROVIDERS: required but not set (comma-separated list of provider instance names)")
+		allErrors = append(allErrors, "DNSWEAVER_INSTANCES: required but not set (comma-separated list of instance names)")
 	}
 
 	// Load each provider instance configuration

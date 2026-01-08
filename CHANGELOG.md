@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-01-08
+
+### Added
+- **IP Change Detection** (#43, #44): Reconciler now detects when a DNS record exists with a different target
+  - Updates records in-place instead of failing with conflict errors
+  - Logs `updated record` with old and new target values
+  - Handles A→CNAME and CNAME→A type conflicts by deleting and recreating
+- **Provider Record Caching**: Cache DNS records per reconciliation cycle
+  - Reduces API calls by querying each provider once per cycle
+  - Significant performance improvement for large deployments
+  - Cache automatically invalidated between reconciliation runs
+- **Environment Variable Rename**: `DNSWEAVER_PROVIDERS` → `DNSWEAVER_INSTANCES`
+  - Clarifies that instance names are arbitrary identifiers, not provider types
+  - Old variable still works with deprecation warning
+  - README and examples updated to use new naming
+
+### Fixed
+- **Technitium**: Detect "Identical record" response as conflict error (#56)
+
 ## [0.2.1] - 2026-01-07
 
 ### Fixed
@@ -78,7 +97,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitLab CI/CD pipeline with GitHub release automation
 - Docker Hub and GitHub Container Registry publishing
 
-[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/maxfield-allison/dnsweaver/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/maxfield-allison/dnsweaver/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/maxfield-allison/dnsweaver/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/maxfield-allison/dnsweaver/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/maxfield-allison/dnsweaver/releases/tag/v0.1.0

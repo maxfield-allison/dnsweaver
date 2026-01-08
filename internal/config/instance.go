@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -53,22 +54,30 @@ func (c *ProviderInstanceConfig) ToProviderConfig() provider.ProviderInstanceCon
 	}
 }
 
-// parseProviders parses the DNSWEAVER_PROVIDERS environment variable.
-// Returns the list of provider instance names in order.
-func parseProviders() []string {
-	providersStr := getEnv("DNSWEAVER_PROVIDERS")
-	if providersStr == "" {
+// parseInstances parses the DNSWEAVER_INSTANCES environment variable.
+// For backward compatibility, DNSWEAVER_PROVIDERS is also accepted but deprecated.
+// Returns the list of instance names in order.
+func parseInstances() []string {
+	// Prefer DNSWEAVER_INSTANCES, fall back to deprecated DNSWEAVER_PROVIDERS
+	instancesStr := getEnv("DNSWEAVER_INSTANCES")
+	if instancesStr == "" {
+		instancesStr = getEnv("DNSWEAVER_PROVIDERS")
+		if instancesStr != "" {
+			slog.Warn("DNSWEAVER_PROVIDERS is deprecated, use DNSWEAVER_INSTANCES instead")
+		}
+	}
+	if instancesStr == "" {
 		return nil
 	}
 
-	var providers []string
-	for _, p := range strings.Split(providersStr, ",") {
+	var instances []string
+	for _, p := range strings.Split(instancesStr, ",") {
 		p = strings.TrimSpace(p)
 		if p != "" {
-			providers = append(providers, p)
+			instances = append(instances, p)
 		}
 	}
-	return providers
+	return instances
 }
 
 // loadInstanceConfig loads configuration for a single provider instance.

@@ -13,14 +13,15 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 | Version | Theme | Key Deliverables |
 |---------|-------|------------------|
 | v0.1.x | Foundation | Technitium, Traefik, Docker/Swarm, TOML support |
-| v0.2.x | Cloudflare + Webhook | Cloudflare, Webhook (custom integrations) |
-| v0.3.x | Labels + nginx | Native dnsweaver labels, nginx source |
-| v0.4.x | Interleaved Providers | Route53, Pi-hole |
-| v0.5.x | Sources + Private DNS | Caddy, dnsmasq, unbound |
-| v0.6.x | Public Cloud DNS | Google Cloud DNS, DigitalOcean |
-| v0.7.x | Enterprise + AdGuard | HAProxy, Azure DNS, AdGuard Home |
-| v0.8.x | Standards + PowerDNS | PowerDNS, RFC2136 |
-| v0.9.x | Hardening + Review | Security audit, code review, edge cases |
+| v0.2.x | Cloudflare + Webhook | Cloudflare, Webhook, Ownership tracking |
+| v0.3.x | Reconciliation | IP change detection, caching, API improvements |
+| v0.4.x | Labels + nginx | Native dnsweaver labels, nginx source |
+| v0.5.x | Interleaved Providers | Route53, Pi-hole |
+| v0.6.x | Sources + Private DNS | Caddy, dnsmasq, unbound |
+| v0.7.x | Public Cloud DNS | Google Cloud DNS, DigitalOcean |
+| v0.8.x | Enterprise + AdGuard | HAProxy, Azure DNS, AdGuard Home |
+| v0.9.x | Standards + PowerDNS | PowerDNS, RFC2136 |
+| v0.10.x | Hardening + Review | Security audit, code review, edge cases |
 | v1.0.0 | Stable Release | Documentation, stability, production-ready |
 | v2.0.0 | Kubernetes | Ingress, Gateway API, Services |
 
@@ -55,7 +56,19 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 
 ---
 
-## v0.3.x - Labels + nginx
+## v0.3.x - Reconciliation ✅
+
+**Theme:** Reconciliation improvements and API refinements
+
+### v0.3.0 (Released)
+- IP change detection (#43, #44) - update records when target changes
+- Provider record caching - reduce API calls per reconciliation cycle
+- Environment variable rename: `DNSWEAVER_PROVIDERS` → `DNSWEAVER_INSTANCES`
+- Technitium "Identical record" conflict detection (#56)
+
+---
+
+## v0.4.x - Labels + nginx
 
 **Theme:** Native dnsweaver labels and first non-Traefik source
 
@@ -65,7 +78,7 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 
 ---
 
-## v0.4.x - Interleaved Providers
+## v0.5.x - Interleaved Providers
 
 **Theme:** Mix of public and private DNS providers
 
@@ -75,7 +88,7 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 
 ---
 
-## v0.5.x - Sources + Private DNS
+## v0.6.x - Sources + Private DNS
 
 **Theme:** Additional sources and private DNS providers
 
@@ -86,7 +99,7 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 
 ---
 
-## v0.6.x - Public Cloud DNS
+## v0.7.x - Public Cloud DNS
 
 **Theme:** Additional public cloud DNS providers
 
@@ -96,7 +109,7 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 
 ---
 
-## v0.7.x - Enterprise + AdGuard
+## v0.8.x - Enterprise + AdGuard
 
 **Theme:** Enterprise sources and homelab-popular providers
 
@@ -107,7 +120,7 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 
 ---
 
-## v0.8.x - Standards + PowerDNS
+## v0.9.x - Standards + PowerDNS
 
 **Theme:** Enterprise and standards-based DNS
 
@@ -117,7 +130,7 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 
 ---
 
-## v0.9.x - Hardening + Review
+## v0.10.x - Hardening + Review
 
 **Theme:** Pre-release hardening and quality assurance
 

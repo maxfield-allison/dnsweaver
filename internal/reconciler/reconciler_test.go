@@ -294,7 +294,7 @@ func TestReconciler_EnsureRecord_NoMatchingProvider(t *testing.T) {
 		knownHostnames: make(map[string]struct{}),
 	}
 
-	actions := r.ensureRecord(context.Background(), "unmatched.example.com")
+	actions := r.ensureRecord(context.Background(), "unmatched.example.com", nil)
 
 	if len(actions) != 1 {
 		t.Fatalf("ensureRecord should return 1 action, got %d", len(actions))

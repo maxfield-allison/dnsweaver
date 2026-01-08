@@ -603,8 +603,26 @@ github:release:
       # Create GitHub Release via API
       echo "Creating GitHub Release for $TAG..."
 
+      # Extract changelog section for this version
+      # Strip 'v' prefix since CHANGELOG uses [0.2.0] not [v0.2.0]
+      VERSION=$(echo "$TAG" | sed 's/^v//')
+      VERSION_PATTERN=$(echo "$VERSION" | sed 's/\./\\./g')
+      CHANGELOG_SECTION=""
+      if [ -f "CHANGELOG.md" ]; then
+        # Extract from version header until next version header
+        CHANGELOG_SECTION=$(awk "BEGIN{p=0} /^## \\[$VERSION_PATTERN\\]/{p=1; next} p && /^## \\[/{p=0} p" CHANGELOG.md)
+      fi
+
+      # Fallback if no changelog found
+      if [ -z "$CHANGELOG_SECTION" ]; then
+        CHANGELOG_SECTION="See [CHANGELOG.md](https://github.com/$GITHUB_REPO/blob/main/CHANGELOG.md) for details."
+      fi
+
+      # Build release body with changelog + docker info
       RELEASE_BODY=$(cat <<EOF
-      ## Docker Images
+      $CHANGELOG_SECTION
+
+      ## Installation
 
       ### Docker Hub
       \`\`\`bash
@@ -616,12 +634,8 @@ github:release:
       docker pull ghcr.io/$GITHUB_REPO:$TAG
       \`\`\`
 
-      ## What's Changed
-
-      See [README.md](https://github.com/$GITHUB_REPO#readme) for documentation.
-
       ---
-      *Built from GitLab CI/CD*
+      📖 [Full Documentation](https://github.com/$GITHUB_REPO#readme) | 📋 [Changelog](https://github.com/$GITHUB_REPO/blob/main/CHANGELOG.md)
       EOF
       )
 
@@ -646,11 +660,10 @@ github:release:
         "https://api.github.com/repos/$GITHUB_REPO/releases" \
         -d "{
           \"tag_name\": \"$TAG\",
-          \"name\": \"$TAG\",
+          \"name\": \"dnsweaver $TAG\",
           \"body\": $(echo "$RELEASE_BODY" | jq -Rs .),
           \"draft\": false,
-          \"prerelease\": false,
-          \"generate_release_notes\": true
+          \"prerelease\": false
         }")
 
       RELEASE_URL=$(echo "$RESPONSE" | jq -r '.html_url // empty')

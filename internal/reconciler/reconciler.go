@@ -190,9 +190,15 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 		slog.Int("hostnames", len(discoveredHostnames)),
 	)
 
-	// Step 3: Ensure records exist for all discovered hostnames
+	// Step 3: Build record cache for all providers (single List() call per provider)
+	var cache *recordCache
+	if !r.config.DryRun {
+		cache = newRecordCache(ctx, r.providers, r.logger)
+	}
+
+	// Step 4: Ensure records exist for all discovered hostnames
 	for hostname := range discoveredHostnames {
-		actions := r.ensureRecord(ctx, hostname)
+		actions := r.ensureRecord(ctx, hostname, cache)
 		for _, action := range actions {
 			result.AddAction(action)
 		}
@@ -230,6 +236,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 
 // ReconcileHostname performs reconciliation for a single hostname.
 // This is useful for event-driven updates when a specific workload changes.
+// Note: This does not use the record cache since it's a single hostname operation.
 func (r *Reconciler) ReconcileHostname(ctx context.Context, hostname string) (*Result, error) {
 	if !r.config.Enabled {
 		r.logger.Debug("reconciliation disabled, skipping hostname",
@@ -248,7 +255,8 @@ func (r *Reconciler) ReconcileHostname(ctx context.Context, hostname string) (*R
 	result := NewResult(r.config.DryRun)
 	result.HostnamesDiscovered = 1
 
-	actions := r.ensureRecord(ctx, hostname)
+	// No cache for single-hostname reconciliation (not worth it for one query)
+	actions := r.ensureRecord(ctx, hostname, nil)
 	for _, action := range actions {
 		result.AddAction(action)
 	}
@@ -298,7 +306,7 @@ func (r *Reconciler) RemoveHostname(ctx context.Context, hostname string) (*Resu
 // 2. If exists with same target → skip (idempotent)
 // 3. If exists with different target (same type) → delete old, create new
 // 4. If exists with different type → log warning, skip (don't delete manual records)
-func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action {
+func (r *Reconciler) ensureRecord(ctx context.Context, hostname string, cache *recordCache) []Action {
 	var actions []Action
 
 	matchingProviders := r.providers.MatchingProviders(hostname)
@@ -317,7 +325,7 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action
 	}
 
 	for _, inst := range matchingProviders {
-		action := r.ensureRecordForProvider(ctx, hostname, inst)
+		action := r.ensureRecordForProvider(ctx, hostname, inst, cache)
 		actions = append(actions, action)
 	}
 
@@ -325,7 +333,7 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname string) []Action
 }
 
 // ensureRecordForProvider handles record creation for a single provider with List+Compare logic.
-func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname string, inst *provider.ProviderInstance) Action {
+func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname string, inst *provider.ProviderInstance, cache *recordCache) Action {
 	action := Action{
 		Type:       ActionCreate,
 		Provider:   inst.Name(),
@@ -346,16 +354,28 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname strin
 		return action
 	}
 
-	// Step 1: Check existing records for this hostname
-	existingRecords, err := inst.GetExistingRecords(ctx, hostname)
-	if err != nil {
-		r.logger.Warn("failed to list existing records, proceeding with create",
-			slog.String("hostname", hostname),
-			slog.String("provider", inst.Name()),
-			slog.String("error", err.Error()),
-		)
-		// Fall through to try create anyway
-		existingRecords = nil
+	// Step 1: Get existing records from cache (or fetch if cache unavailable)
+	var existingRecords []provider.Record
+	if cache != nil {
+		var cached bool
+		existingRecords, cached = cache.getExistingRecords(inst.Name(), hostname)
+		if !cached {
+			// Cache miss (provider failed to load) - fall back to direct query
+			r.logger.Debug("cache miss, querying provider directly",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+			)
+			var err error
+			existingRecords, err = inst.GetExistingRecords(ctx, hostname)
+			if err != nil {
+				r.logger.Warn("failed to list existing records, proceeding with create",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("error", err.Error()),
+				)
+				existingRecords = nil
+			}
+		}
 	}
 
 	// Step 2: Analyze existing records
@@ -427,8 +447,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname strin
 	}
 
 	// Step 6: Create the record with the desired target
-	err = inst.CreateRecord(ctx, hostname)
-	if err != nil {
+	if err := inst.CreateRecord(ctx, hostname); err != nil {
 		// Handle conflict error (shouldn't happen after our checks, but be safe)
 		if provider.IsConflict(err) {
 			action.Type = ActionSkip

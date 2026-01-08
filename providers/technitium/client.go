@@ -139,8 +139,13 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, params url.Valu
 	}
 
 	if apiResp.Status == "error" {
-		// Detect "record already exists" error and return ErrConflict
-		if strings.Contains(strings.ToLower(apiResp.ErrorMessage), "record already exists") {
+		// Detect "record already exists" errors and return ErrConflict.
+		// Technitium returns different messages:
+		// - "Record already exists" (general)
+		// - "Identical record already exists" (error code 81058)
+		errLower := strings.ToLower(apiResp.ErrorMessage)
+		if strings.Contains(errLower, "record already exists") ||
+			strings.Contains(errLower, "identical record") {
 			return nil, fmt.Errorf("API error: %s: %w", apiResp.ErrorMessage, provider.ErrConflict)
 		}
 		return nil, fmt.Errorf("API error: %s", apiResp.ErrorMessage)

@@ -35,19 +35,19 @@ func clearInstanceEnv(t *testing.T, instanceName string) {
 	}
 }
 
-func TestParseProviders(t *testing.T) {
+func TestParseInstances(t *testing.T) {
 	tests := []struct {
 		name     string
 		envValue string
 		expected []string
 	}{
 		{
-			name:     "single provider",
+			name:     "single instance",
 			envValue: "internal-dns",
 			expected: []string{"internal-dns"},
 		},
 		{
-			name:     "multiple providers",
+			name:     "multiple instances",
 			envValue: "internal-dns,public-dns,backup-dns",
 			expected: []string{"internal-dns", "public-dns", "backup-dns"},
 		},
@@ -70,24 +70,59 @@ func TestParseProviders(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			os.Unsetenv("DNSWEAVER_INSTANCES")
 			os.Unsetenv("DNSWEAVER_PROVIDERS")
 			if tc.envValue != "" {
-				os.Setenv("DNSWEAVER_PROVIDERS", tc.envValue)
+				os.Setenv("DNSWEAVER_INSTANCES", tc.envValue)
 			}
+			defer os.Unsetenv("DNSWEAVER_INSTANCES")
 			defer os.Unsetenv("DNSWEAVER_PROVIDERS")
 
-			got := parseProviders()
+			got := parseInstances()
 
 			if len(got) != len(tc.expected) {
-				t.Errorf("parseProviders() returned %d items, want %d: %v", len(got), len(tc.expected), got)
+				t.Errorf("parseInstances() returned %d items, want %d: %v", len(got), len(tc.expected), got)
 				return
 			}
 			for i, want := range tc.expected {
 				if got[i] != want {
-					t.Errorf("parseProviders()[%d] = %q, want %q", i, got[i], want)
+					t.Errorf("parseInstances()[%d] = %q, want %q", i, got[i], want)
 				}
 			}
 		})
+	}
+}
+
+func TestParseInstances_DeprecatedAlias(t *testing.T) {
+	// Verify that DNSWEAVER_PROVIDERS still works as a deprecated alias
+	os.Unsetenv("DNSWEAVER_INSTANCES")
+	os.Unsetenv("DNSWEAVER_PROVIDERS")
+	defer os.Unsetenv("DNSWEAVER_INSTANCES")
+	defer os.Unsetenv("DNSWEAVER_PROVIDERS")
+
+	os.Setenv("DNSWEAVER_PROVIDERS", "legacy-instance")
+
+	got := parseInstances()
+
+	if len(got) != 1 || got[0] != "legacy-instance" {
+		t.Errorf("parseInstances() should accept deprecated DNSWEAVER_PROVIDERS, got %v", got)
+	}
+}
+
+func TestParseInstances_NewVarTakesPrecedence(t *testing.T) {
+	// Verify that DNSWEAVER_INSTANCES takes precedence over DNSWEAVER_PROVIDERS
+	os.Unsetenv("DNSWEAVER_INSTANCES")
+	os.Unsetenv("DNSWEAVER_PROVIDERS")
+	defer os.Unsetenv("DNSWEAVER_INSTANCES")
+	defer os.Unsetenv("DNSWEAVER_PROVIDERS")
+
+	os.Setenv("DNSWEAVER_INSTANCES", "new-instance")
+	os.Setenv("DNSWEAVER_PROVIDERS", "old-instance")
+
+	got := parseInstances()
+
+	if len(got) != 1 || got[0] != "new-instance" {
+		t.Errorf("parseInstances() should prefer DNSWEAVER_INSTANCES, got %v", got)
 	}
 }
 

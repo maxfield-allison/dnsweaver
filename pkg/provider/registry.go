@@ -123,7 +123,7 @@ func (r *Registry) All() []*ProviderInstance {
 }
 
 // MatchingProviders returns all provider instances that match the given hostname.
-// The order matches the priority order from DNSWEAVER_PROVIDERS.
+// The order matches the priority order from DNSWEAVER_INSTANCES.
 func (r *Registry) MatchingProviders(hostname string) []*ProviderInstance {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

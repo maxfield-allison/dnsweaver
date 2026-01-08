@@ -34,7 +34,7 @@ func TestLoad_MinimalConfig(t *testing.T) {
 	defer clearAllEnv(t)
 
 	// Minimal required config
-	os.Setenv("DNSWEAVER_PROVIDERS", "internal-dns")
+	os.Setenv("DNSWEAVER_INSTANCES", "internal-dns")
 	os.Setenv("DNSWEAVER_INTERNAL_DNS_TYPE", "technitium")
 	os.Setenv("DNSWEAVER_INTERNAL_DNS_TARGET", "10.1.20.210")
 	os.Setenv("DNSWEAVER_INTERNAL_DNS_DOMAINS", "*.example.com")
@@ -114,8 +114,8 @@ func TestLoad_CompleteConfig(t *testing.T) {
 	os.Setenv("DNSWEAVER_DOCKER_MODE", "swarm")
 	os.Setenv("DNSWEAVER_SOURCE", "labels")
 
-	// Providers
-	os.Setenv("DNSWEAVER_PROVIDERS", "internal-dns,public-dns")
+	// Instances
+	os.Setenv("DNSWEAVER_INSTANCES", "internal-dns,public-dns")
 
 	// Internal DNS (Technitium with secrets file)
 	os.Setenv("DNSWEAVER_INTERNAL_DNS_TYPE", "technitium")
@@ -199,16 +199,16 @@ func TestLoad_CompleteConfig(t *testing.T) {
 	}
 }
 
-func TestLoad_MissingProviders(t *testing.T) {
+func TestLoad_MissingInstances(t *testing.T) {
 	clearAllEnv(t)
 	defer clearAllEnv(t)
 
-	// No DNSWEAVER_PROVIDERS set
+	// No DNSWEAVER_INSTANCES set
 
 	_, err := Load()
 
 	if err == nil {
-		t.Fatal("Load() should return error when DNSWEAVER_PROVIDERS is not set")
+		t.Fatal("Load() should return error when DNSWEAVER_INSTANCES is not set")
 	}
 
 	validationErr, ok := err.(*ValidationError)
@@ -218,13 +218,13 @@ func TestLoad_MissingProviders(t *testing.T) {
 
 	found := false
 	for _, e := range validationErr.Errors {
-		if containsSubstring(e, "DNSWEAVER_PROVIDERS") {
+		if containsSubstring(e, "DNSWEAVER_INSTANCES") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("error should mention DNSWEAVER_PROVIDERS, got %v", validationErr.Errors)
+		t.Errorf("error should mention DNSWEAVER_INSTANCES, got %v", validationErr.Errors)
 	}
 }
 
@@ -235,8 +235,8 @@ func TestLoad_MultipleErrors(t *testing.T) {
 	// Set up config with multiple errors
 	os.Setenv("DNSWEAVER_LOG_LEVEL", "invalid")
 	os.Setenv("DNSWEAVER_HEALTH_PORT", "-1")
-	os.Setenv("DNSWEAVER_PROVIDERS", "broken")
-	// Missing TYPE, TARGET, DOMAINS for "broken" provider
+	os.Setenv("DNSWEAVER_INSTANCES", "broken")
+	// Missing TYPE, TARGET, DOMAINS for "broken" instance
 
 	_, err := Load()
 
@@ -260,7 +260,7 @@ func TestLoad_TargetRecordTypeMismatch(t *testing.T) {
 	defer clearAllEnv(t)
 
 	// A record with hostname target (invalid)
-	os.Setenv("DNSWEAVER_PROVIDERS", "bad-a-record")
+	os.Setenv("DNSWEAVER_INSTANCES", "bad-a-record")
 	os.Setenv("DNSWEAVER_BAD_A_RECORD_TYPE", "technitium")
 	os.Setenv("DNSWEAVER_BAD_A_RECORD_RECORD_TYPE", "A")
 	os.Setenv("DNSWEAVER_BAD_A_RECORD_TARGET", "example.com") // Should be IP
@@ -282,7 +282,7 @@ func TestLoad_CNAMEWithIPTarget(t *testing.T) {
 	defer clearAllEnv(t)
 
 	// CNAME record with IP target (invalid)
-	os.Setenv("DNSWEAVER_PROVIDERS", "bad-cname")
+	os.Setenv("DNSWEAVER_INSTANCES", "bad-cname")
 	os.Setenv("DNSWEAVER_BAD_CNAME_TYPE", "cloudflare")
 	os.Setenv("DNSWEAVER_BAD_CNAME_RECORD_TYPE", "CNAME")
 	os.Setenv("DNSWEAVER_BAD_CNAME_TARGET", "10.1.20.210") // Should be hostname

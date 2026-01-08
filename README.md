@@ -47,10 +47,10 @@ services:
     image: maxamill/dnsweaver:latest
     restart: unless-stopped
     environment:
-      # Provider configuration
-      - DNSWEAVER_PROVIDERS=internal-dns,public-dns
+      # Define instance names (you choose these, they're arbitrary identifiers)
+      - DNSWEAVER_INSTANCES=internal-dns,public-dns
 
-      # Internal DNS (Technitium)
+      # Internal DNS (Technitium) - instance name "internal-dns" → prefix "INTERNAL_DNS"
       - DNSWEAVER_INTERNAL_DNS_TYPE=technitium
       - DNSWEAVER_INTERNAL_DNS_URL=http://dns.internal:5380
       - DNSWEAVER_INTERNAL_DNS_TOKEN_FILE=/run/secrets/technitium_token
@@ -93,10 +93,43 @@ secrets:
 2. dnsweaver matches `myapp.home.example.com` against provider domain patterns
 
 3. The matching provider creates the appropriate DNS record:
-   - **A record**: `myapp.home.example.com → 10.0.0.100`
-   - **CNAME record**: `myapp.example.com → example.com`
+   - **A record**: `myapp.home.example.com → 10.0.0.100` (direct IP)
+   - **CNAME record**: `myapp.example.com → proxy.example.com` (alias to target hostname)
 
 4. When the container stops, the DNS record is automatically deleted
+
+### Record Types and Targets
+
+The `RECORD_TYPE` and `TARGET` settings control what DNS records are created:
+
+| Record Type | TARGET Value | Result | Use Case |
+|-------------|--------------|--------|----------|
+| `A` | IP address (e.g., `10.0.0.100`) | Direct IP resolution | Internal DNS, split-horizon |
+| `CNAME` | Hostname (e.g., `ingress.example.com`) | Alias to another name | Public DNS via reverse proxy |
+
+**Example scenarios:**
+
+- **Single reverse proxy:** All services CNAME to your ingress host
+  ```bash
+  DNSWEAVER_PUBLIC_DNS_TARGET=ingress.example.com
+  ```
+
+- **Multiple Docker hosts:** Each dnsweaver instance points to its own host
+  ```bash
+  # On docker-host-1
+  DNSWEAVER_PUBLIC_DNS_TARGET=docker1.example.com
+  DNSWEAVER_PUBLIC_DNS_DOMAINS=*.docker1.example.com
+
+  # On docker-host-2
+  DNSWEAVER_PUBLIC_DNS_TARGET=docker2.example.com
+  DNSWEAVER_PUBLIC_DNS_DOMAINS=*.docker2.example.com
+  ```
+
+- **Internal A records:** Point directly to a load balancer VIP
+  ```bash
+  DNSWEAVER_INTERNAL_DNS_RECORD_TYPE=A
+  DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
+  ```
 
 ## Configuration
 
@@ -133,18 +166,18 @@ environment:
 
 This is the recommended approach for production deployments. The socket proxy only needs to expose read-only access to containers, services, and events.
 
-### Provider Configuration
+### Instance Configuration
 
-Providers are configured using an explicit instance model:
+Define named **instances** that each connect to a DNS provider. Instance names are arbitrary identifiers you choose:
 
 ```bash
-# List of provider instance names (order = priority)
-DNSWEAVER_PROVIDERS=internal-dns,public-dns
+# List of instance names you define (order = priority for domain matching)
+DNSWEAVER_INSTANCES=internal-dns,public-dns
 
-# Each instance requires TYPE and provider-specific settings
+# Each instance needs TYPE to specify which provider it uses
 # Note: Dashes in names become underscores in env vars
 # Example: "internal-dns" → DNSWEAVER_INTERNAL_DNS_*
-DNSWEAVER_INTERNAL_DNS_TYPE=technitium
+DNSWEAVER_INTERNAL_DNS_TYPE=technitium    # ← This sets the provider type
 DNSWEAVER_INTERNAL_DNS_RECORD_TYPE=A
 DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
 DNSWEAVER_INTERNAL_DNS_DOMAINS=*.home.example.com
@@ -152,10 +185,12 @@ DNSWEAVER_INTERNAL_DNS_TTL=300
 
 DNSWEAVER_PUBLIC_DNS_TYPE=cloudflare
 DNSWEAVER_PUBLIC_DNS_RECORD_TYPE=CNAME
-DNSWEAVER_PUBLIC_DNS_TARGET=example.com
+DNSWEAVER_PUBLIC_DNS_TARGET=proxy.example.com
 DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
 DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.home.example.com
 ```
+
+> **Note:** `DNSWEAVER_PROVIDERS` is deprecated but still works as an alias for `DNSWEAVER_INSTANCES`.
 
 ### Domain Matching
 

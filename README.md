@@ -96,7 +96,53 @@ secrets:
    - **A record**: `myapp.home.example.com → 10.0.0.100` (direct IP)
    - **CNAME record**: `myapp.example.com → docker-host.example.com` (alias to target hostname)
 
-4. When the container stops, the DNS record is automatically deleted
+4. When the container stops, the DNS record is automatically deleted (see [Record Lifecycle](#record-lifecycle) for details)
+
+### Record Lifecycle
+
+Understanding when dnsweaver creates and deletes DNS records helps you configure it safely for your environment.
+
+#### When Records Are Created
+
+Records are created during reconciliation when:
+1. A container/service has matching reverse proxy labels (e.g., Traefik `Host()` rules)
+2. The extracted hostname matches a configured provider's domain patterns
+3. The record doesn't already exist (or exists with a different target, triggering an update)
+
+#### When Records Are Deleted
+
+Records are **only** deleted during **orphan cleanup**, which requires ALL of these conditions:
+
+1. `DNSWEAVER_CLEANUP_ORPHANS=true` (the default)
+2. The hostname has an ownership TXT record (meaning dnsweaver created or adopted it)
+3. The hostname is **no longer found in any running container/service**
+
+If any of these conditions is false, the record stays. This means:
+
+- **Stopped containers still protect their records** — A container that's stopped but not removed still appears in Docker and its hostnames are still extracted
+- **Manually-created records are safe** — Without an ownership TXT record, dnsweaver won't touch them
+- **Dry-run lets you preview** — Set `DNSWEAVER_DRY_RUN=true` to see what would be deleted
+
+#### Reconciliation Triggers
+
+Reconciliation (the process of comparing desired vs actual DNS state) runs when:
+
+| Trigger | Timing | Description |
+|---------|--------|-------------|
+| **Docker events** | Real-time (2s debounce) | Container/service start, stop, update, remove |
+| **Periodic timer** | Every `RECONCILE_INTERVAL` (default: 60s) | Safety net for any missed events |
+| **File changes** | When detected | If Traefik file discovery is enabled |
+| **Startup** | Once on start | Full sync ensures consistency |
+
+#### Tuning for Safety
+
+For extra safety during slow container restarts or deployments:
+
+- **Increase interval**: `DNSWEAVER_RECONCILE_INTERVAL=300` (5 minutes) — more time for containers to restart
+- **Disable cleanup**: `DNSWEAVER_CLEANUP_ORPHANS=false` — never auto-delete, manually remove old records
+- **Preview first**: `DNSWEAVER_DRY_RUN=true` — see what would happen without making changes
+
+See [Environment Variables Reference](#environment-variables-reference) for the complete list of settings.
 
 > **Note:** dnsweaver only manages records it creates. Your existing DNS records (like the A record for your docker host) are never modified or deleted — ownership is tracked via TXT records. By default, dnsweaver will **not** adopt existing DNS records; if a record already exists with the correct target but no ownership TXT, dnsweaver skips it. Set `DNSWEAVER_ADOPT_EXISTING=true` to have dnsweaver take ownership of matching records. You can also run with `DNSWEAVER_DRY_RUN=true` to see what changes would be made without actually modifying DNS.
 
@@ -354,6 +400,84 @@ With file discovery enabled, dnsweaver parses Traefik dynamic configuration file
 - Hostnames defined in static Traefik files (not container labels)
 - External services routed through Traefik
 - Pre-provisioning DNS before container deployment
+
+### Environment Variables Reference
+
+Complete reference of all environment variables. All variables use the `DNSWEAVER_` prefix and support Docker secrets via `_FILE` suffix.
+
+#### Global Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DNSWEAVER_INSTANCES` | *(required)* | Comma-separated list of provider instance names |
+| `DNSWEAVER_LOG_LEVEL` | `info` | Logging level: `debug`, `info`, `warn`, `error` |
+| `DNSWEAVER_LOG_FORMAT` | `json` | Log format: `json`, `text` |
+| `DNSWEAVER_DRY_RUN` | `false` | Preview changes without modifying DNS |
+| `DNSWEAVER_CLEANUP_ORPHANS` | `true` | Delete DNS records when workloads are removed |
+| `DNSWEAVER_OWNERSHIP_TRACKING` | `true` | Use TXT records to track record ownership |
+| `DNSWEAVER_ADOPT_EXISTING` | `false` | Adopt existing DNS records by creating ownership TXT |
+| `DNSWEAVER_DEFAULT_TTL` | `300` | Default TTL for DNS records (seconds) |
+| `DNSWEAVER_RECONCILE_INTERVAL` | `60s` | Periodic reconciliation interval |
+| `DNSWEAVER_HEALTH_PORT` | `8080` | Port for health/metrics endpoints |
+
+#### Docker Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DNSWEAVER_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker host (socket path or TCP URL) |
+| `DNSWEAVER_DOCKER_MODE` | `auto` | Docker mode: `auto`, `swarm`, `standalone` |
+
+#### Per-Instance Settings
+
+Replace `{NAME}` with your instance name (e.g., `INTERNAL_DNS` for instance `internal-dns`).
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DNSWEAVER_{NAME}_TYPE` | Yes | Provider type: `technitium`, `cloudflare`, `webhook` |
+| `DNSWEAVER_{NAME}_RECORD_TYPE` | Yes | Record type: `A`, `CNAME` |
+| `DNSWEAVER_{NAME}_TARGET` | Yes | Record target (IP for A, hostname for CNAME) |
+| `DNSWEAVER_{NAME}_DOMAINS` | Yes | Glob patterns for matching hostnames |
+| `DNSWEAVER_{NAME}_DOMAINS_REGEX` | No | Regex patterns (alternative to glob) |
+| `DNSWEAVER_{NAME}_EXCLUDE_DOMAINS` | No | Glob patterns to exclude |
+| `DNSWEAVER_{NAME}_TTL` | No | Per-instance TTL override |
+
+#### Technitium Provider
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DNSWEAVER_{NAME}_URL` | Yes | Technitium API URL |
+| `DNSWEAVER_{NAME}_TOKEN` | Yes | API token (supports `_FILE`) |
+| `DNSWEAVER_{NAME}_ZONE` | Yes | DNS zone to manage |
+
+#### Cloudflare Provider
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DNSWEAVER_{NAME}_TOKEN` | Yes | Cloudflare API token (supports `_FILE`) |
+| `DNSWEAVER_{NAME}_ZONE` | Yes* | Zone name (*or use `ZONE_ID`) |
+| `DNSWEAVER_{NAME}_ZONE_ID` | Yes* | Zone ID (*or use `ZONE`) |
+| `DNSWEAVER_{NAME}_PROXIED` | No | Enable Cloudflare proxy (default: `false`) |
+
+#### Webhook Provider
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DNSWEAVER_{NAME}_URL` | Yes | Webhook base URL |
+| `DNSWEAVER_{NAME}_AUTH_HEADER` | No | Auth header name (e.g., `Authorization`) |
+| `DNSWEAVER_{NAME}_AUTH_TOKEN` | No | Auth token value (supports `_FILE`) |
+| `DNSWEAVER_{NAME}_TIMEOUT` | No | HTTP timeout (default: `30s`) |
+| `DNSWEAVER_{NAME}_RETRIES` | No | Retry attempts (default: `3`) |
+| `DNSWEAVER_{NAME}_RETRY_DELAY` | No | Retry delay (default: `1s`) |
+
+#### Source Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DNSWEAVER_SOURCES` | `traefik` | Comma-separated list of source types |
+| `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS` | *(none)* | Paths to Traefik config directories/files |
+| `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATTERN` | `*.yml,*.yaml,*.toml` | Glob pattern for config files |
+| `DNSWEAVER_SOURCE_TRAEFIK_POLL_INTERVAL` | `60s` | File re-scan interval |
+| `DNSWEAVER_SOURCE_TRAEFIK_WATCH_METHOD` | `auto` | Watch method: `auto`, `inotify`, `poll` |
 
 ## Endpoints
 

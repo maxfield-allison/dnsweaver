@@ -96,6 +96,10 @@ type Result struct {
 	// HostnamesInvalid is the number of hostnames that failed validation.
 	HostnamesInvalid int
 
+	// HostnamesDuplicate is the number of hostnames that appeared in multiple workloads.
+	// Only the first occurrence is processed; duplicates are logged and skipped.
+	HostnamesDuplicate int
+
 	// Actions contains all reconciliation actions taken (or planned in dry-run).
 	Actions []Action
 

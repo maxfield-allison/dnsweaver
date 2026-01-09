@@ -158,7 +158,9 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	)
 
 	// Step 2: Extract hostnames from each workload
+	// Track hostname -> first workload that defined it (for duplicate detection)
 	discoveredHostnames := make(map[string]struct{})
+	hostnameOrigins := make(map[string]string) // hostname -> workload name
 
 	for _, workload := range workloads {
 		hostnames := r.sources.ExtractAll(ctx, workload.Labels)
@@ -185,7 +187,19 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 		}
 
 		for _, hostname := range hostnames {
-			discoveredHostnames[hostname.Name] = struct{}{}
+			if existingWorkload, exists := hostnameOrigins[hostname.Name]; exists {
+				// Duplicate hostname detected
+				r.logger.Warn("duplicate hostname found in multiple workloads",
+					slog.String("hostname", hostname.Name),
+					slog.String("first_workload", existingWorkload),
+					slog.String("duplicate_workload", workload.Name),
+				)
+				result.HostnamesDuplicate++
+				// First workload wins - don't update hostnameOrigins
+			} else {
+				hostnameOrigins[hostname.Name] = workload.Name
+				discoveredHostnames[hostname.Name] = struct{}{}
+			}
 		}
 	}
 

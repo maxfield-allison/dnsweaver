@@ -189,6 +189,29 @@ func run() error {
 	logger.Info("running initial reconciliation")
 	triggerReconcile()
 
+	// Start periodic reconciliation timer as a safety net
+	// This catches any missed Docker events and ensures eventual consistency
+	if cfg.ReconcileInterval() > 0 {
+		go func() {
+			ticker := time.NewTicker(cfg.ReconcileInterval())
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					logger.Debug("periodic reconciliation triggered",
+						slog.Duration("interval", cfg.ReconcileInterval()),
+					)
+					triggerReconcile()
+				}
+			}
+		}()
+		logger.Info("periodic reconciliation enabled",
+			slog.Duration("interval", cfg.ReconcileInterval()),
+		)
+	}
+
 	logger.Info("dnsweaver initialized, watching for changes",
 		slog.Int("sources", sourceRegistry.Count()),
 		slog.Int("providers", providerRegistry.Count()),

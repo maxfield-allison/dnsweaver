@@ -46,7 +46,7 @@ func TestClient_Ping_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 			"response": map[string]interface{}{
 				"username": "admin",
@@ -66,7 +66,7 @@ func TestClient_Ping_Success(t *testing.T) {
 func TestClient_Ping_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":       "error",
 			"errorMessage": "Invalid token",
 		})
@@ -108,7 +108,7 @@ func TestClient_AddARecord_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 			"response": map[string]interface{}{
 				"zone": mockZoneInfo("example.com"),
@@ -128,7 +128,7 @@ func TestClient_AddARecord_Success(t *testing.T) {
 func TestClient_AddARecord_APIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":       "error",
 			"errorMessage": "Zone does not exist",
 		})
@@ -158,7 +158,7 @@ func TestClient_AddCNAMERecord_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 			"response": map[string]interface{}{
 				"zone": mockZoneInfo("example.com"),
@@ -190,7 +190,7 @@ func TestClient_DeleteARecord_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 		})
 	}))
@@ -219,7 +219,7 @@ func TestClient_DeleteCNAMERecord_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 		})
 	}))
@@ -240,7 +240,7 @@ func TestClient_GetRecords_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 			"response": map[string]interface{}{
 				"zone": mockZoneInfo("example.com"),
@@ -283,7 +283,7 @@ func TestClient_ListZoneRecords_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 			"response": map[string]interface{}{
 				"zone": mockZoneInfo("example.com"),

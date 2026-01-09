@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Periodic Reconciliation Timer**: Implemented the missing periodic reconciliation loop
+  - Uses `DNSWEAVER_RECONCILE_INTERVAL` setting (default: 60 seconds)
+  - Acts as a safety net for any missed Docker events
+  - Ensures containers with slow restarts don't get their DNS records deleted prematurely
+  - The config value existed since v0.1.0 but the timer was never wired up (oversight in initial implementation)
+
 ### Changed
 - **Package Structure Refactor** (#61): Moved source implementations to root-level `sources/` directory
   - `pkg/source/traefik/` → `sources/traefik/` for consistency with `providers/` structure

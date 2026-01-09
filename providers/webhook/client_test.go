@@ -202,7 +202,7 @@ func TestClient_Create(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(ErrorResponse{
+			_ = json.NewEncoder(w).Encode(ErrorResponse{
 				Error: "invalid hostname",
 			})
 		}))
@@ -276,7 +276,7 @@ func TestClient_Delete(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(ErrorResponse{
+			_ = json.NewEncoder(w).Encode(ErrorResponse{
 				Error: "permission denied",
 			})
 		}))

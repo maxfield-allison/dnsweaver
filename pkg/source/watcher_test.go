@@ -215,14 +215,14 @@ func TestFileWatcher_SkipsNonDiscoverableSources(t *testing.T) {
 
 	// Register a non-discoverable source
 	nonDisc := &mockSource{name: "static"}
-	reg.Register(nonDisc)
+	_ = reg.Register(nonDisc)
 
 	// Register a discoverable source
 	disc := &mockDiscoverableSource{
 		name:       "dynamic",
 		discovered: []Hostname{{Name: "app.example.com"}},
 	}
-	reg.Register(disc)
+	_ = reg.Register(disc)
 
 	var sourcesCallled []string
 	var callMu sync.Mutex

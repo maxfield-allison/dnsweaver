@@ -227,10 +227,10 @@ func TestProvider_Create_ARecord(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			json.NewDecoder(r.Body).Decode(&receivedBody)
+			_ = json.NewDecoder(r.Body).Decode(&receivedBody)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successProviderResponse(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(successProviderResponse(map[string]interface{}{
 			"id": "new-rec",
 		}))
 	}))
@@ -265,10 +265,10 @@ func TestProvider_Create_CNAMERecord(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			json.NewDecoder(r.Body).Decode(&receivedBody)
+			_ = json.NewDecoder(r.Body).Decode(&receivedBody)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successProviderResponse(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(successProviderResponse(map[string]interface{}{
 			"id": "new-rec",
 		}))
 	}))
@@ -300,10 +300,10 @@ func TestProvider_Create_WithProxied(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			json.NewDecoder(r.Body).Decode(&receivedBody)
+			_ = json.NewDecoder(r.Body).Decode(&receivedBody)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successProviderResponse(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(successProviderResponse(map[string]interface{}{
 			"id": "new-rec",
 		}))
 	}))

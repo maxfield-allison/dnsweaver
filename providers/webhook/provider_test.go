@@ -129,7 +129,7 @@ func TestProvider_List(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/list" {
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(webhookRecords)
+				_ = json.NewEncoder(w).Encode(webhookRecords)
 				return
 			}
 			w.WriteHeader(http.StatusNotFound)

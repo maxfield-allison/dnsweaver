@@ -139,8 +139,8 @@ func TestTraefik_Extract_NilLabels(t *testing.T) {
 		t.Fatalf("Extract failed: %v", err)
 	}
 
-	if hostnames != nil && len(hostnames) != 0 {
-		t.Errorf("expected nil or empty, got %v", hostnames)
+	if len(hostnames) != 0 {
+		t.Errorf("expected empty, got %v", hostnames)
 	}
 }
 

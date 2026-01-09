@@ -78,7 +78,7 @@ func TestClient_List(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(records)
+			_ = json.NewEncoder(w).Encode(records)
 		}))
 		defer server.Close()
 
@@ -99,7 +99,7 @@ func TestClient_List(t *testing.T) {
 	t.Run("empty list", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]RecordResponse{})
+			_ = json.NewEncoder(w).Encode([]RecordResponse{})
 		}))
 		defer server.Close()
 
@@ -118,7 +118,7 @@ func TestClient_List(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(ErrorResponse{
+			_ = json.NewEncoder(w).Encode(ErrorResponse{
 				Error:   "internal error",
 				Message: "database connection failed",
 			})

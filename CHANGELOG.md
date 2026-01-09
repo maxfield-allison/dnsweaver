@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Package Structure Refactor** (#61): Moved source implementations to root-level `sources/` directory
+  - `pkg/source/traefik/` → `sources/traefik/` for consistency with `providers/` structure
+  - Import path changed: `gitlab.bluewillows.net/root/dnsweaver/sources/traefik`
+  - Internal interfaces remain in `pkg/source/` (no breaking changes for external consumers)
+
 ### Fixed
+- **CI: Trivy security scan fails** (#59): Fixed container entrypoint issue
+  - The `aquasec/trivy:latest` image has trivy as entrypoint, causing "unknown command sh" error
+  - Added explicit entrypoint override in GitLab CI configuration
+- **CI: Lint job errors** (#60): Fixed all golangci-lint errors
+  - Fixed unchecked error returns in test files (errcheck)
+  - Fixed deprecated Docker types: `types.ServiceListOptions` → `swarm.ServiceListOptions` (staticcheck SA1019)
+  - Removed unused `printUsage` function and mock types
+  - Fixed unnecessary nil check before len() (gosimple S1009)
 - **DNSWEAVER_ADOPT_EXISTING not working** (#58): Environment variable was parsed but not passed to reconciler
   - The value was correctly loaded from environment but was missing from reconciler config initialization
   - Now `DNSWEAVER_ADOPT_EXISTING=true` works as documented

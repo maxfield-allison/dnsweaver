@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/swarm"
@@ -230,7 +229,7 @@ func (c *Client) ListServices(ctx context.Context) ([]Service, error) {
 		return nil, ErrNotSwarmMode
 	}
 
-	services, err := c.docker.ServiceList(ctx, types.ServiceListOptions{})
+	services, err := c.docker.ServiceList(ctx, swarm.ServiceListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("listing services: %w", err)
 	}
@@ -304,7 +303,7 @@ func (c *Client) GetServiceLabels(ctx context.Context, serviceID string) (map[st
 		return nil, ErrNotSwarmMode
 	}
 
-	svc, _, err := c.docker.ServiceInspectWithRaw(ctx, serviceID, types.ServiceInspectOptions{})
+	svc, _, err := c.docker.ServiceInspectWithRaw(ctx, serviceID, swarm.ServiceInspectOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("inspecting service %s: %w", serviceID, err)
 	}

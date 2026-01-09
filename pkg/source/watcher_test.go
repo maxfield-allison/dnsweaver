@@ -45,7 +45,7 @@ func TestFileWatcher_Start(t *testing.T) {
 		name:       "test",
 		discovered: []Hostname{{Name: "app.example.com"}},
 	}
-	reg.Register(source)
+	_ = reg.Register(source)
 
 	var callbackCalled bool
 	var callbackMu sync.Mutex
@@ -92,7 +92,7 @@ func TestFileWatcher_DetectsChanges(t *testing.T) {
 		name:       "test",
 		discovered: []Hostname{{Name: "app1.example.com"}},
 	}
-	reg.Register(source)
+	_ = reg.Register(source)
 
 	var calls [][]Hostname
 	var callMu sync.Mutex
@@ -107,7 +107,7 @@ func TestFileWatcher_DetectsChanges(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	w.Start(ctx)
+	_ = w.Start(ctx)
 
 	// Wait for initial poll
 	time.Sleep(30 * time.Millisecond)
@@ -136,7 +136,7 @@ func TestFileWatcher_NoChangeNoDuplicate(t *testing.T) {
 		name:       "test",
 		discovered: []Hostname{{Name: "app.example.com"}},
 	}
-	reg.Register(source)
+	_ = reg.Register(source)
 
 	var callCount int
 	var callMu sync.Mutex
@@ -151,7 +151,7 @@ func TestFileWatcher_NoChangeNoDuplicate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	w.Start(ctx)
+	_ = w.Start(ctx)
 
 	// Wait for multiple poll cycles
 	time.Sleep(60 * time.Millisecond)
@@ -172,7 +172,7 @@ func TestFileWatcher_PollNow(t *testing.T) {
 		name:       "test",
 		discovered: []Hostname{{Name: "app.example.com"}},
 	}
-	reg.Register(source)
+	_ = reg.Register(source)
 
 	var callCount int
 	var callMu sync.Mutex

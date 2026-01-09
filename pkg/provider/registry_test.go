@@ -308,7 +308,7 @@ func TestRegistry_Count(t *testing.T) {
 		t.Errorf("Count() = %d, want 0", r.Count())
 	}
 
-	r.CreateInstance(ProviderInstanceConfig{
+	_ = r.CreateInstance(ProviderInstanceConfig{
 		Name:       "one",
 		TypeName:   "test",
 		RecordType: RecordTypeA,
@@ -328,7 +328,7 @@ func TestRegistry_Close(t *testing.T) {
 		return &mockProvider{name: name, typeName: "test"}, nil
 	})
 
-	r.CreateInstance(ProviderInstanceConfig{
+	_ = r.CreateInstance(ProviderInstanceConfig{
 		Name:       "one",
 		TypeName:   "test",
 		RecordType: RecordTypeA,

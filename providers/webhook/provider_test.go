@@ -207,7 +207,7 @@ func TestProvider_Create(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/create" && r.Method == http.MethodPost {
-				json.NewDecoder(r.Body).Decode(&received)
+				_ = json.NewDecoder(r.Body).Decode(&received)
 				w.WriteHeader(http.StatusCreated)
 				return
 			}
@@ -252,7 +252,7 @@ func TestProvider_Create(t *testing.T) {
 		var received RecordRequest
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			json.NewDecoder(r.Body).Decode(&received)
+			_ = json.NewDecoder(r.Body).Decode(&received)
 			w.WriteHeader(http.StatusCreated)
 		}))
 		defer server.Close()
@@ -288,7 +288,7 @@ func TestProvider_Delete(t *testing.T) {
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/delete" && r.Method == http.MethodDelete {
-				json.NewDecoder(r.Body).Decode(&received)
+				_ = json.NewDecoder(r.Body).Decode(&received)
 				w.WriteHeader(http.StatusOK)
 				return
 			}

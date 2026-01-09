@@ -21,10 +21,10 @@ import (
 	"gitlab.bluewillows.net/root/dnsweaver/internal/watcher"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/source"
-	"gitlab.bluewillows.net/root/dnsweaver/pkg/source/traefik"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/cloudflare"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/technitium"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/webhook"
+	"gitlab.bluewillows.net/root/dnsweaver/sources/traefik"
 )
 
 // Version and BuildDate are set via ldflags during build.
@@ -328,19 +328,4 @@ func createProviderInstances(registry *provider.Registry, cfg *config.Config) er
 	return nil
 }
 
-// printUsage outputs help information.
-func printUsage() {
-	fmt.Fprintf(os.Stderr, `dnsweaver - Automatic DNS record management for Docker containers
 
-Usage: dnsweaver [options]
-
-Environment Variables:
-  DNSWEAVER_LOG_LEVEL        Log level: debug, info, warn, error (default: info)
-  DNSWEAVER_LOG_FORMAT       Log format: json, text (default: json)
-  DNSWEAVER_DRY_RUN          Log changes without applying (default: false)
-  DNSWEAVER_INSTANCES        Comma-separated list of instance names (each needs _TYPE)
-  DNSWEAVER_HEALTH_PORT      Port for health/metrics endpoints (default: 8080)
-
-For more information, see: https://github.com/maxfield-allison/dnsweaver
-`)
-}

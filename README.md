@@ -94,9 +94,11 @@ secrets:
 
 3. The matching provider creates the appropriate DNS record:
    - **A record**: `myapp.home.example.com → 10.0.0.100` (direct IP)
-   - **CNAME record**: `myapp.example.com → proxy.example.com` (alias to target hostname)
+   - **CNAME record**: `myapp.example.com → docker-host.example.com` (alias to target hostname)
 
 4. When the container stops, the DNS record is automatically deleted
+
+> **Note:** dnsweaver only manages records it creates. Your existing DNS records (like the A record for your docker host) are never modified or deleted — ownership is tracked via TXT records. By default, dnsweaver will **not** adopt existing DNS records; if a record already exists with the correct target but no ownership TXT, dnsweaver skips it. Set `DNSWEAVER_ADOPT_EXISTING=true` to have dnsweaver take ownership of matching records. You can also run with `DNSWEAVER_DRY_RUN=true` to see what changes would be made without actually modifying DNS.
 
 ### Record Types and Targets
 
@@ -109,7 +111,16 @@ The `RECORD_TYPE` and `TARGET` settings control what DNS records are created:
 
 **Example scenarios:**
 
-- **Single reverse proxy:** All services CNAME to your ingress host
+- **Single Docker host:** All service subdomains CNAME to your docker host
+  ```bash
+  DNSWEAVER_INTERNAL_DNS_RECORD_TYPE=CNAME
+  DNSWEAVER_INTERNAL_DNS_TARGET=docker-host.example.com
+  DNSWEAVER_INTERNAL_DNS_DOMAINS=*.example.com
+  # app1.example.com → CNAME → docker-host.example.com
+  # app2.example.com → CNAME → docker-host.example.com
+  ```
+
+- **Dedicated ingress/reverse proxy:** All services CNAME to a shared ingress hostname
   ```bash
   DNSWEAVER_PUBLIC_DNS_TARGET=ingress.example.com
   ```
@@ -144,6 +155,7 @@ All configuration is via environment variables with the `DNSWEAVER_` prefix. Var
 | `DNSWEAVER_DRY_RUN` | `false` | Log changes without applying |
 | `DNSWEAVER_CLEANUP_ORPHANS` | `true` | Delete DNS records when workloads are removed |
 | `DNSWEAVER_OWNERSHIP_TRACKING` | `true` | Use TXT records to track record ownership (prevents deletion of manually-created records) |
+| `DNSWEAVER_ADOPT_EXISTING` | `false` | Adopt existing DNS records by creating ownership TXT records (see note below) |
 | `DNSWEAVER_DEFAULT_TTL` | `300` | Default TTL for DNS records |
 | `DNSWEAVER_RECONCILE_INTERVAL` | `60s` | Full reconciliation interval |
 | `DNSWEAVER_HEALTH_PORT` | `8080` | Port for health/metrics endpoints |
@@ -305,6 +317,18 @@ With file discovery enabled, dnsweaver parses Traefik dynamic configuration file
 ## Related Projects
 
 - [technitium-companion](https://github.com/maxfield-allison/technitium-companion) - **Superseded by dnsweaver.** Single-provider predecessor for Technitium-only setups. dnsweaver provides the same functionality plus multi-provider support, static file discovery, and improved observability.
+
+## Uninstalling
+
+To stop using dnsweaver:
+
+1. **Stop the container** — No more DNS changes will be made
+
+2. **Choose what to keep:**
+   - **Keep DNS records, stop automation:** Delete only the `_dnsweaver.*` TXT ownership records. Your A/CNAME records remain and become manually managed.
+   - **Remove everything:** Delete both the TXT ownership records and the A/CNAME records dnsweaver created.
+
+That's it — dnsweaver has no external state beyond the DNS records themselves.
 
 ## License
 

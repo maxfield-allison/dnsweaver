@@ -13,6 +13,9 @@ func clearGlobalEnv(t *testing.T) {
 		"DNSWEAVER_LOG_LEVEL",
 		"DNSWEAVER_LOG_FORMAT",
 		"DNSWEAVER_DRY_RUN",
+		"DNSWEAVER_CLEANUP_ORPHANS",
+		"DNSWEAVER_OWNERSHIP_TRACKING",
+		"DNSWEAVER_ADOPT_EXISTING",
 		"DNSWEAVER_DEFAULT_TTL",
 		"DNSWEAVER_RECONCILE_INTERVAL",
 		"DNSWEAVER_HEALTH_PORT",
@@ -43,6 +46,15 @@ func TestLoadGlobalConfig_Defaults(t *testing.T) {
 	}
 	if cfg.DryRun != DefaultDryRun {
 		t.Errorf("DryRun = %v, want %v", cfg.DryRun, DefaultDryRun)
+	}
+	if cfg.CleanupOrphans != DefaultCleanupOrphans {
+		t.Errorf("CleanupOrphans = %v, want %v", cfg.CleanupOrphans, DefaultCleanupOrphans)
+	}
+	if cfg.OwnershipTracking != DefaultOwnershipTracking {
+		t.Errorf("OwnershipTracking = %v, want %v", cfg.OwnershipTracking, DefaultOwnershipTracking)
+	}
+	if cfg.AdoptExisting != DefaultAdoptExisting {
+		t.Errorf("AdoptExisting = %v, want %v", cfg.AdoptExisting, DefaultAdoptExisting)
 	}
 	if cfg.DefaultTTL != DefaultTTL {
 		t.Errorf("DefaultTTL = %d, want %d", cfg.DefaultTTL, DefaultTTL)
@@ -227,6 +239,42 @@ func TestLoadGlobalConfig_CaseInsensitive(t *testing.T) {
 	}
 	if cfg.DockerMode != "swarm" {
 		t.Errorf("DockerMode = %q, want %q (lowercased)", cfg.DockerMode, "swarm")
+	}
+}
+
+func TestLoadGlobalConfig_AdoptExisting(t *testing.T) {
+	tests := []struct {
+		name    string
+		envVal  string
+		want    bool
+	}{
+		{"default when unset", "", false},
+		{"explicit true", "true", true},
+		{"explicit false", "false", false},
+		{"1 means true", "1", true},
+		{"0 means false", "0", false},
+		{"yes means true", "yes", true},
+		{"no means false", "no", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearGlobalEnv(t)
+			defer clearGlobalEnv(t)
+
+			if tt.envVal != "" {
+				os.Setenv("DNSWEAVER_ADOPT_EXISTING", tt.envVal)
+			}
+
+			cfg, errs := loadGlobalConfig()
+			if len(errs) > 0 {
+				t.Errorf("unexpected errors: %v", errs)
+			}
+
+			if cfg.AdoptExisting != tt.want {
+				t.Errorf("AdoptExisting = %v, want %v", cfg.AdoptExisting, tt.want)
+			}
+		})
 	}
 }
 

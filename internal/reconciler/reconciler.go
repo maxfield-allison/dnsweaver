@@ -28,6 +28,10 @@ type Config struct {
 	// This prevents deletion of manually-created DNS records.
 	OwnershipTracking bool
 
+	// AdoptExisting if true, creates ownership TXT records for existing DNS records
+	// that have matching targets. If false, existing records are left unmanaged.
+	AdoptExisting bool
+
 	// ReconcileInterval is the interval between full reconciliation runs.
 	// Zero means no automatic reconciliation (only on-demand).
 	ReconcileInterval time.Duration
@@ -43,6 +47,7 @@ func DefaultConfig() Config {
 		DryRun:            false,
 		CleanupOrphans:    true,
 		OwnershipTracking: true,
+		AdoptExisting:     false,
 		ReconcileInterval: 60 * time.Second,
 		Enabled:           true,
 	}
@@ -416,13 +421,38 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname strin
 			action.Type = ActionSkip
 			action.Status = StatusSkipped
 			action.Error = "record already exists"
-			r.logger.Debug("record already exists with correct target",
-				slog.String("hostname", hostname),
-				slog.String("provider", inst.Name()),
-				slog.String("target", inst.Target),
-			)
-			// Ensure ownership record exists
-			r.ensureOwnershipRecord(ctx, hostname, inst)
+
+			// Check if we already own this record
+			hasOwnership := false
+			if cache != nil {
+				hasOwnership = cache.hasOwnershipRecord(inst.Name(), hostname)
+			}
+
+			if hasOwnership {
+				// We already own this record - just a normal skip
+				r.logger.Debug("record already exists with correct target",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("target", inst.Target),
+				)
+				// Ensure ownership record exists (idempotent)
+				r.ensureOwnershipRecord(ctx, hostname, inst)
+			} else if r.config.AdoptExisting {
+				// Existing record without ownership - adopt it
+				r.logger.Info("adopting existing record",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("target", inst.Target),
+				)
+				r.ensureOwnershipRecord(ctx, hostname, inst)
+			} else {
+				// Existing record without ownership - skip adoption
+				r.logger.Info("existing record found, skipping adoption (set ADOPT_EXISTING=true to manage)",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("target", inst.Target),
+				)
+			}
 			return action
 		}
 	}

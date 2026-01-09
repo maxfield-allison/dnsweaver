@@ -85,7 +85,7 @@ func TestProvider_New_InvalidConfig(t *testing.T) {
 func TestProvider_Ping_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":   "ok",
 			"response": map[string]interface{}{},
 		})
@@ -103,7 +103,7 @@ func TestProvider_Ping_Success(t *testing.T) {
 func TestProvider_Ping_Error(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":       "error",
 			"errorMessage": "Invalid token",
 		})
@@ -121,7 +121,7 @@ func TestProvider_Ping_Error(t *testing.T) {
 func TestProvider_List_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 			"response": map[string]interface{}{
 				"zone": map[string]interface{}{
@@ -208,7 +208,7 @@ func TestProvider_Create_ARecord(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 		})
 	}))
@@ -243,7 +243,7 @@ func TestProvider_Create_CNAMERecord(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 		})
 	}))
@@ -274,7 +274,7 @@ func TestProvider_Create_DefaultTTL(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 		})
 	}))
@@ -306,7 +306,7 @@ func TestProvider_Delete_ARecord(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 		})
 	}))
@@ -337,7 +337,7 @@ func TestProvider_Delete_CNAMERecord(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "ok",
 		})
 	}))

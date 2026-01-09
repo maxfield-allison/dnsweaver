@@ -94,9 +94,11 @@ secrets:
 
 3. The matching provider creates the appropriate DNS record:
    - **A record**: `myapp.home.example.com → 10.0.0.100` (direct IP)
-   - **CNAME record**: `myapp.example.com → proxy.example.com` (alias to target hostname)
+   - **CNAME record**: `myapp.example.com → docker-host.example.com` (alias to target hostname)
 
 4. When the container stops, the DNS record is automatically deleted
+
+> **Note:** dnsweaver only manages records it creates. Your existing DNS records (like the A record for your docker host) are never modified or deleted — ownership is tracked via TXT records. By default, dnsweaver will **not** adopt existing DNS records; if a record already exists with the correct target but no ownership TXT, dnsweaver skips it. Set `DNSWEAVER_ADOPT_EXISTING=true` to have dnsweaver take ownership of matching records. You can also run with `DNSWEAVER_DRY_RUN=true` to see what changes would be made without actually modifying DNS.
 
 ### Record Types and Targets
 
@@ -109,7 +111,16 @@ The `RECORD_TYPE` and `TARGET` settings control what DNS records are created:
 
 **Example scenarios:**
 
-- **Single reverse proxy:** All services CNAME to your ingress host
+- **Single Docker host:** All service subdomains CNAME to your docker host
+  ```bash
+  DNSWEAVER_INTERNAL_DNS_RECORD_TYPE=CNAME
+  DNSWEAVER_INTERNAL_DNS_TARGET=docker-host.example.com
+  DNSWEAVER_INTERNAL_DNS_DOMAINS=*.example.com
+  # app1.example.com → CNAME → docker-host.example.com
+  # app2.example.com → CNAME → docker-host.example.com
+  ```
+
+- **Dedicated ingress/reverse proxy:** All services CNAME to a shared ingress hostname
   ```bash
   DNSWEAVER_PUBLIC_DNS_TARGET=ingress.example.com
   ```
@@ -144,9 +155,18 @@ All configuration is via environment variables with the `DNSWEAVER_` prefix. Var
 | `DNSWEAVER_DRY_RUN` | `false` | Log changes without applying |
 | `DNSWEAVER_CLEANUP_ORPHANS` | `true` | Delete DNS records when workloads are removed |
 | `DNSWEAVER_OWNERSHIP_TRACKING` | `true` | Use TXT records to track record ownership (prevents deletion of manually-created records) |
-| `DNSWEAVER_DEFAULT_TTL` | `300` | Default TTL for DNS records |
+| `DNSWEAVER_ADOPT_EXISTING` | `false` | Adopt existing DNS records by creating ownership TXT records |
+| `DNSWEAVER_DEFAULT_TTL` | `300` | Default TTL for DNS records (seconds) |
 | `DNSWEAVER_RECONCILE_INTERVAL` | `60s` | Full reconciliation interval |
 | `DNSWEAVER_HEALTH_PORT` | `8080` | Port for health/metrics endpoints |
+
+**TTL Handling:**
+
+- TTL (Time To Live) controls how long DNS resolvers cache records
+- Default is 300 seconds (5 minutes) — a balance between responsiveness and cache efficiency
+- Per-instance TTL can be set with `DNSWEAVER_{NAME}_TTL` to override the global default
+- TTL is set at record creation time; changing TTL doesn't update existing records (delete and recreate to change)
+- **Cloudflare special case:** Proxied records ignore TTL and use "Automatic" (API shows TTL=1)
 
 ### Docker Settings
 
@@ -207,6 +227,45 @@ DNSWEAVER_INTERNAL_DNS_EXCLUDE_DOMAINS=admin.home.example.com
 DNSWEAVER_INTERNAL_DNS_DOMAINS_REGEX=^[a-z0-9-]+\.home\.example\.com$
 ```
 
+#### Multi-Provider Matching (Split-Horizon DNS)
+
+When a hostname matches multiple providers, dnsweaver creates records in **all matching providers**. This is intentional for split-horizon DNS:
+
+```bash
+DNSWEAVER_INSTANCES=internal-dns,public-dns
+
+# Internal DNS: *.example.com → 10.0.0.100 (private IP)
+DNSWEAVER_INTERNAL_DNS_DOMAINS=*.example.com
+DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
+
+# Public DNS: *.example.com → public.example.com (public CNAME)
+DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
+DNSWEAVER_PUBLIC_DNS_TARGET=public.example.com
+```
+
+With this configuration, `app.example.com` creates records in **both** providers:
+
+- Internal DNS: `app.example.com → A → 10.0.0.100`
+- Public DNS: `app.example.com → CNAME → public.example.com`
+
+**To route different subdomains to different providers**, use non-overlapping patterns or `EXCLUDE_DOMAINS`:
+
+```bash
+# Internal only: *.internal.example.com
+DNSWEAVER_INTERNAL_DNS_DOMAINS=*.internal.example.com
+
+# Public only: *.example.com but NOT internal subdomains
+DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
+DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.internal.example.com
+```
+
+#### Instance Order (Priority)
+
+The order of instances in `DNSWEAVER_INSTANCES` does **not** affect which providers receive records — all matching providers get records. However, instance order matters for:
+
+1. **Logging**: Actions are logged in instance order
+2. **Startup validation**: Providers are initialized in order
+
 ### Provider-Specific Settings
 
 #### Technitium
@@ -226,6 +285,8 @@ DNSWEAVER_INTERNAL_DNS_DOMAINS_REGEX=^[a-z0-9-]+\.home\.example\.com$
 | `DNSWEAVER_{NAME}_ZONE` | Yes** | Zone name for lookup (**or use `ZONE_ID`) |
 | `DNSWEAVER_{NAME}_TTL` | No | Record TTL, default 300 (1 = automatic when proxied) |
 | `DNSWEAVER_{NAME}_PROXIED` | No | Enable Cloudflare proxy (default: false) |
+
+**TTL Note:** When `PROXIED=true`, Cloudflare ignores the TTL and uses "Automatic" (displayed as TTL=1 in the API). For unproxied records, Cloudflare requires TTL >= 60 seconds.
 
 **Example:**
 ```bash
@@ -305,6 +366,18 @@ With file discovery enabled, dnsweaver parses Traefik dynamic configuration file
 ## Related Projects
 
 - [technitium-companion](https://github.com/maxfield-allison/technitium-companion) - **Superseded by dnsweaver.** Single-provider predecessor for Technitium-only setups. dnsweaver provides the same functionality plus multi-provider support, static file discovery, and improved observability.
+
+## Uninstalling
+
+To stop using dnsweaver:
+
+1. **Stop the container** — No more DNS changes will be made
+
+2. **Choose what to keep:**
+   - **Keep DNS records, stop automation:** Delete only the `_dnsweaver.*` TXT ownership records. Your A/CNAME records remain and become manually managed.
+   - **Remove everything:** Delete both the TXT ownership records and the A/CNAME records dnsweaver created.
+
+That's it — dnsweaver has no external state beyond the DNS records themselves.
 
 ## License
 

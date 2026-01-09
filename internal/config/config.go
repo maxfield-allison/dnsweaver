@@ -102,6 +102,12 @@ func (c *Config) OwnershipTracking() bool {
 	return c.Global.OwnershipTracking
 }
 
+// AdoptExisting returns whether existing DNS records should be adopted
+// by creating ownership TXT records for them.
+func (c *Config) AdoptExisting() bool {
+	return c.Global.AdoptExisting
+}
+
 // ReconcileInterval returns the reconciliation interval.
 func (c *Config) ReconcileInterval() time.Duration {
 	return c.Global.ReconcileInterval

@@ -28,6 +28,10 @@ type Config struct {
 	// This prevents deletion of manually-created DNS records.
 	OwnershipTracking bool
 
+	// AdoptExisting if true, creates ownership TXT records for existing DNS records
+	// that have matching targets. If false, existing records are left unmanaged.
+	AdoptExisting bool
+
 	// ReconcileInterval is the interval between full reconciliation runs.
 	// Zero means no automatic reconciliation (only on-demand).
 	ReconcileInterval time.Duration
@@ -43,6 +47,7 @@ func DefaultConfig() Config {
 		DryRun:            false,
 		CleanupOrphans:    true,
 		OwnershipTracking: true,
+		AdoptExisting:     false,
 		ReconcileInterval: 60 * time.Second,
 		Enabled:           true,
 	}
@@ -153,10 +158,25 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	)
 
 	// Step 2: Extract hostnames from each workload
+	// Track hostname -> first workload that defined it (for duplicate detection)
 	discoveredHostnames := make(map[string]struct{})
+	hostnameOrigins := make(map[string]string) // hostname -> workload name
 
 	for _, workload := range workloads {
 		hostnames := r.sources.ExtractAll(ctx, workload.Labels)
+
+		// Validate hostnames and log warnings for invalid ones
+		validation := hostnames.ValidateAll()
+		for _, inv := range validation.Invalid {
+			r.logger.Warn("skipping invalid hostname from workload",
+				slog.String("workload", workload.Name),
+				slog.String("hostname", inv.Hostname.Name),
+				slog.String("source", inv.Hostname.Source),
+				slog.String("error", inv.Error.Error()),
+			)
+			result.HostnamesInvalid++
+		}
+		hostnames = validation.Valid
 
 		if len(hostnames) > 0 {
 			r.logger.Debug("extracted hostnames from workload",
@@ -167,13 +187,38 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 		}
 
 		for _, hostname := range hostnames {
-			discoveredHostnames[hostname.Name] = struct{}{}
+			if existingWorkload, exists := hostnameOrigins[hostname.Name]; exists {
+				// Duplicate hostname detected
+				r.logger.Warn("duplicate hostname found in multiple workloads",
+					slog.String("hostname", hostname.Name),
+					slog.String("first_workload", existingWorkload),
+					slog.String("duplicate_workload", workload.Name),
+				)
+				result.HostnamesDuplicate++
+				// First workload wins - don't update hostnameOrigins
+			} else {
+				hostnameOrigins[hostname.Name] = workload.Name
+				discoveredHostnames[hostname.Name] = struct{}{}
+			}
 		}
 	}
 
 	// Step 2b: Discover hostnames from static config files (Traefik YAML, etc.)
 	fileHostnames := r.sources.DiscoverAll(ctx)
 	if len(fileHostnames) > 0 {
+		// Validate file-discovered hostnames
+		validation := fileHostnames.ValidateAll()
+		for _, inv := range validation.Invalid {
+			r.logger.Warn("skipping invalid hostname from file",
+				slog.String("hostname", inv.Hostname.Name),
+				slog.String("source", inv.Hostname.Source),
+				slog.String("router", inv.Hostname.Router),
+				slog.String("error", inv.Error.Error()),
+			)
+			result.HostnamesInvalid++
+		}
+		fileHostnames = validation.Valid
+
 		r.logger.Debug("discovered hostnames from files",
 			slog.Int("count", len(fileHostnames)),
 			slog.Any("hostnames", fileHostnames.Names()),
@@ -416,13 +461,38 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname strin
 			action.Type = ActionSkip
 			action.Status = StatusSkipped
 			action.Error = "record already exists"
-			r.logger.Debug("record already exists with correct target",
-				slog.String("hostname", hostname),
-				slog.String("provider", inst.Name()),
-				slog.String("target", inst.Target),
-			)
-			// Ensure ownership record exists
-			r.ensureOwnershipRecord(ctx, hostname, inst)
+
+			// Check if we already own this record
+			hasOwnership := false
+			if cache != nil {
+				hasOwnership = cache.hasOwnershipRecord(inst.Name(), hostname)
+			}
+
+			if hasOwnership {
+				// We already own this record - just a normal skip
+				r.logger.Debug("record already exists with correct target",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("target", inst.Target),
+				)
+				// Ensure ownership record exists (idempotent)
+				r.ensureOwnershipRecord(ctx, hostname, inst)
+			} else if r.config.AdoptExisting {
+				// Existing record without ownership - adopt it
+				r.logger.Info("adopting existing record",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("target", inst.Target),
+				)
+				r.ensureOwnershipRecord(ctx, hostname, inst)
+			} else {
+				// Existing record without ownership - skip adoption
+				r.logger.Info("existing record found, skipping adoption (set ADOPT_EXISTING=true to manage)",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("target", inst.Target),
+				)
+			}
 			return action
 		}
 	}

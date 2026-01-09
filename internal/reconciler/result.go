@@ -90,8 +90,15 @@ type Result struct {
 	// WorkloadsScanned is the number of Docker workloads examined.
 	WorkloadsScanned int
 
-	// HostnamesDiscovered is the number of unique hostnames found in labels.
+	// HostnamesDiscovered is the number of unique valid hostnames found in labels.
 	HostnamesDiscovered int
+
+	// HostnamesInvalid is the number of hostnames that failed validation.
+	HostnamesInvalid int
+
+	// HostnamesDuplicate is the number of hostnames that appeared in multiple workloads.
+	// Only the first occurrence is processed; duplicates are logged and skipped.
+	HostnamesDuplicate int
 
 	// Actions contains all reconciliation actions taken (or planned in dry-run).
 	Actions []Action

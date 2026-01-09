@@ -77,3 +77,23 @@ func (c *recordCache) getExistingRecords(providerName, hostname string) ([]provi
 
 	return filtered, true
 }
+
+// hasOwnershipRecord checks if an ownership TXT record exists for the given hostname.
+// Returns false if the provider cache is unavailable.
+func (c *recordCache) hasOwnershipRecord(providerName, hostname string) bool {
+	byHostname, exists := c.records[providerName]
+	if !exists || byHostname == nil {
+		return false
+	}
+
+	ownershipName := provider.OwnershipRecordName(hostname)
+	records := byHostname[ownershipName]
+
+	for _, r := range records {
+		if r.Type == provider.RecordTypeTXT && r.Target == provider.OwnershipValue {
+			return true
+		}
+	}
+
+	return false
+}

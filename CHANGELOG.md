@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-01-09
+
+### Added
+- **Hostname Validation** (#49): RFC 1123 hostname validation before DNS operations
+  - Validates label length (max 63 chars) and total hostname length (max 253 chars)
+  - Checks for valid characters (alphanumeric and hyphens)
+  - Rejects empty labels, leading/trailing hyphens, special characters
+  - Supports wildcards (`*.example.com`) in first label only
+  - Invalid hostnames are logged with warnings and skipped (won't fail reconciliation)
+  - New `HostnamesInvalid` counter in reconciliation results
+- **Adopt Existing Setting** (#58): Control whether dnsweaver adopts existing DNS records
+  - New `DNSWEAVER_ADOPT_EXISTING` environment variable (default: `false`)
+  - When false, existing records without ownership TXT are left unmanaged
+  - When true, dnsweaver creates ownership TXT to adopt matching records
+  - Prevents surprising behavior where dnsweaver silently takes over manually-created records
+  - Thanks to u/pheitman on Reddit for testing and feedback on this feature
+- **Duplicate Hostname Detection** (#54): Warn when same hostname appears in multiple workloads
+  - Logs warning with both workload names when duplicate hostname detected
+  - First workload wins (deterministic, alphabetical by service discovery order)
+  - New `HostnamesDuplicate` counter in reconciliation results
+
+### Documentation
+- **Domain Pattern Overlap** (#52): Documented multi-provider matching behavior
+  - Clarified that hostnames are sent to ALL matching providers (split-horizon DNS design)
+  - Added examples for non-overlapping patterns using `EXCLUDE_DOMAINS`
+  - Documented that instance order doesn't affect provider selection
+- **TTL Handling** (#46): Documented TTL configuration and provider-specific behavior
+  - Added TTL handling section explaining caching behavior
+  - Documented Cloudflare quirks: proxied records use "Automatic" TTL (ignores configured value)
+  - Clarified that TTL changes require record deletion/recreation
+
 ## [0.3.0] - 2026-01-08
 
 ### Added

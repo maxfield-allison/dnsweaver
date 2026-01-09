@@ -89,6 +89,12 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.CleanupOrphans {
 		t.Error("DefaultConfig should have CleanupOrphans=true")
 	}
+	if !cfg.OwnershipTracking {
+		t.Error("DefaultConfig should have OwnershipTracking=true")
+	}
+	if cfg.AdoptExisting {
+		t.Error("DefaultConfig should have AdoptExisting=false")
+	}
 	if cfg.ReconcileInterval != 60*time.Second {
 		t.Errorf("DefaultConfig ReconcileInterval = %v, want 60s", cfg.ReconcileInterval)
 	}

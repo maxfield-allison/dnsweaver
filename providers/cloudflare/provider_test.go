@@ -95,7 +95,7 @@ func TestProvider_New_InvalidConfig(t *testing.T) {
 func TestProvider_Ping_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successProviderResponse(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(successProviderResponse(map[string]interface{}{
 			"id":     "token-id",
 			"status": "active",
 		}))
@@ -133,14 +133,14 @@ func TestProvider_ZoneID_Lookup(t *testing.T) {
 			query := r.URL.Query()
 			if query.Get("name") == "example.com" {
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{
+				_ = json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{
 					{"id": "looked-up-zone-id", "name": "example.com", "status": "active"},
 				}))
 				return
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{}))
+		_ = json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{}))
 	}))
 	defer server.Close()
 
@@ -170,15 +170,15 @@ func TestProvider_List_Success(t *testing.T) {
 
 		switch recordType {
 		case "A":
-			json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{
 				{"id": "rec-1", "type": "A", "name": "app.example.com", "content": "10.0.0.1", "ttl": 300},
 			}))
 		case "CNAME":
-			json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{
 				{"id": "rec-2", "type": "CNAME", "name": "www.example.com", "content": "app.example.com", "ttl": 300},
 			}))
 		default:
-			json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{}))
+			_ = json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{}))
 		}
 	}))
 	defer server.Close()
@@ -342,7 +342,7 @@ func TestProvider_Delete_Success(t *testing.T) {
 
 		if r.Method == http.MethodGet && r.URL.Path == "/zones/zone-123/dns_records" {
 			// FindRecord call
-			json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{
 				{"id": "rec-to-delete", "type": "A", "name": "delete.example.com", "content": "10.0.0.1"},
 			}))
 			return
@@ -350,7 +350,7 @@ func TestProvider_Delete_Success(t *testing.T) {
 
 		if r.Method == http.MethodDelete && r.URL.Path == "/zones/zone-123/dns_records/rec-to-delete" {
 			deleteCalled = true
-			json.NewEncoder(w).Encode(successProviderResponse(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(successProviderResponse(map[string]interface{}{
 				"id": "rec-to-delete",
 			}))
 			return
@@ -381,7 +381,7 @@ func TestProvider_Delete_NotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// Return empty result - record not found
-		json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{}))
+		_ = json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{}))
 	}))
 	defer server.Close()
 

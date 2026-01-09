@@ -163,6 +163,19 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	for _, workload := range workloads {
 		hostnames := r.sources.ExtractAll(ctx, workload.Labels)
 
+		// Validate hostnames and log warnings for invalid ones
+		validation := hostnames.ValidateAll()
+		for _, inv := range validation.Invalid {
+			r.logger.Warn("skipping invalid hostname from workload",
+				slog.String("workload", workload.Name),
+				slog.String("hostname", inv.Hostname.Name),
+				slog.String("source", inv.Hostname.Source),
+				slog.String("error", inv.Error.Error()),
+			)
+			result.HostnamesInvalid++
+		}
+		hostnames = validation.Valid
+
 		if len(hostnames) > 0 {
 			r.logger.Debug("extracted hostnames from workload",
 				slog.String("workload", workload.Name),
@@ -179,6 +192,19 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	// Step 2b: Discover hostnames from static config files (Traefik YAML, etc.)
 	fileHostnames := r.sources.DiscoverAll(ctx)
 	if len(fileHostnames) > 0 {
+		// Validate file-discovered hostnames
+		validation := fileHostnames.ValidateAll()
+		for _, inv := range validation.Invalid {
+			r.logger.Warn("skipping invalid hostname from file",
+				slog.String("hostname", inv.Hostname.Name),
+				slog.String("source", inv.Hostname.Source),
+				slog.String("router", inv.Hostname.Router),
+				slog.String("error", inv.Error.Error()),
+			)
+			result.HostnamesInvalid++
+		}
+		fileHostnames = validation.Valid
+
 		r.logger.Debug("discovered hostnames from files",
 			slog.Int("count", len(fileHostnames)),
 			slog.Any("hostnames", fileHostnames.Names()),

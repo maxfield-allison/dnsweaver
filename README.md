@@ -219,6 +219,45 @@ DNSWEAVER_INTERNAL_DNS_EXCLUDE_DOMAINS=admin.home.example.com
 DNSWEAVER_INTERNAL_DNS_DOMAINS_REGEX=^[a-z0-9-]+\.home\.example\.com$
 ```
 
+#### Multi-Provider Matching (Split-Horizon DNS)
+
+When a hostname matches multiple providers, dnsweaver creates records in **all matching providers**. This is intentional for split-horizon DNS:
+
+```bash
+DNSWEAVER_INSTANCES=internal-dns,public-dns
+
+# Internal DNS: *.example.com → 10.0.0.100 (private IP)
+DNSWEAVER_INTERNAL_DNS_DOMAINS=*.example.com
+DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
+
+# Public DNS: *.example.com → public.example.com (public CNAME)
+DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
+DNSWEAVER_PUBLIC_DNS_TARGET=public.example.com
+```
+
+With this configuration, `app.example.com` creates records in **both** providers:
+
+- Internal DNS: `app.example.com → A → 10.0.0.100`
+- Public DNS: `app.example.com → CNAME → public.example.com`
+
+**To route different subdomains to different providers**, use non-overlapping patterns or `EXCLUDE_DOMAINS`:
+
+```bash
+# Internal only: *.internal.example.com
+DNSWEAVER_INTERNAL_DNS_DOMAINS=*.internal.example.com
+
+# Public only: *.example.com but NOT internal subdomains
+DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
+DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.internal.example.com
+```
+
+#### Instance Order (Priority)
+
+The order of instances in `DNSWEAVER_INSTANCES` does **not** affect which providers receive records — all matching providers get records. However, instance order matters for:
+
+1. **Logging**: Actions are logged in instance order
+2. **Startup validation**: Providers are initialized in order
+
 ### Provider-Specific Settings
 
 #### Technitium

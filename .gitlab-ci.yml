@@ -185,6 +185,8 @@ docker:manifest:
 
 github:mirror:
   extends: .mirror-base
+  variables:
+    GIT_DEPTH: 0  # Full clone for complete history
   script:
     - |
       if [ "$CI_COMMIT_BRANCH" = "develop" ]; then
@@ -193,7 +195,7 @@ github:mirror:
         GITHUB_BRANCH="$CI_COMMIT_BRANCH"
       fi
       git remote add github "https://$GITHUB_USERNAME:$GITHUB_TOKEN@github.com/$GITHUB_REPO.git" || true
-      git fetch origin $CI_COMMIT_BRANCH
+      git fetch origin $CI_COMMIT_BRANCH --unshallow 2>/dev/null || git fetch origin $CI_COMMIT_BRANCH
       git checkout -B $CI_COMMIT_BRANCH origin/$CI_COMMIT_BRANCH
       git push github $CI_COMMIT_BRANCH:$GITHUB_BRANCH --force
       echo "✅ Mirrored $CI_COMMIT_BRANCH → github:$GITHUB_BRANCH"
@@ -202,10 +204,12 @@ github:mirror:
 
 github:mirror:tags:
   extends: .mirror-base
+  variables:
+    GIT_DEPTH: 0  # Full clone for complete history
   script:
     - |
       git remote add github "https://$GITHUB_USERNAME:$GITHUB_TOKEN@github.com/$GITHUB_REPO.git" || true
-      git fetch origin --tags
+      git fetch origin --tags --unshallow 2>/dev/null || git fetch origin --tags
       git push github $CI_COMMIT_TAG
       echo "✅ Pushed tag $CI_COMMIT_TAG to GitHub"
   rules:

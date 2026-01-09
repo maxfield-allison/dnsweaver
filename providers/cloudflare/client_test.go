@@ -67,7 +67,7 @@ func TestClient_Ping_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successResponse(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(successResponse(map[string]interface{}{
 			"id":     "token-id",
 			"status": "active",
 		}))
@@ -86,7 +86,7 @@ func TestClient_Ping_InvalidToken(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(errorResponse(1000, "Invalid API token"))
+		_ = json.NewEncoder(w).Encode(errorResponse(1000, "Invalid API token"))
 	}))
 	defer server.Close()
 
@@ -111,11 +111,11 @@ func TestClient_GetZoneID_Success(t *testing.T) {
 
 		// Return zone if querying for example.com
 		if zoneName == "example.com" {
-			json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{
 				{"id": "zone-123", "name": "example.com", "status": "active"},
 			}))
 		} else {
-			json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{}))
+			_ = json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{}))
 		}
 	}))
 	defer server.Close()
@@ -134,7 +134,7 @@ func TestClient_GetZoneID_Success(t *testing.T) {
 func TestClient_GetZoneID_NotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{}))
+		_ = json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{}))
 	}))
 	defer server.Close()
 
@@ -158,12 +158,12 @@ func TestClient_ListRecords_Success(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 
 		if recordType == "A" {
-			json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{
 				{"id": "rec-1", "type": "A", "name": "app.example.com", "content": "10.0.0.1", "ttl": 300, "proxied": false},
 				{"id": "rec-2", "type": "A", "name": "api.example.com", "content": "10.0.0.2", "ttl": 300, "proxied": true},
 			}))
 		} else {
-			json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{}))
+			_ = json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{}))
 		}
 	}))
 	defer server.Close()
@@ -207,7 +207,7 @@ func TestClient_CreateRecord_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successResponse(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(successResponse(map[string]interface{}{
 			"id":      "rec-new",
 			"type":    "A",
 			"name":    "test.example.com",
@@ -229,7 +229,7 @@ func TestClient_CreateRecord_APIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(errorResponse(1004, "DNS Validation Error"))
+		_ = json.NewEncoder(w).Encode(errorResponse(1004, "DNS Validation Error"))
 	}))
 	defer server.Close()
 
@@ -251,7 +251,7 @@ func TestClient_DeleteRecord_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successResponse(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(successResponse(map[string]interface{}{
 			"id": "rec-1",
 		}))
 	}))
@@ -273,7 +273,7 @@ func TestClient_FindRecord_Found(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{
 			{"id": "rec-1", "type": "A", "name": "app.example.com", "content": "10.0.0.1", "ttl": 300},
 		}))
 	}))
@@ -296,7 +296,7 @@ func TestClient_FindRecord_Found(t *testing.T) {
 func TestClient_FindRecord_NotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{}))
+		_ = json.NewEncoder(w).Encode(successResponse([]map[string]interface{}{}))
 	}))
 	defer server.Close()
 
@@ -318,12 +318,12 @@ func TestClient_RateLimiting(t *testing.T) {
 		if callCount == 1 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
-			json.NewEncoder(w).Encode(errorResponse(10000, "Rate limit exceeded"))
+			_ = json.NewEncoder(w).Encode(errorResponse(10000, "Rate limit exceeded"))
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(successResponse(map[string]interface{}{}))
+		_ = json.NewEncoder(w).Encode(successResponse(map[string]interface{}{}))
 	}))
 	defer server.Close()
 

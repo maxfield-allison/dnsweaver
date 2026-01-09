@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed deprecated Docker types: `types.ServiceListOptions` → `swarm.ServiceListOptions` (staticcheck SA1019)
   - Removed unused `printUsage` function and mock types
   - Fixed unnecessary nil check before len() (gosimple S1009)
+
+## [0.3.2] - 2026-01-09
+
+### Fixed
 - **DNSWEAVER_ADOPT_EXISTING not working** (#58): Environment variable was parsed but not passed to reconciler
   - The value was correctly loaded from environment but was missing from reconciler config initialization
   - Now `DNSWEAVER_ADOPT_EXISTING=true` works as documented

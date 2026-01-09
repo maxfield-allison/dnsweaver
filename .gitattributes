@@ -1,7 +1,21 @@
-# Files to exclude from public GitHub mirror
-.gitlab-ci.yml export-ignore
-.gitattributes export-ignore
+# Git attributes for dnsweaver
+# Note: With native git push mirroring, export-ignore is not used.
+# Internal documentation lives in homelab-docs/, not in this repo.
 
-# Internal documentation - NEVER publish publicly
-# Public docs go in docs/, internal docs go in internal-docs/
-internal-docs/ export-ignore
+# LF line endings for all text files
+* text=auto
+
+# Explicit text files
+*.go text
+*.md text
+*.yaml text
+*.yml text
+*.json text
+*.toml text
+*.mod text
+*.sum text
+
+# Binary files
+*.png binary
+*.jpg binary
+*.ico binary

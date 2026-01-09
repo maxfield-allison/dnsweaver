@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **DNSWEAVER_ADOPT_EXISTING not working** (#58): Environment variable was parsed but not passed to reconciler
+  - The value was correctly loaded from environment but was missing from reconciler config initialization
+  - Now `DNSWEAVER_ADOPT_EXISTING=true` works as documented
+  - Added `adopt_existing` to startup log for easier debugging
+  - Thanks to u/pheitman on Reddit for reporting this bug
+
 ## [0.3.1] - 2026-01-09
 
 ### Added

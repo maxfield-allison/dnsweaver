@@ -60,6 +60,7 @@ func run() error {
 		slog.String("build_date", BuildDate),
 		slog.String("go_version", runtime.Version()),
 		slog.Bool("dry_run", cfg.DryRun()),
+		slog.Bool("adopt_existing", cfg.AdoptExisting()),
 	)
 
 	// Create context with cancellation for graceful shutdown
@@ -99,6 +100,7 @@ func run() error {
 		DryRun:            cfg.DryRun(),
 		CleanupOrphans:    cfg.CleanupOrphans(),
 		OwnershipTracking: cfg.OwnershipTracking(),
+		AdoptExisting:     cfg.AdoptExisting(),
 		ReconcileInterval: cfg.ReconcileInterval(),
 		Enabled:           true,
 	}

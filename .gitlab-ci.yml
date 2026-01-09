@@ -9,6 +9,9 @@ variables:
   BINARY_NAME: "dnsweaver"
   REGISTRY: "registry.bluewillows.net"
   IMAGE: "registry.bluewillows.net/root/dnsweaver"
+  # Deploy target - set these as CI/CD variables or override here
+  # DEPLOY_HOST: "swarm-manager.example.com"
+  # DEPLOY_USER: "deploy"
 
 workflow:
   rules:
@@ -90,7 +93,9 @@ test:go:
 
 security:trivy:
   stage: security
-  image: aquasec/trivy:latest
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
   script:
     - trivy fs --exit-code 0 --severity HIGH,CRITICAL --format table .
   rules: *rules-code-changes
@@ -226,7 +231,7 @@ github:mirror:tags:
     - apk add --no-cache openssh-client
     - mkdir -p ~/.ssh && chmod 700 ~/.ssh
     - echo "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519 || true
-    - ssh-keyscan -p 22 10.1.20.220 >> ~/.ssh/known_hosts 2>/dev/null || true
+    - '[ -n "$DEPLOY_HOST" ] && ssh-keyscan -p 22 $DEPLOY_HOST >> ~/.ssh/known_hosts 2>/dev/null || true'
 
 deploy:dev:
   extends: .deploy-base
@@ -234,7 +239,8 @@ deploy:dev:
   script:
     - |
       [ -z "$SSH_PRIVATE_KEY" ] && echo "SSH_PRIVATE_KEY not set" && exit 0
-      ssh -o StrictHostKeyChecking=no administrator@10.1.20.220 \
+      [ -z "$DEPLOY_HOST" ] && echo "DEPLOY_HOST not set" && exit 0
+      ssh -o StrictHostKeyChecking=no ${DEPLOY_USER:-deploy}@$DEPLOY_HOST \
         "docker service update --force --image $IMAGE:dev dnsweaver_dnsweaver" || echo "Service not deployed"
   rules:
     - if: $CI_COMMIT_BRANCH == "develop"
@@ -248,8 +254,9 @@ deploy:production:
   script:
     - |
       [ -z "$SSH_PRIVATE_KEY" ] && echo "SSH_PRIVATE_KEY not set" && exit 0
+      [ -z "$DEPLOY_HOST" ] && echo "DEPLOY_HOST not set" && exit 0
       [ -n "$CI_COMMIT_TAG" ] && IMG="$IMAGE:$CI_COMMIT_TAG" || IMG="$IMAGE:edge"
-      ssh -o StrictHostKeyChecking=no administrator@10.1.20.220 \
+      ssh -o StrictHostKeyChecking=no ${DEPLOY_USER:-deploy}@$DEPLOY_HOST \
         "docker service update --force --image $IMG dnsweaver_dnsweaver" || echo "Service not deployed"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"

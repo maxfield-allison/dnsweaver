@@ -77,17 +77,19 @@ func (pi *ProviderInstance) Matches(hostname string) bool {
 // CreateRecord creates a DNS record for the given hostname using this instance's
 // record type and target configuration.
 func (pi *ProviderInstance) CreateRecord(ctx context.Context, hostname string) error {
-	return pi.CreateRecordWithValues(ctx, hostname, pi.RecordType, pi.Target, pi.TTL)
+	return pi.CreateRecordWithValues(ctx, hostname, pi.RecordType, pi.Target, pi.TTL, nil)
 }
 
-// CreateRecordWithValues creates a DNS record with explicit type, target, and TTL.
+// CreateRecordWithValues creates a DNS record with explicit type, target, TTL, and optional SRV data.
 // This is used when RecordHints override the provider instance defaults.
-func (pi *ProviderInstance) CreateRecordWithValues(ctx context.Context, hostname string, recordType RecordType, target string, ttl int) error {
+// For SRV records, srvData must be provided with priority, weight, and port.
+func (pi *ProviderInstance) CreateRecordWithValues(ctx context.Context, hostname string, recordType RecordType, target string, ttl int, srvData *SRVData) error {
 	record := Record{
 		Hostname: hostname,
 		Type:     recordType,
 		Target:   target,
 		TTL:      ttl,
+		SRV:      srvData,
 	}
 
 	start := time.Now()

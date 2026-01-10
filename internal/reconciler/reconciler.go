@@ -423,6 +423,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 	recordType := inst.RecordType
 	target := inst.Target
 	ttl := inst.TTL
+	var srvData *provider.SRVData
 
 	if hints := hostname.RecordHints; hints != nil {
 		if hints.Type != "" {
@@ -433,6 +434,14 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		}
 		if hints.TTL > 0 {
 			ttl = hints.TTL
+		}
+		// Extract SRV-specific data for SRV records
+		if hints.SRV != nil {
+			srvData = &provider.SRVData{
+				Priority: hints.SRV.Priority,
+				Weight:   hints.SRV.Weight,
+				Port:     hints.SRV.Port,
+			}
 		}
 	}
 
@@ -576,7 +585,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 
 	// Step 6: Create the record with the desired target
 	// Use CreateRecordWithValues to respect RecordHints overrides
-	if err := inst.CreateRecordWithValues(ctx, hostname.Name, recordType, target, ttl); err != nil {
+	if err := inst.CreateRecordWithValues(ctx, hostname.Name, recordType, target, ttl, srvData); err != nil {
 		// Handle conflict error (shouldn't happen after our checks, but be safe)
 		if provider.IsConflict(err) {
 			action.Type = ActionSkip

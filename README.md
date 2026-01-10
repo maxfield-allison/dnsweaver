@@ -144,6 +144,31 @@ For extra safety during slow container restarts or deployments:
 
 See [Environment Variables Reference](#environment-variables-reference) for the complete list of settings.
 
+#### Domain Migration and Phased Rollouts
+
+dnsweaver's domain matching makes it safe to migrate between domains gradually. If your provider is configured with `DOMAINS=*.newdomain.local`, containers using labels like `Host(`app.olddomain.lan`)` will simply be **ignored** — dnsweaver only acts on hostnames that match at least one of the configured domain patterns.
+
+**Migration example:** Moving from `.lan` to `.local`
+
+```bash
+# Provider configured for new domain only
+DNSWEAVER_DNS_TYPE=technitium
+DNSWEAVER_DNS_DOMAINS=*.home.local
+DNSWEAVER_DNS_TARGET=10.0.0.100
+
+# Container labels:
+# - app.home.local     → ✅ Record created (matches *.home.local)
+# - app.home.lan       → ⏭️ Skipped (no matching provider)
+# - legacy.oldzone.lan → ⏭️ Skipped (no matching provider)
+```
+
+This allows you to:
+1. Deploy dnsweaver with your new domain patterns
+2. Migrate containers one at a time by updating their Traefik labels
+3. Old-domain containers continue working (manually managed DNS) until you're ready
+
+> **Tip:** Run with `LOG_LEVEL=debug` to see "no matching providers for hostname" messages for containers that don't match any configured domain pattern.
+
 > **Note:** dnsweaver only manages records it creates. Your existing DNS records (like the A record for your docker host) are never modified or deleted — ownership is tracked via TXT records. By default, dnsweaver will **not** adopt existing DNS records; if a record already exists with the correct target but no ownership TXT, dnsweaver skips it. Set `DNSWEAVER_ADOPT_EXISTING=true` to have dnsweaver take ownership of matching records. You can also run with `DNSWEAVER_DRY_RUN=true` to see what changes would be made without actually modifying DNS.
 
 ### Record Types and Targets

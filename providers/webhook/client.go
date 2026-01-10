@@ -18,10 +18,18 @@ import (
 
 // RecordRequest is the request body for create operations.
 type RecordRequest struct {
-	Hostname string `json:"hostname"`
-	Type     string `json:"type"`
-	Value    string `json:"value"`
-	TTL      int    `json:"ttl"`
+	Hostname string   `json:"hostname"`
+	Type     string   `json:"type"`
+	Value    string   `json:"value"`
+	TTL      int      `json:"ttl"`
+	SRV      *SRVData `json:"srv,omitempty"` // SRV-specific data (only for SRV records)
+}
+
+// SRVData contains SRV record-specific fields for webhook requests.
+type SRVData struct {
+	Priority uint16 `json:"priority"`
+	Weight   uint16 `json:"weight"`
+	Port     uint16 `json:"port"`
 }
 
 // DeleteRequest is the request body for delete operations.
@@ -32,11 +40,12 @@ type DeleteRequest struct {
 
 // RecordResponse represents a single DNS record returned by the webhook.
 type RecordResponse struct {
-	Hostname string `json:"hostname"`
-	Type     string `json:"type"`
-	Value    string `json:"value"`
-	TTL      int    `json:"ttl,omitempty"`
-	ID       string `json:"id,omitempty"`
+	Hostname string   `json:"hostname"`
+	Type     string   `json:"type"`
+	Value    string   `json:"value"`
+	TTL      int      `json:"ttl,omitempty"`
+	ID       string   `json:"id,omitempty"`
+	SRV      *SRVData `json:"srv,omitempty"` // SRV-specific data (only for SRV records)
 }
 
 // ErrorResponse is the expected error response format from webhooks.
@@ -285,6 +294,55 @@ func (c *Client) Create(ctx context.Context, hostname, recordType, value string,
 		slog.String("hostname", hostname),
 		slog.String("type", recordType),
 		slog.String("value", value),
+		slog.Int("ttl", ttl),
+	)
+
+	return nil
+}
+
+// CreateSRV sends a request to create an SRV record with SRV-specific data.
+// Sends POST /create with RecordRequest body including SRV data.
+func (c *Client) CreateSRV(ctx context.Context, hostname string, priority, weight, port uint16, target string, ttl int) error {
+	reqBody := RecordRequest{
+		Hostname: hostname,
+		Type:     "SRV",
+		Value:    target,
+		TTL:      ttl,
+		SRV: &SRVData{
+			Priority: priority,
+			Weight:   weight,
+			Port:     port,
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshaling request: %w", err)
+	}
+
+	resp, body, err := c.doRequest(ctx, http.MethodPost, "/create", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("create SRV failed: %w", err)
+	}
+
+	// Accept 200 OK, 201 Created, or 204 No Content
+	if resp.StatusCode != http.StatusOK &&
+		resp.StatusCode != http.StatusCreated &&
+		resp.StatusCode != http.StatusNoContent {
+		// Try to parse error response
+		var errResp ErrorResponse
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			return fmt.Errorf("create SRV failed: %s", errResp.Error)
+		}
+		return fmt.Errorf("create SRV failed: unexpected status %d", resp.StatusCode)
+	}
+
+	c.logger.Info("created SRV record via webhook",
+		slog.String("hostname", hostname),
+		slog.Uint64("priority", uint64(priority)),
+		slog.Uint64("weight", uint64(weight)),
+		slog.Uint64("port", uint64(port)),
+		slog.String("target", target),
 		slog.Int("ttl", ttl),
 	)
 

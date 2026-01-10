@@ -22,8 +22,11 @@ import (
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/source"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/cloudflare"
+	"gitlab.bluewillows.net/root/dnsweaver/providers/dnsmasq"
+	"gitlab.bluewillows.net/root/dnsweaver/providers/pihole"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/technitium"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/webhook"
+	dnsweaversource "gitlab.bluewillows.net/root/dnsweaver/sources/dnsweaver"
 	"gitlab.bluewillows.net/root/dnsweaver/sources/traefik"
 )
 
@@ -297,8 +300,14 @@ func registerSources(registry *source.Registry, cfg *config.Config, logger *slog
 				slog.Bool("file_discovery", src.SupportsDiscovery()),
 			)
 		case "dnsweaver":
-			// Native dnsweaver labels - could be added here
-			logger.Debug("dnsweaver source not yet implemented", slog.String("source", name))
+			src := dnsweaversource.New(dnsweaversource.WithLogger(logger))
+			if err := registry.Register(src); err != nil {
+				return fmt.Errorf("registering dnsweaver source: %w", err)
+			}
+			logger.Info("registered source",
+				slog.String("name", name),
+				slog.Bool("file_discovery", src.SupportsDiscovery()),
+			)
 		default:
 			logger.Warn("unknown source, skipping", slog.String("source", name))
 		}
@@ -339,6 +348,12 @@ func registerProviderFactories(registry *provider.Registry) {
 
 	// Register Webhook provider factory (custom integrations)
 	registry.RegisterFactory("webhook", webhook.Factory())
+
+	// Register dnsmasq provider factory (local DNS, Pi-hole backend)
+	registry.RegisterFactory("dnsmasq", dnsmasq.Factory())
+
+	// Register Pi-hole provider factory (local DNS via Pi-hole API or file mode)
+	registry.RegisterFactory("pihole", pihole.Factory())
 }
 
 func createProviderInstances(registry *provider.Registry, cfg *config.Config) error {

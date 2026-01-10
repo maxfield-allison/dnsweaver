@@ -14,6 +14,26 @@ func isIPAddress(s string) bool {
 	return net.ParseIP(s) != nil
 }
 
+// isIPv4Address returns true if the given string is a valid IPv4 address.
+func isIPv4Address(s string) bool {
+	ip := net.ParseIP(s)
+	if ip == nil {
+		return false
+	}
+	// To4() returns nil for IPv6 addresses
+	return ip.To4() != nil
+}
+
+// isIPv6Address returns true if the given string is a valid IPv6 address.
+func isIPv6Address(s string) bool {
+	ip := net.ParseIP(s)
+	if ip == nil {
+		return false
+	}
+	// If To4() is nil, it's IPv6
+	return ip.To4() == nil
+}
+
 // ProviderInstance combines a Provider with its domain matcher and record configuration.
 // This allows each provider instance to have its own:
 //   - Domain patterns (which hostnames it handles)
@@ -57,11 +77,17 @@ func (pi *ProviderInstance) Matches(hostname string) bool {
 // CreateRecord creates a DNS record for the given hostname using this instance's
 // record type and target configuration.
 func (pi *ProviderInstance) CreateRecord(ctx context.Context, hostname string) error {
+	return pi.CreateRecordWithValues(ctx, hostname, pi.RecordType, pi.Target, pi.TTL)
+}
+
+// CreateRecordWithValues creates a DNS record with explicit type, target, and TTL.
+// This is used when RecordHints override the provider instance defaults.
+func (pi *ProviderInstance) CreateRecordWithValues(ctx context.Context, hostname string, recordType RecordType, target string, ttl int) error {
 	record := Record{
 		Hostname: hostname,
-		Type:     pi.RecordType,
-		Target:   pi.Target,
-		TTL:      pi.TTL,
+		Type:     recordType,
+		Target:   target,
+		TTL:      ttl,
 	}
 
 	start := time.Now()
@@ -123,8 +149,8 @@ func (pi *ProviderInstance) GetExistingRecords(ctx context.Context, hostname str
 
 	var matching []Record
 	for _, r := range allRecords {
-		// Only return A and CNAME records for the hostname (skip TXT, etc.)
-		if r.Hostname == hostname && (r.Type == RecordTypeA || r.Type == RecordTypeCNAME) {
+		// Only return A, AAAA, and CNAME records for the hostname (skip TXT, etc.)
+		if r.Hostname == hostname && (r.Type == RecordTypeA || r.Type == RecordTypeAAAA || r.Type == RecordTypeCNAME) {
 			matching = append(matching, r)
 		}
 	}
@@ -324,8 +350,8 @@ func (c *ProviderInstanceConfig) Validate() error {
 	if c.TypeName == "" {
 		return ErrConfigMissing("type")
 	}
-	if c.RecordType != RecordTypeA && c.RecordType != RecordTypeCNAME {
-		return ErrConfigInvalid("record_type", string(c.RecordType), "must be A or CNAME")
+	if c.RecordType != RecordTypeA && c.RecordType != RecordTypeAAAA && c.RecordType != RecordTypeCNAME {
+		return ErrConfigInvalid("record_type", string(c.RecordType), "must be A, AAAA, or CNAME")
 	}
 	if c.Target == "" {
 		return ErrConfigMissing("target")
@@ -333,10 +359,13 @@ func (c *ProviderInstanceConfig) Validate() error {
 
 	// Validate target matches record type
 	if c.RecordType == RecordTypeCNAME && isIPAddress(c.Target) {
-		return ErrConfigInvalid("target", c.Target, "CNAME records cannot point to IP addresses; use record_type=A for IP targets")
+		return ErrConfigInvalid("target", c.Target, "CNAME records cannot point to IP addresses; use record_type=A or AAAA for IP targets")
 	}
-	if c.RecordType == RecordTypeA && !isIPAddress(c.Target) {
-		return ErrConfigInvalid("target", c.Target, "A records must point to IP addresses; use record_type=CNAME for hostname targets")
+	if c.RecordType == RecordTypeA && !isIPv4Address(c.Target) {
+		return ErrConfigInvalid("target", c.Target, "A records must point to IPv4 addresses; use record_type=AAAA for IPv6 or CNAME for hostnames")
+	}
+	if c.RecordType == RecordTypeAAAA && !isIPv6Address(c.Target) {
+		return ErrConfigInvalid("target", c.Target, "AAAA records must point to IPv6 addresses; use record_type=A for IPv4 or CNAME for hostnames")
 	}
 
 	if c.TTL < 1 {

@@ -47,6 +47,10 @@ var labelRegex = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$`)
 // singleCharLabelRegex matches single-character labels (valid: just alphanumeric).
 var singleCharLabelRegex = regexp.MustCompile(`^[a-zA-Z0-9]$`)
 
+// srvLabelRegex matches SRV record service/protocol labels (RFC 2782).
+// These labels start with underscore followed by alphanumeric (e.g., _minecraft, _tcp, _udp).
+var srvLabelRegex = regexp.MustCompile(`^_[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$`)
+
 // HostnameValidationError provides detailed information about validation failures.
 type HostnameValidationError struct {
 	Hostname string
@@ -121,6 +125,87 @@ func ValidateHostname(hostname string) error {
 		} else {
 			if !labelRegex.MatchString(label) {
 				// Provide more specific error
+				if !isAlphanumeric(label[0]) {
+					return &HostnameValidationError{Hostname: hostname, Label: label, Err: ErrInvalidLabelStart}
+				}
+				if !isAlphanumeric(label[len(label)-1]) {
+					return &HostnameValidationError{Hostname: hostname, Label: label, Err: ErrInvalidLabelEnd}
+				}
+				return &HostnameValidationError{Hostname: hostname, Label: label, Err: ErrInvalidCharacters}
+			}
+		}
+	}
+
+	return nil
+}
+
+// ValidateSRVHostname validates an SRV record hostname according to RFC 2782.
+//
+// SRV hostnames have the format: _service._protocol.name.domain.tld
+// The first two labels (_service and _protocol) must start with underscore.
+// Remaining labels follow standard RFC 1123 rules.
+//
+// Examples:
+//   - _minecraft._tcp.mc.example.com
+//   - _http._tcp.www.example.com
+//   - _sip._udp.voip.example.com
+//
+// Returns nil if valid, or a HostnameValidationError with details.
+func ValidateSRVHostname(hostname string) error {
+	// Normalize: remove trailing dot (FQDN format)
+	hostname = strings.TrimSuffix(hostname, ".")
+
+	// Check empty
+	if hostname == "" {
+		return &HostnameValidationError{Hostname: hostname, Err: ErrHostnameEmpty}
+	}
+
+	// Check total length
+	if len(hostname) > MaxHostnameLength {
+		return &HostnameValidationError{Hostname: hostname, Err: ErrHostnameTooLong}
+	}
+
+	// Split into labels
+	labels := strings.Split(hostname, ".")
+
+	// SRV hostnames must have at least 3 labels: _service._proto.name
+	if len(labels) < 3 {
+		return &HostnameValidationError{
+			Hostname: hostname,
+			Err:      errors.New("SRV hostname must have at least 3 labels (_service._proto.name)"),
+		}
+	}
+
+	for i, label := range labels {
+		// Check empty label
+		if label == "" {
+			return &HostnameValidationError{Hostname: hostname, Label: label, Err: ErrLabelEmpty}
+		}
+
+		// Check label length
+		if len(label) > MaxLabelLength {
+			return &HostnameValidationError{Hostname: hostname, Label: label, Err: ErrLabelTooLong}
+		}
+
+		// First two labels must be SRV-style (underscore prefix)
+		if i < 2 {
+			if !srvLabelRegex.MatchString(label) {
+				return &HostnameValidationError{
+					Hostname: hostname,
+					Label:    label,
+					Err:      errors.New("SRV service/protocol label must start with underscore"),
+				}
+			}
+			continue
+		}
+
+		// Remaining labels follow RFC 1123 rules
+		if len(label) == 1 {
+			if !singleCharLabelRegex.MatchString(label) {
+				return &HostnameValidationError{Hostname: hostname, Label: label, Err: ErrInvalidCharacters}
+			}
+		} else {
+			if !labelRegex.MatchString(label) {
 				if !isAlphanumeric(label[0]) {
 					return &HostnameValidationError{Hostname: hostname, Label: label, Err: ErrInvalidLabelStart}
 				}
@@ -211,14 +296,24 @@ func (h Hostname) String() string {
 	return h.Name + " (from " + h.Source + ")"
 }
 
-// Validate checks if the hostname conforms to RFC 1123.
+// Validate checks if the hostname conforms to the appropriate RFC.
+// For SRV records (RecordHints.Type == "SRV"), uses RFC 2782 validation.
+// For all other records, uses RFC 1123 validation.
 // Returns nil if valid, or a HostnameValidationError with details.
 func (h Hostname) Validate() error {
+	if h.RecordHints != nil && h.RecordHints.Type == "SRV" {
+		return ValidateSRVHostname(h.Name)
+	}
 	return ValidateHostname(h.Name)
 }
 
-// IsValid returns true if the hostname is valid according to RFC 1123.
+// IsValid returns true if the hostname is valid according to the appropriate RFC.
+// For SRV records (RecordHints.Type == "SRV"), uses RFC 2782 validation.
+// For all other records, uses RFC 1123 validation.
 func (h Hostname) IsValid() bool {
+	if h.RecordHints != nil && h.RecordHints.Type == "SRV" {
+		return ValidateSRVHostname(h.Name) == nil
+	}
 	return ValidateHostname(h.Name) == nil
 }
 

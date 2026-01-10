@@ -375,8 +375,8 @@ func TestProvider_Create_SRVRecord(t *testing.T) {
 		if query.Get("port") != "25565" {
 			t.Errorf("expected port 25565, got %s", query.Get("port"))
 		}
-		if query.Get("srvTarget") != "mc.example.com" {
-			t.Errorf("expected srvTarget mc.example.com, got %s", query.Get("srvTarget"))
+		if query.Get("target") != "mc.example.com" {
+			t.Errorf("expected target mc.example.com, got %s", query.Get("target"))
 		}
 		if query.Get("ttl") != "300" {
 			t.Errorf("expected ttl 300, got %s", query.Get("ttl"))
@@ -450,8 +450,8 @@ func TestProvider_Delete_SRVRecord(t *testing.T) {
 		if query.Get("port") != "25565" {
 			t.Errorf("expected port 25565, got %s", query.Get("port"))
 		}
-		if query.Get("srvTarget") != "mc.example.com" {
-			t.Errorf("expected srvTarget mc.example.com, got %s", query.Get("srvTarget"))
+		if query.Get("target") != "mc.example.com" {
+			t.Errorf("expected target mc.example.com, got %s", query.Get("target"))
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -508,10 +508,10 @@ func TestProvider_List_WithSRVRecords(t *testing.T) {
 						"ttl":      3600,
 						"disabled": false,
 						"rData": map[string]interface{}{
-							"priority":  10,
-							"weight":    5,
-							"port":      25565,
-							"srvTarget": "mc.example.com",
+							"priority": 10,
+							"weight":   5,
+							"port":     25565,
+							"target":   "mc.example.com",
 						},
 					},
 				},

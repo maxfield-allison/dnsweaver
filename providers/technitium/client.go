@@ -31,10 +31,10 @@ type apiRData struct {
 	CName     string `json:"cname,omitempty"`     // For CNAME records
 	Text      string `json:"text,omitempty"`      // For TXT records
 	// SRV record fields
-	Priority   int    `json:"priority,omitempty"`   // For SRV records
-	Weight     int    `json:"weight,omitempty"`     // For SRV records
-	Port       int    `json:"port,omitempty"`       // For SRV records
-	SrvTarget  string `json:"srvTarget,omitempty"`  // For SRV records (Technitium uses this field)
+	Priority  int    `json:"priority,omitempty"` // For SRV records
+	Weight    int    `json:"weight,omitempty"`   // For SRV records
+	Port      int    `json:"port,omitempty"`     // For SRV records
+	SrvTarget string `json:"target,omitempty"`   // For SRV records
 }
 
 // apiResponse is the standard Technitium API response wrapper.
@@ -367,7 +367,7 @@ func (c *Client) AddSRVRecord(ctx context.Context, zone, hostname string, priori
 	params.Set("priority", strconv.Itoa(priority))
 	params.Set("weight", strconv.Itoa(weight))
 	params.Set("port", strconv.Itoa(port))
-	params.Set("srvTarget", target)
+	params.Set("target", target)
 	params.Set("ttl", strconv.Itoa(ttl))
 
 	_, err := c.doRequest(ctx, "/api/zones/records/add", params)
@@ -397,7 +397,7 @@ func (c *Client) DeleteSRVRecord(ctx context.Context, zone, hostname string, pri
 	params.Set("priority", strconv.Itoa(priority))
 	params.Set("weight", strconv.Itoa(weight))
 	params.Set("port", strconv.Itoa(port))
-	params.Set("srvTarget", target)
+	params.Set("target", target)
 
 	_, err := c.doRequest(ctx, "/api/zones/records/delete", params)
 	if err != nil {

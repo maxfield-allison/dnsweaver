@@ -524,7 +524,21 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 	// Step 4: Check if record with correct target already exists
 	for _, existing := range sameTypeRecords {
 		if existing.Target == target {
-			// Perfect match - record already exists with correct target
+			// For SRV records, also check if SRV-specific data matches
+			if recordType == provider.RecordTypeSRV {
+				if !srvDataEquals(existing.SRV, srvData) {
+					// Target matches but SRV data differs - this is an update
+					r.logger.Info("SRV record data changed, updating record",
+						slog.String("hostname", hostname.Name),
+						slog.String("provider", inst.Name()),
+						slog.String("target", target),
+					)
+					// Continue to Step 5 to delete old and create new
+					break
+				}
+			}
+
+			// Perfect match - record already exists with correct target (and SRV data if applicable)
 			action.Type = ActionSkip
 			action.Status = StatusSkipped
 			action.Error = "record already exists"
@@ -975,4 +989,16 @@ func (r *Reconciler) recordMetrics(result *Result) {
 			metrics.RecordsSkippedTotal.WithLabelValues(reason).Inc()
 		}
 	}
+}
+
+// srvDataEquals compares two SRVData structs for equality.
+// Returns true if both are nil or have identical priority, weight, and port.
+func srvDataEquals(a, b *provider.SRVData) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Priority == b.Priority && a.Weight == b.Weight && a.Port == b.Port
 }

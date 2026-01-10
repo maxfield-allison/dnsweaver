@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Pi-hole Provider** (#15): Native Pi-hole DNS integration with two operation modes
+  - **API mode**: Uses Pi-hole's Admin API (recommended for Pi-hole v5+)
+    - Manages Local DNS Records (A/AAAA) and Local CNAME Records
+    - Authentication via admin password (supports `_FILE` suffix for secrets)
+  - **File mode**: Direct file manipulation for containerized Pi-hole setups
+    - Uses dnsmasq config format internally
+    - Configurable config directory, filename, and reload command
+  - Supports A, AAAA, and CNAME record types
+  - Zone filtering for multi-zone environments
 - **dnsmasq Provider** (#28): File-based DNS provider for dnsmasq DNS server
   - Manages records by writing to dnsmasq configuration files
   - Supports `address=` directive for A/AAAA records

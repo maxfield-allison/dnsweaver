@@ -23,6 +23,7 @@ import (
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/source"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/cloudflare"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/dnsmasq"
+	"gitlab.bluewillows.net/root/dnsweaver/providers/pihole"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/technitium"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/webhook"
 	"gitlab.bluewillows.net/root/dnsweaver/sources/traefik"
@@ -343,6 +344,9 @@ func registerProviderFactories(registry *provider.Registry) {
 
 	// Register dnsmasq provider factory (local DNS, Pi-hole backend)
 	registry.RegisterFactory("dnsmasq", dnsmasq.Factory())
+
+	// Register Pi-hole provider factory (local DNS via Pi-hole API or file mode)
+	registry.RegisterFactory("pihole", pihole.Factory())
 }
 
 func createProviderInstances(registry *provider.Registry, cfg *config.Config) error {

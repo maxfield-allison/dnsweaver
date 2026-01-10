@@ -511,6 +511,55 @@ volumes:
 
 > **Note:** The dnsmasq provider requires write access to the config directory and the ability to execute the reload command. For Pi-hole, mount the `/etc/dnsmasq.d` directory and use `pihole restartdns` as the reload command.
 
+#### Pi-hole Provider
+
+Native Pi-hole integration with two operation modes: API mode (recommended) and file mode (for containerized setups).
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DNSWEAVER_{NAME}_MODE` | No | Operation mode: `api` (default) or `file` |
+| `DNSWEAVER_{NAME}_URL` | API mode | Pi-hole admin URL (e.g., `http://pihole.local`) |
+| `DNSWEAVER_{NAME}_PASSWORD` | API mode | Admin password (supports `_FILE`) |
+| `DNSWEAVER_{NAME}_CONFIG_DIR` | File mode | Config directory (default: `/etc/pihole`) |
+| `DNSWEAVER_{NAME}_CONFIG_FILE` | File mode | Config filename (default: `custom.list`) |
+| `DNSWEAVER_{NAME}_RELOAD_COMMAND` | File mode | Reload command (default: `pihole restartdns reload-lists`) |
+| `DNSWEAVER_{NAME}_ZONE` | No | Zone filter (optional) |
+
+**API Mode (Recommended for Pi-hole v5+):**
+
+Uses Pi-hole's built-in Admin API for managing Local DNS Records and Local CNAME Records.
+
+```yaml
+environment:
+  - DNSWEAVER_PIHOLE_TYPE=pihole
+  - DNSWEAVER_PIHOLE_MODE=api
+  - DNSWEAVER_PIHOLE_URL=http://pihole.local
+  - DNSWEAVER_PIHOLE_PASSWORD_FILE=/run/secrets/pihole_password
+  - DNSWEAVER_PIHOLE_RECORD_TYPE=A
+  - DNSWEAVER_PIHOLE_TARGET=10.0.0.100
+  - DNSWEAVER_PIHOLE_DOMAINS=*.home.example.com
+```
+
+**File Mode (For Containerized Pi-hole):**
+
+When running Pi-hole in Docker alongside dnsweaver, file mode allows direct file manipulation. Uses dnsmasq config format internally.
+
+```yaml
+environment:
+  - DNSWEAVER_PIHOLE_TYPE=pihole
+  - DNSWEAVER_PIHOLE_MODE=file
+  - DNSWEAVER_PIHOLE_CONFIG_DIR=/etc/pihole
+  - DNSWEAVER_PIHOLE_CONFIG_FILE=custom.list
+  - DNSWEAVER_PIHOLE_RELOAD_COMMAND=pihole restartdns reload-lists
+  - DNSWEAVER_PIHOLE_RECORD_TYPE=A
+  - DNSWEAVER_PIHOLE_TARGET=10.0.0.100
+  - DNSWEAVER_PIHOLE_DOMAINS=*.home.example.com
+volumes:
+  - pihole-etc:/etc/pihole
+```
+
+> **Note:** Pi-hole supports A, AAAA, and CNAME records. TXT records (used for ownership tracking) are silently skipped since Pi-hole's custom DNS doesn't support them. SRV records are not supported.
+
 #### Source Settings
 
 | Variable | Default | Description |

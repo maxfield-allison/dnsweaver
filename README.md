@@ -441,7 +441,7 @@ Replace `{NAME}` with your instance name (e.g., `INTERNAL_DNS` for instance `int
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DNSWEAVER_{NAME}_TYPE` | Yes | Provider type: `technitium`, `cloudflare`, `webhook` |
+| `DNSWEAVER_{NAME}_TYPE` | Yes | Provider type: `technitium`, `cloudflare`, `dnsmasq`, `webhook` |
 | `DNSWEAVER_{NAME}_RECORD_TYPE` | Yes | Record type: `A`, `AAAA`, `CNAME` |
 | `DNSWEAVER_{NAME}_TARGET` | Yes | Record target (IPv4 for A, IPv6 for AAAA, hostname for CNAME) |
 | `DNSWEAVER_{NAME}_DOMAINS` | Yes | Glob patterns for matching hostnames |
@@ -476,6 +476,40 @@ Replace `{NAME}` with your instance name (e.g., `INTERNAL_DNS` for instance `int
 | `DNSWEAVER_{NAME}_TIMEOUT` | No | HTTP timeout (default: `30s`) |
 | `DNSWEAVER_{NAME}_RETRIES` | No | Retry attempts (default: `3`) |
 | `DNSWEAVER_{NAME}_RETRY_DELAY` | No | Retry delay (default: `1s`) |
+
+#### dnsmasq Provider
+
+File-based provider for dnsmasq DNS server. Manages records by writing to dnsmasq configuration files. Also serves as the backend for Pi-hole.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DNSWEAVER_{NAME}_CONFIG_DIR` | No | Config directory (default: `/etc/dnsmasq.d`) |
+| `DNSWEAVER_{NAME}_CONFIG_FILE` | No | Config filename (default: `dnsweaver.conf`) |
+| `DNSWEAVER_{NAME}_RELOAD_COMMAND` | No | Reload command (default: `systemctl reload dnsmasq`) |
+| `DNSWEAVER_{NAME}_ZONE` | No | Zone filter (optional) |
+
+**dnsmasq record format:**
+```bash
+address=/myapp.example.com/10.1.20.210      # A record
+address=/myapp.example.com/fd00::1          # AAAA record
+cname=alias.example.com,target.example.com  # CNAME
+```
+
+**Example:**
+```yaml
+environment:
+  - DNSWEAVER_PIHOLE_TYPE=dnsmasq
+  - DNSWEAVER_PIHOLE_CONFIG_DIR=/etc/dnsmasq.d
+  - DNSWEAVER_PIHOLE_CONFIG_FILE=10-dnsweaver.conf
+  - DNSWEAVER_PIHOLE_RELOAD_COMMAND=pihole restartdns
+  - DNSWEAVER_PIHOLE_RECORD_TYPE=A
+  - DNSWEAVER_PIHOLE_TARGET=10.0.0.100
+  - DNSWEAVER_PIHOLE_DOMAINS=*.home.example.com
+volumes:
+  - /etc/dnsmasq.d:/etc/dnsmasq.d
+```
+
+> **Note:** The dnsmasq provider requires write access to the config directory and the ability to execute the reload command. For Pi-hole, mount the `/etc/dnsmasq.d` directory and use `pihole restartdns` as the reload command.
 
 #### Source Settings
 

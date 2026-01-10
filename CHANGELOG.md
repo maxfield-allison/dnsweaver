@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **dnsmasq Provider** (#28): File-based DNS provider for dnsmasq DNS server
+  - Manages records by writing to dnsmasq configuration files
+  - Supports `address=` directive for A/AAAA records
+  - Supports `cname=` directive for CNAME records
+  - Automatic dnsmasq reload after changes (configurable)
+  - Serves as foundation for Pi-hole integration
+  - Configurable config directory, filename, and reload command
 - **SRV Record Support** (#62): Service discovery DNS records
   - Added `SRV` record type for service discovery (Minecraft, SIP, LDAP, XMPP)
   - SRV records include priority, weight, port, and target fields

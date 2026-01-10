@@ -522,6 +522,8 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 	}
 
 	// Step 4: Check if record with correct target already exists
+	var srvDataNeedsUpdate bool
+	var existingRecordToUpdate provider.Record
 	for _, existing := range sameTypeRecords {
 		if existing.Target == target {
 			// For SRV records, also check if SRV-specific data matches
@@ -533,7 +535,8 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 						slog.String("provider", inst.Name()),
 						slog.String("target", target),
 					)
-					// Continue to Step 5 to delete old and create new
+					srvDataNeedsUpdate = true
+					existingRecordToUpdate = existing
 					break
 				}
 			}
@@ -578,7 +581,28 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		}
 	}
 
-	// Step 5: Delete records with wrong targets (IP changed)
+	// Step 5a: Handle SRV record data changes (same target, different priority/weight/port)
+	if srvDataNeedsUpdate {
+		r.logger.Info("deleting SRV record with outdated data",
+			slog.String("hostname", hostname.Name),
+			slog.String("provider", inst.Name()),
+			slog.String("target", existingRecordToUpdate.Target),
+		)
+		if err := inst.DeleteRecordByTarget(ctx, hostname.Name, existingRecordToUpdate.Type, existingRecordToUpdate.Target); err != nil {
+			r.logger.Error("failed to delete SRV record before update",
+				slog.String("hostname", hostname.Name),
+				slog.String("provider", inst.Name()),
+				slog.String("error", err.Error()),
+			)
+			action.Type = ActionSkip
+			action.Status = StatusFailed
+			action.Error = fmt.Sprintf("failed to delete old SRV record: %v", err)
+			return action
+		}
+		// Fall through to Step 6 to create the new record with updated SRV data
+	}
+
+	// Step 5b: Delete records with wrong targets (IP changed)
 	for _, existing := range sameTypeRecords {
 		r.logger.Info("target changed, deleting old record",
 			slog.String("hostname", hostname.Name),

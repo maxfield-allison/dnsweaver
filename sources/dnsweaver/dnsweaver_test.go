@@ -151,6 +151,9 @@ func TestDNSWeaver_Extract_SRVRecord(t *testing.T) {
 	if h.RecordHints == nil {
 		t.Fatal("RecordHints is nil")
 	}
+	if h.RecordHints.Target != "mc-server.example.com" {
+		t.Errorf("RecordHints.Target = %q, want %q", h.RecordHints.Target, "mc-server.example.com")
+	}
 	if h.RecordHints.SRV == nil {
 		t.Fatal("RecordHints.SRV is nil")
 	}

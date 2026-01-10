@@ -442,6 +442,13 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 				Weight:   hints.SRV.Weight,
 				Port:     hints.SRV.Port,
 			}
+			r.logger.Debug("SRV data extracted from hints",
+				slog.String("hostname", hostname.Name),
+				slog.String("target", target),
+				slog.Uint64("priority", uint64(srvData.Priority)),
+				slog.Uint64("weight", uint64(srvData.Weight)),
+				slog.Uint64("port", uint64(srvData.Port)),
+			)
 		}
 	}
 

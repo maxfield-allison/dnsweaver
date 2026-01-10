@@ -149,18 +149,31 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 			recordType = provider.RecordTypeCNAME
 		case "TXT":
 			recordType = provider.RecordTypeTXT
+		case "SRV":
+			recordType = provider.RecordTypeSRV
 		default:
 			// Skip unsupported record types
 			continue
 		}
 
-		records = append(records, provider.Record{
+		rec := provider.Record{
 			Hostname:   r.Hostname,
 			Type:       recordType,
 			Target:     r.Value,
 			TTL:        r.TTL,
 			ProviderID: r.ID,
-		})
+		}
+
+		// Handle SRV-specific data
+		if recordType == provider.RecordTypeSRV && r.SRV != nil {
+			rec.SRV = &provider.SRVData{
+				Priority: r.SRV.Priority,
+				Weight:   r.SRV.Weight,
+				Port:     r.SRV.Port,
+			}
+		}
+
+		records = append(records, rec)
 	}
 
 	p.logger.Debug("listed records",
@@ -173,7 +186,18 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 
 // Create adds a new DNS record via the webhook.
 func (p *Provider) Create(ctx context.Context, record provider.Record) error {
-	err := p.client.Create(ctx, record.Hostname, string(record.Type), record.Target, record.TTL)
+	var err error
+
+	// SRV records require special handling
+	if record.Type == provider.RecordTypeSRV {
+		if record.SRV == nil {
+			return fmt.Errorf("creating SRV record: SRV data is required")
+		}
+		err = p.client.CreateSRV(ctx, record.Hostname, record.SRV.Priority, record.SRV.Weight, record.SRV.Port, record.Target, record.TTL)
+	} else {
+		err = p.client.Create(ctx, record.Hostname, string(record.Type), record.Target, record.TTL)
+	}
+
 	if err != nil {
 		return fmt.Errorf("creating %s record: %w", record.Type, err)
 	}

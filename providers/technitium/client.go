@@ -27,9 +27,14 @@ type apiRecord struct {
 
 // apiRData contains the record-specific data from Technitium.
 type apiRData struct {
-	IPAddress string `json:"ipAddress,omitempty"` // For A records
+	IPAddress string `json:"ipAddress,omitempty"` // For A/AAAA records
 	CName     string `json:"cname,omitempty"`     // For CNAME records
 	Text      string `json:"text,omitempty"`      // For TXT records
+	// SRV record fields
+	Priority   int    `json:"priority,omitempty"`   // For SRV records
+	Weight     int    `json:"weight,omitempty"`     // For SRV records
+	Port       int    `json:"port,omitempty"`       // For SRV records
+	SrvTarget  string `json:"srvTarget,omitempty"`  // For SRV records (Technitium uses this field)
 }
 
 // apiResponse is the standard Technitium API response wrapper.
@@ -347,6 +352,64 @@ func (c *Client) DeleteTXTRecord(ctx context.Context, zone, hostname, text strin
 	c.logger.Info("deleted TXT record",
 		slog.String("hostname", hostname),
 		slog.String("text", text),
+		slog.String("zone", zone),
+	)
+
+	return nil
+}
+
+// AddSRVRecord creates an SRV record in the specified zone.
+func (c *Client) AddSRVRecord(ctx context.Context, zone, hostname string, priority, weight, port int, target string, ttl int) error {
+	params := url.Values{}
+	params.Set("zone", zone)
+	params.Set("domain", hostname)
+	params.Set("type", "SRV")
+	params.Set("priority", strconv.Itoa(priority))
+	params.Set("weight", strconv.Itoa(weight))
+	params.Set("port", strconv.Itoa(port))
+	params.Set("srvTarget", target)
+	params.Set("ttl", strconv.Itoa(ttl))
+
+	_, err := c.doRequest(ctx, "/api/zones/records/add", params)
+	if err != nil {
+		return fmt.Errorf("adding SRV record for %s: %w", hostname, err)
+	}
+
+	c.logger.Info("added SRV record",
+		slog.String("hostname", hostname),
+		slog.Int("priority", priority),
+		slog.Int("weight", weight),
+		slog.Int("port", port),
+		slog.String("target", target),
+		slog.String("zone", zone),
+		slog.Int("ttl", ttl),
+	)
+
+	return nil
+}
+
+// DeleteSRVRecord removes an SRV record from the specified zone.
+func (c *Client) DeleteSRVRecord(ctx context.Context, zone, hostname string, priority, weight, port int, target string) error {
+	params := url.Values{}
+	params.Set("zone", zone)
+	params.Set("domain", hostname)
+	params.Set("type", "SRV")
+	params.Set("priority", strconv.Itoa(priority))
+	params.Set("weight", strconv.Itoa(weight))
+	params.Set("port", strconv.Itoa(port))
+	params.Set("srvTarget", target)
+
+	_, err := c.doRequest(ctx, "/api/zones/records/delete", params)
+	if err != nil {
+		return fmt.Errorf("deleting SRV record for %s: %w", hostname, err)
+	}
+
+	c.logger.Info("deleted SRV record",
+		slog.String("hostname", hostname),
+		slog.Int("priority", priority),
+		slog.Int("weight", weight),
+		slog.Int("port", port),
+		slog.String("target", target),
 		slog.String("zone", zone),
 	)
 

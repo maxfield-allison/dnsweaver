@@ -213,6 +213,33 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 		})
 	}
 
+	// Fetch SRV records
+	srvRecords, err := p.client.ListRecords(ctx, zoneID, "SRV")
+	if err != nil {
+		return nil, fmt.Errorf("listing SRV records: %w", err)
+	}
+	for _, r := range srvRecords {
+		rec := provider.Record{
+			Hostname:   r.Name,
+			Type:       provider.RecordTypeSRV,
+			TTL:        r.TTL,
+			ProviderID: r.ID,
+		}
+		// Cloudflare returns SRV data in the Data field
+		if r.Data != nil {
+			rec.Target = r.Data.Target
+			rec.SRV = &provider.SRVData{
+				Priority: r.Data.Priority,
+				Weight:   r.Data.Weight,
+				Port:     r.Data.Port,
+			}
+		} else {
+			// Fallback: parse Content if Data is not present
+			rec.Target = r.Content
+		}
+		records = append(records, rec)
+	}
+
 	p.logger.Debug("listed records",
 		slog.String("provider", p.name),
 		slog.String("zone_id", zoneID),
@@ -235,9 +262,9 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 	}
 
 	// Determine if record should be proxied
-	// TXT records cannot be proxied by Cloudflare
+	// TXT and SRV records cannot be proxied by Cloudflare
 	proxied := p.proxied
-	if record.Type == provider.RecordTypeTXT {
+	if record.Type == provider.RecordTypeTXT || record.Type == provider.RecordTypeSRV {
 		proxied = false
 	}
 
@@ -246,16 +273,27 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 		ttl = 1
 	}
 
-	recordType := string(record.Type)
-	err = p.client.CreateRecord(ctx, zoneID, recordType, record.Hostname, record.Target, ttl, proxied)
-	if err != nil {
-		return fmt.Errorf("creating %s record: %w", recordType, err)
+	// SRV records require special handling
+	if record.Type == provider.RecordTypeSRV {
+		if record.SRV == nil {
+			return fmt.Errorf("creating SRV record: SRV data is required")
+		}
+		err = p.client.CreateSRVRecord(ctx, zoneID, record.Hostname, record.SRV.Priority, record.SRV.Weight, record.SRV.Port, record.Target, ttl)
+		if err != nil {
+			return fmt.Errorf("creating SRV record: %w", err)
+		}
+	} else {
+		recordType := string(record.Type)
+		err = p.client.CreateRecord(ctx, zoneID, recordType, record.Hostname, record.Target, ttl, proxied)
+		if err != nil {
+			return fmt.Errorf("creating %s record: %w", recordType, err)
+		}
 	}
 
 	p.logger.Info("created record",
 		slog.String("provider", p.name),
 		slog.String("hostname", record.Hostname),
-		slog.String("type", recordType),
+		slog.String("type", string(record.Type)),
 		slog.String("target", record.Target),
 		slog.Int("ttl", ttl),
 		slog.Bool("proxied", proxied),

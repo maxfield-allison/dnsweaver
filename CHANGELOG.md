@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **SRV Record Support** (#62): Service discovery DNS records
+  - Added `SRV` record type for service discovery (Minecraft, SIP, LDAP, XMPP)
+  - SRV records include priority, weight, port, and target fields
+  - SRV naming convention: `_service._proto.name` (e.g., `_minecraft._tcp.example.com`)
+  - Full support across all providers: Technitium, Cloudflare, Webhook
+  - Updated README with SRV record type in reference table
 - **AAAA Record Support** (#63): IPv6 DNS record support
   - Added `AAAA` record type for IPv6 addresses alongside existing `A` (IPv4) and `CNAME` types
   - Strict validation: A records require IPv4, AAAA records require IPv6, CNAME requires hostname

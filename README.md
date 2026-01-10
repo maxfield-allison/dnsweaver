@@ -155,6 +155,7 @@ The `RECORD_TYPE` and `TARGET` settings control what DNS records are created:
 | `A` | IPv4 address (e.g., `10.0.0.100`) | Direct IPv4 resolution | Internal DNS, split-horizon |
 | `AAAA` | IPv6 address (e.g., `2001:db8::1`) | Direct IPv6 resolution | IPv6-enabled environments |
 | `CNAME` | Hostname (e.g., `ingress.example.com`) | Alias to another name | Public DNS via reverse proxy |
+| `SRV` | Target hostname + priority/weight/port | Service discovery | Minecraft, SIP, LDAP |
 
 **Example scenarios:**
 

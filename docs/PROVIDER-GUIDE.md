@@ -287,7 +287,7 @@ import (
 
 func registerProviderFactories(registry *provider.Registry) {
 	// Existing registrations...
-	
+
 	// Register new provider
 	registry.RegisterFactory("myprovider", myprovider.Factory())
 }
@@ -324,7 +324,7 @@ func TestClient_CreateRecord(t *testing.T) {
 ```go
 func TestFactory(t *testing.T) {
 	factory := Factory()
-	
+
 	p, err := factory("test", map[string]string{
 		"URL":   "http://localhost",
 		"TOKEN": "test-token",
@@ -333,7 +333,7 @@ func TestFactory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	
+
 	if p.Name() != "test" {
 		t.Errorf("expected name test, got %s", p.Name())
 	}
@@ -393,22 +393,54 @@ Your provider should support these record types as applicable:
 | `AAAA` | IPv6 address record | Valid IPv6 address (e.g., `2001:db8::1` or `fd00::1`) |
 | `CNAME` | Canonical name (alias) | Valid hostname (e.g., `target.example.com`) |
 | `TXT` | Text record (used for ownership) | String value |
-| `SRV` | Service record (future) | Priority, weight, port, target |
+| `SRV` | Service record | Priority (0-65535), weight (0-65535), port (1-65535), target hostname |
+
+### SRV Record Format
+
+SRV records are used for service discovery. The hostname follows the pattern `_service._proto.name`:
+
+- `_minecraft._tcp.example.com` → Minecraft server discovery
+- `_sip._tcp.example.com` → SIP server discovery
+- `_ldap._tcp.example.com` → LDAP server discovery
+
+SRV records have additional fields beyond standard records:
+
+```go
+type SRVData struct {
+    Priority uint16 // Lower values = higher priority (0-65535)
+    Weight   uint16 // Load balancing among same-priority servers (0-65535)
+    Port     uint16 // TCP/UDP port number (1-65535)
+}
+
+type Record struct {
+    Hostname   string
+    Type       RecordType
+    Target     string   // Target hostname for SRV records
+    TTL        int
+    SRV        *SRVData // Only set when Type is SRV
+}
+```
 
 ### Implementation Notes
 
 1. **A and AAAA records** use the same pattern — only the target format differs:
-   - `A` → IPv4: `record.Value` must be a valid IPv4 address
-   - `AAAA` → IPv6: `record.Value` must be a valid IPv6 address (including shorthand)
+   - `A` → IPv4: `record.Target` must be a valid IPv4 address
+   - `AAAA` → IPv6: `record.Target` must be a valid IPv6 address (including shorthand)
 
 2. **IPv6 considerations:**
    - Accept both full (`2001:0db8:0000:0000:0000:0000:0000:0001`) and shorthand (`2001:db8::1`) notation
    - Use `net.ParseIP()` for validation — it handles both
    - Common private IPv6: `fd00::/8` (unique local addresses)
 
-3. **API-specific handling:**
+3. **SRV record handling:**
+   - Check `record.SRV` is not nil before accessing priority/weight/port
+   - Return an error if SRV data is missing for SRV record operations
+   - SRV records cannot be proxied (for providers like Cloudflare)
+
+4. **API-specific handling:**
    - Some APIs (like Technitium) use `ipAddress` param for both A and AAAA
    - Others (like Cloudflare) use `content` for the value regardless of type
+   - SRV records often require structured data (Cloudflare) or separate params (Technitium)
    - Check your DNS provider's API documentation
 
 ### Example Implementation
@@ -417,11 +449,18 @@ Your provider should support these record types as applicable:
 func (p *Provider) Create(ctx context.Context, record provider.Record) error {
     switch record.Type {
     case provider.RecordTypeA, provider.RecordTypeAAAA:
-        return p.client.AddAddressRecord(ctx, record.Hostname, record.Type, record.Value, p.ttl)
+        return p.client.AddAddressRecord(ctx, record.Hostname, record.Type, record.Target, p.ttl)
     case provider.RecordTypeCNAME:
-        return p.client.AddCNAME(ctx, record.Hostname, record.Value, p.ttl)
+        return p.client.AddCNAME(ctx, record.Hostname, record.Target, p.ttl)
     case provider.RecordTypeTXT:
-        return p.client.AddTXT(ctx, record.Hostname, record.Value, p.ttl)
+        return p.client.AddTXT(ctx, record.Hostname, record.Target, p.ttl)
+    case provider.RecordTypeSRV:
+        if record.SRV == nil {
+            return fmt.Errorf("SRV data is required for SRV records")
+        }
+        return p.client.AddSRV(ctx, record.Hostname,
+            int(record.SRV.Priority), int(record.SRV.Weight), int(record.SRV.Port),
+            record.Target, p.ttl)
     default:
         return fmt.Errorf("unsupported record type: %s", record.Type)
     }

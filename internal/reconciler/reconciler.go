@@ -522,87 +522,83 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 	}
 
 	// Step 4: Check if record with correct target already exists
-	var srvDataNeedsUpdate bool
-	var existingRecordToUpdate provider.Record
+	// For SRV records, we need to handle multiple records with the same target but different SRV data
+	var exactMatchFound bool
+	var staleSrvRecords []provider.Record
 	for _, existing := range sameTypeRecords {
 		if existing.Target == target {
-			// For SRV records, also check if SRV-specific data matches
+			// For SRV records, check if SRV-specific data matches
 			if recordType == provider.RecordTypeSRV {
-				if !srvDataEquals(existing.SRV, srvData) {
-					// Target matches but SRV data differs - this is an update
-					r.logger.Info("SRV record data changed, updating record",
-						slog.String("hostname", hostname.Name),
-						slog.String("provider", inst.Name()),
-						slog.String("target", target),
-					)
-					srvDataNeedsUpdate = true
-					existingRecordToUpdate = existing
-					break
+				if srvDataEquals(existing.SRV, srvData) {
+					// Perfect match for SRV record
+					exactMatchFound = true
+				} else {
+					// Same target but different SRV data - this is a stale record
+					staleSrvRecords = append(staleSrvRecords, existing)
 				}
-			}
-
-			// Perfect match - record already exists with correct target (and SRV data if applicable)
-			action.Type = ActionSkip
-			action.Status = StatusSkipped
-			action.Error = "record already exists"
-
-			// Check if we already own this record
-			hasOwnership := false
-			if cache != nil {
-				hasOwnership = cache.hasOwnershipRecord(inst.Name(), hostname.Name)
-			}
-
-			if hasOwnership {
-				// We already own this record - just a normal skip
-				r.logger.Debug("record already exists with correct target",
-					slog.String("hostname", hostname.Name),
-					slog.String("provider", inst.Name()),
-					slog.String("target", target),
-				)
-				// Ensure ownership record exists (idempotent)
-				r.ensureOwnershipRecord(ctx, hostname.Name, inst)
-			} else if r.config.AdoptExisting {
-				// Existing record without ownership - adopt it
-				r.logger.Info("adopting existing record",
-					slog.String("hostname", hostname.Name),
-					slog.String("provider", inst.Name()),
-					slog.String("target", target),
-				)
-				r.ensureOwnershipRecord(ctx, hostname.Name, inst)
 			} else {
-				// Existing record without ownership - skip adoption
-				r.logger.Info("existing record found, skipping adoption (set ADOPT_EXISTING=true to manage)",
-					slog.String("hostname", hostname.Name),
-					slog.String("provider", inst.Name()),
-					slog.String("target", target),
-				)
+				// Non-SRV record with matching target - exact match
+				exactMatchFound = true
 			}
-			return action
 		}
 	}
 
-	// Step 5a: Handle SRV record data changes (same target, different priority/weight/port)
-	if srvDataNeedsUpdate {
-		r.logger.Info("deleting SRV record with outdated data",
+	// Step 4a: Delete stale SRV records (same target, different priority/weight/port)
+	for _, stale := range staleSrvRecords {
+		r.logger.Info("deleting stale SRV record with outdated data",
 			slog.String("hostname", hostname.Name),
 			slog.String("provider", inst.Name()),
-			slog.String("target", existingRecordToUpdate.Target),
+			slog.String("target", stale.Target),
+			slog.Int("old_priority", int(stale.SRV.Priority)),
+			slog.Int("old_port", int(stale.SRV.Port)),
 		)
-		if err := inst.DeleteRecordByTarget(ctx, hostname.Name, existingRecordToUpdate.Type, existingRecordToUpdate.Target); err != nil {
-			r.logger.Error("failed to delete SRV record before update",
+		if err := inst.DeleteSRVRecord(ctx, hostname.Name, stale.Target, stale.SRV); err != nil {
+			r.logger.Error("failed to delete stale SRV record",
 				slog.String("hostname", hostname.Name),
 				slog.String("provider", inst.Name()),
 				slog.String("error", err.Error()),
 			)
-			action.Type = ActionSkip
-			action.Status = StatusFailed
-			action.Error = fmt.Sprintf("failed to delete old SRV record: %v", err)
-			return action
+			// Continue trying other deletes
 		}
-		// Fall through to Step 6 to create the new record with updated SRV data
 	}
 
-	// Step 5b: Delete records with wrong targets (IP changed)
+	// Step 4b: If exact match exists, skip creation
+	if exactMatchFound {
+		action.Type = ActionSkip
+		action.Status = StatusSkipped
+		action.Error = "record already exists"
+
+		// Check if we already own this record
+		hasOwnership := false
+		if cache != nil {
+			hasOwnership = cache.hasOwnershipRecord(inst.Name(), hostname.Name)
+		}
+
+		if hasOwnership {
+			r.logger.Debug("record already exists with correct target",
+				slog.String("hostname", hostname.Name),
+				slog.String("provider", inst.Name()),
+				slog.String("target", target),
+			)
+			r.ensureOwnershipRecord(ctx, hostname.Name, inst)
+		} else if r.config.AdoptExisting {
+			r.logger.Info("adopting existing record",
+				slog.String("hostname", hostname.Name),
+				slog.String("provider", inst.Name()),
+				slog.String("target", target),
+			)
+			r.ensureOwnershipRecord(ctx, hostname.Name, inst)
+		} else {
+			r.logger.Info("existing record found, skipping adoption (set ADOPT_EXISTING=true to manage)",
+				slog.String("hostname", hostname.Name),
+				slog.String("provider", inst.Name()),
+				slog.String("target", target),
+			)
+		}
+		return action
+	}
+
+	// Step 5: Delete records with wrong targets (IP/hostname changed)
 	for _, existing := range sameTypeRecords {
 		r.logger.Info("target changed, deleting old record",
 			slog.String("hostname", hostname.Name),

@@ -185,6 +185,32 @@ func (pi *ProviderInstance) DeleteRecordByTarget(ctx context.Context, hostname s
 	return err
 }
 
+// DeleteSRVRecord removes a specific SRV record by hostname, target, and SRV data.
+// This is needed because multiple SRV records can have the same target but different
+// priority/weight/port values.
+func (pi *ProviderInstance) DeleteSRVRecord(ctx context.Context, hostname string, target string, srvData *SRVData) error {
+	record := Record{
+		Hostname: hostname,
+		Type:     RecordTypeSRV,
+		Target:   target,
+		SRV:      srvData,
+	}
+
+	start := time.Now()
+	err := pi.Provider.Delete(ctx, record)
+	duration := time.Since(start).Seconds()
+
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete").Observe(duration)
+
+	return err
+}
+
 // CreateOwnershipRecord creates a TXT record to mark ownership of a hostname.
 // The TXT record is named "_dnsweaver.{hostname}" with value "heritage=dnsweaver".
 func (pi *ProviderInstance) CreateOwnershipRecord(ctx context.Context, hostname string) error {

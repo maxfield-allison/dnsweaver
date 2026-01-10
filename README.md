@@ -17,7 +17,7 @@ dnsweaver watches Docker events and automatically creates and deletes DNS record
 - **Socket Proxy Compatible**: Connect via TCP to a Docker socket proxy for improved security
 - **Traefik Integration**: Parses `traefik.http.routers.*.rule` labels to extract hostnames
 - **Static File Discovery**: Parse Traefik dynamic configuration files (YAML and TOML) for hostnames not defined in container labels
-- **A and CNAME Records**: Full record type support for flexible DNS configuration
+- **A, AAAA, and CNAME Records**: Full record type support including IPv6
 - **Real-time Sync**: Watches Docker events and updates records instantly
 - **Startup Reconciliation**: Full sync on startup ensures consistency
 - **Prometheus Metrics**: Full observability with `dnsweaver_*` metrics
@@ -152,7 +152,8 @@ The `RECORD_TYPE` and `TARGET` settings control what DNS records are created:
 
 | Record Type | TARGET Value | Result | Use Case |
 |-------------|--------------|--------|----------|
-| `A` | IP address (e.g., `10.0.0.100`) | Direct IP resolution | Internal DNS, split-horizon |
+| `A` | IPv4 address (e.g., `10.0.0.100`) | Direct IPv4 resolution | Internal DNS, split-horizon |
+| `AAAA` | IPv6 address (e.g., `2001:db8::1`) | Direct IPv6 resolution | IPv6-enabled environments |
 | `CNAME` | Hostname (e.g., `ingress.example.com`) | Alias to another name | Public DNS via reverse proxy |
 
 **Example scenarios:**
@@ -186,6 +187,12 @@ The `RECORD_TYPE` and `TARGET` settings control what DNS records are created:
   ```bash
   DNSWEAVER_INTERNAL_DNS_RECORD_TYPE=A
   DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
+  ```
+
+- **IPv6 AAAA records:** Point to an IPv6 address
+  ```bash
+  DNSWEAVER_IPV6_DNS_RECORD_TYPE=AAAA
+  DNSWEAVER_IPV6_DNS_TARGET=2001:db8::1
   ```
 
 ## Configuration
@@ -434,8 +441,8 @@ Replace `{NAME}` with your instance name (e.g., `INTERNAL_DNS` for instance `int
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `DNSWEAVER_{NAME}_TYPE` | Yes | Provider type: `technitium`, `cloudflare`, `webhook` |
-| `DNSWEAVER_{NAME}_RECORD_TYPE` | Yes | Record type: `A`, `CNAME` |
-| `DNSWEAVER_{NAME}_TARGET` | Yes | Record target (IP for A, hostname for CNAME) |
+| `DNSWEAVER_{NAME}_RECORD_TYPE` | Yes | Record type: `A`, `AAAA`, `CNAME` |
+| `DNSWEAVER_{NAME}_TARGET` | Yes | Record target (IPv4 for A, IPv6 for AAAA, hostname for CNAME) |
 | `DNSWEAVER_{NAME}_DOMAINS` | Yes | Glob patterns for matching hostnames |
 | `DNSWEAVER_{NAME}_DOMAINS_REGEX` | No | Regex patterns (alternative to glob) |
 | `DNSWEAVER_{NAME}_EXCLUDE_DOMAINS` | No | Glob patterns to exclude |

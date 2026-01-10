@@ -8,6 +8,7 @@ type RecordType string
 
 const (
 	RecordTypeA     RecordType = "A"
+	RecordTypeAAAA  RecordType = "AAAA"
 	RecordTypeCNAME RecordType = "CNAME"
 	RecordTypeTXT   RecordType = "TXT"
 )

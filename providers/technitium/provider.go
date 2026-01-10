@@ -98,12 +98,20 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 
 	var records []provider.Record
 	for _, r := range apiRecords {
-		// Only return A, CNAME, and TXT records (the types we manage)
+		// Only return A, AAAA, CNAME, and TXT records (the types we manage)
 		switch r.Type {
 		case "A":
 			records = append(records, provider.Record{
 				Hostname:   r.Name,
 				Type:       provider.RecordTypeA,
+				Target:     r.RData.IPAddress,
+				TTL:        r.TTL,
+				ProviderID: fmt.Sprintf("%s:%s:%s", r.Name, r.Type, r.RData.IPAddress),
+			})
+		case "AAAA":
+			records = append(records, provider.Record{
+				Hostname:   r.Name,
+				Type:       provider.RecordTypeAAAA,
 				Target:     r.RData.IPAddress,
 				TTL:        r.TTL,
 				ProviderID: fmt.Sprintf("%s:%s:%s", r.Name, r.Type, r.RData.IPAddress),
@@ -149,6 +157,10 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 		if err := p.client.AddARecord(ctx, p.zone, record.Hostname, record.Target, ttl); err != nil {
 			return fmt.Errorf("creating A record: %w", err)
 		}
+	case provider.RecordTypeAAAA:
+		if err := p.client.AddAAAARecord(ctx, p.zone, record.Hostname, record.Target, ttl); err != nil {
+			return fmt.Errorf("creating AAAA record: %w", err)
+		}
 	case provider.RecordTypeCNAME:
 		if err := p.client.AddCNAMERecord(ctx, p.zone, record.Hostname, record.Target, ttl); err != nil {
 			return fmt.Errorf("creating CNAME record: %w", err)
@@ -178,6 +190,10 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 	case provider.RecordTypeA:
 		if err := p.client.DeleteARecord(ctx, p.zone, record.Hostname, record.Target); err != nil {
 			return fmt.Errorf("deleting A record: %w", err)
+		}
+	case provider.RecordTypeAAAA:
+		if err := p.client.DeleteAAAARecord(ctx, p.zone, record.Hostname, record.Target); err != nil {
+			return fmt.Errorf("deleting AAAA record: %w", err)
 		}
 	case provider.RecordTypeCNAME:
 		if err := p.client.DeleteCNAMERecord(ctx, p.zone, record.Hostname, record.Target); err != nil {

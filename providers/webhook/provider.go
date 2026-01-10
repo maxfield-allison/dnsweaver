@@ -143,6 +143,8 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 		switch r.Type {
 		case "A":
 			recordType = provider.RecordTypeA
+		case "AAAA":
+			recordType = provider.RecordTypeAAAA
 		case "CNAME":
 			recordType = provider.RecordTypeCNAME
 		case "TXT":

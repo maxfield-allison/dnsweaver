@@ -193,6 +193,30 @@ func (c *Client) AddARecord(ctx context.Context, zone, hostname, ip string, ttl 
 	return nil
 }
 
+// AddAAAARecord creates an AAAA (IPv6) record in the specified zone.
+func (c *Client) AddAAAARecord(ctx context.Context, zone, hostname, ip string, ttl int) error {
+	params := url.Values{}
+	params.Set("zone", zone)
+	params.Set("domain", hostname)
+	params.Set("type", "AAAA")
+	params.Set("ipAddress", ip)
+	params.Set("ttl", strconv.Itoa(ttl))
+
+	_, err := c.doRequest(ctx, "/api/zones/records/add", params)
+	if err != nil {
+		return fmt.Errorf("adding AAAA record for %s: %w", hostname, err)
+	}
+
+	c.logger.Info("added AAAA record",
+		slog.String("hostname", hostname),
+		slog.String("ip", ip),
+		slog.String("zone", zone),
+		slog.Int("ttl", ttl),
+	)
+
+	return nil
+}
+
 // AddCNAMERecord creates a CNAME record in the specified zone.
 func (c *Client) AddCNAMERecord(ctx context.Context, zone, hostname, target string, ttl int) error {
 	params := url.Values{}
@@ -231,6 +255,28 @@ func (c *Client) DeleteARecord(ctx context.Context, zone, hostname, ip string) e
 	}
 
 	c.logger.Info("deleted A record",
+		slog.String("hostname", hostname),
+		slog.String("ip", ip),
+		slog.String("zone", zone),
+	)
+
+	return nil
+}
+
+// DeleteAAAARecord removes an AAAA (IPv6) record from the specified zone.
+func (c *Client) DeleteAAAARecord(ctx context.Context, zone, hostname, ip string) error {
+	params := url.Values{}
+	params.Set("zone", zone)
+	params.Set("domain", hostname)
+	params.Set("type", "AAAA")
+	params.Set("ipAddress", ip)
+
+	_, err := c.doRequest(ctx, "/api/zones/records/delete", params)
+	if err != nil {
+		return fmt.Errorf("deleting AAAA record for %s: %w", hostname, err)
+	}
+
+	c.logger.Info("deleted AAAA record",
 		slog.String("hostname", hostname),
 		slog.String("ip", ip),
 		slog.String("zone", zone),

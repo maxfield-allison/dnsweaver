@@ -144,7 +144,7 @@ func (p *Provider) Ping(ctx context.Context) error {
 }
 
 // List returns all managed records in the zone.
-// Returns A, CNAME, and TXT records.
+// Returns A, AAAA, CNAME, and TXT records.
 func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 	zoneID, err := p.ZoneID(ctx)
 	if err != nil {
@@ -162,6 +162,21 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 		records = append(records, provider.Record{
 			Hostname:   r.Name,
 			Type:       provider.RecordTypeA,
+			Target:     r.Content,
+			TTL:        r.TTL,
+			ProviderID: r.ID,
+		})
+	}
+
+	// Fetch AAAA records
+	aaaaRecords, err := p.client.ListRecords(ctx, zoneID, "AAAA")
+	if err != nil {
+		return nil, fmt.Errorf("listing AAAA records: %w", err)
+	}
+	for _, r := range aaaaRecords {
+		records = append(records, provider.Record{
+			Hostname:   r.Name,
+			Type:       provider.RecordTypeAAAA,
 			Target:     r.Content,
 			TTL:        r.TTL,
 			ProviderID: r.ID,

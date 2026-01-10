@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **AAAA Record Support** (#63): IPv6 DNS record support
+  - Added `AAAA` record type for IPv6 addresses alongside existing `A` (IPv4) and `CNAME` types
+  - Strict validation: A records require IPv4, AAAA records require IPv6, CNAME requires hostname
+  - Full support across all providers: Technitium, Cloudflare, Webhook
+  - Updated README with IPv6 configuration examples
+
 ## [0.3.3] - 2026-01-09
 
 ### Added

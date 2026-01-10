@@ -383,6 +383,51 @@ DNSWEAVER_{NAME}_ZONE=home.example.com
 3. Update `CHANGELOG.md` with new provider announcement
 4. Create issue in GitLab for tracking
 
+## Record Types
+
+Your provider should support these record types as applicable:
+
+| Record Type | Purpose | Target Validation |
+|------------|---------|-------------------|
+| `A` | IPv4 address record | Valid IPv4 address (e.g., `10.1.20.210`) |
+| `AAAA` | IPv6 address record | Valid IPv6 address (e.g., `2001:db8::1` or `fd00::1`) |
+| `CNAME` | Canonical name (alias) | Valid hostname (e.g., `target.example.com`) |
+| `TXT` | Text record (used for ownership) | String value |
+| `SRV` | Service record (future) | Priority, weight, port, target |
+
+### Implementation Notes
+
+1. **A and AAAA records** use the same pattern — only the target format differs:
+   - `A` → IPv4: `record.Value` must be a valid IPv4 address
+   - `AAAA` → IPv6: `record.Value` must be a valid IPv6 address (including shorthand)
+
+2. **IPv6 considerations:**
+   - Accept both full (`2001:0db8:0000:0000:0000:0000:0000:0001`) and shorthand (`2001:db8::1`) notation
+   - Use `net.ParseIP()` for validation — it handles both
+   - Common private IPv6: `fd00::/8` (unique local addresses)
+
+3. **API-specific handling:**
+   - Some APIs (like Technitium) use `ipAddress` param for both A and AAAA
+   - Others (like Cloudflare) use `content` for the value regardless of type
+   - Check your DNS provider's API documentation
+
+### Example Implementation
+
+```go
+func (p *Provider) Create(ctx context.Context, record provider.Record) error {
+    switch record.Type {
+    case provider.RecordTypeA, provider.RecordTypeAAAA:
+        return p.client.AddAddressRecord(ctx, record.Hostname, record.Type, record.Value, p.ttl)
+    case provider.RecordTypeCNAME:
+        return p.client.AddCNAME(ctx, record.Hostname, record.Value, p.ttl)
+    case provider.RecordTypeTXT:
+        return p.client.AddTXT(ctx, record.Hostname, record.Value, p.ttl)
+    default:
+        return fmt.Errorf("unsupported record type: %s", record.Type)
+    }
+}
+```
+
 ## Checklist Summary
 
 - [ ] `config.go` with Validate(), LoadConfig(), LoadConfigFromMap()

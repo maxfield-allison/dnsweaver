@@ -24,9 +24,12 @@ workflow:
   - if: $CI_COMMIT_TAG
   - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
     changes: &code-files ["{**/*.go,go.mod,go.sum}"]
+  - if: $CI_COMMIT_BRANCH =~ /^(feature|bugfix|hotfix)\//
+    changes: *code-files
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     changes: *code-files
 
+# Feature branches: run validate/test/security/build but NOT docker (no image push)
 .rules-docker: &rules-docker
   - if: $CI_COMMIT_TAG
   - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"

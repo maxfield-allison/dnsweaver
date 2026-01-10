@@ -103,19 +103,6 @@ func TestProvider_Zone(t *testing.T) {
 	}
 }
 
-// mockCommandRunner for testing without actual command execution.
-type mockCommandRunner struct {
-	called  bool
-	command string
-	err     error
-}
-
-func (m *mockCommandRunner) Run(ctx context.Context, command string) error {
-	m.called = true
-	m.command = command
-	return m.err
-}
-
 func TestProvider_List(t *testing.T) {
 	mockFS := newMockFileSystem()
 	mockFS.dirs["/etc/dnsmasq.d"] = true
@@ -278,9 +265,8 @@ func TestProvider_Delete(t *testing.T) {
 
 	// File should still exist but be empty (or just header)
 	content := string(mockFS.files["/etc/dnsmasq.d/dnsweaver.conf"])
-	if content == "" {
-		// Actually acceptable - empty after delete
-	}
+	// Empty content is acceptable after delete
+	_ = content
 }
 
 func TestNewFromMap(t *testing.T) {

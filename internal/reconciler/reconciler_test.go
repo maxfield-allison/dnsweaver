@@ -232,7 +232,8 @@ func TestReconciler_EnsureRecord_NoMatchingProvider(t *testing.T) {
 		knownHostnames: make(map[string]struct{}),
 	}
 
-	actions := r.ensureRecord(context.Background(), "unmatched.example.com", nil)
+	hostname := &source.Hostname{Name: "unmatched.example.com", Source: "test"}
+	actions := r.ensureRecord(context.Background(), hostname, nil)
 
 	if len(actions) != 1 {
 		t.Fatalf("ensureRecord should return 1 action, got %d", len(actions))
@@ -281,9 +282,9 @@ func TestReconciler_CleanupOrphans(t *testing.T) {
 		},
 	}
 
-	currentHostnames := map[string]struct{}{
-		"current.example.com": {},
-		"new.example.com":     {},
+	currentHostnames := map[string]*source.Hostname{
+		"current.example.com": {Name: "current.example.com", Source: "test"},
+		"new.example.com":     {Name: "new.example.com", Source: "test"},
 	}
 
 	// Since no providers match, we won't get actual delete actions,

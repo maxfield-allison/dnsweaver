@@ -140,6 +140,39 @@ func isAlphanumeric(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
+// SRVHints contains SRV record-specific hints from source labels.
+type SRVHints struct {
+	Priority uint16 // Lower values = higher priority (0-65535)
+	Weight   uint16 // Load balancing among same-priority servers (0-65535)
+	Port     uint16 // TCP/UDP port number (1-65535)
+}
+
+// RecordHints contains optional hints for DNS record creation.
+// These allow sources (particularly native dnsweaver labels) to specify
+// record details that override provider defaults.
+//
+// All fields are optional - nil/zero values mean "use provider defaults".
+type RecordHints struct {
+	// Type overrides the record type (A, AAAA, CNAME, SRV, PTR, TXT).
+	// Empty means use provider default.
+	Type string
+
+	// Target overrides the record target (IP for A/AAAA, hostname for CNAME/SRV).
+	// Empty means use provider default.
+	Target string
+
+	// TTL overrides the record TTL.
+	// Zero means use provider default.
+	TTL int
+
+	// Provider targets a specific provider instance by name.
+	// Empty means use domain matching as usual.
+	Provider string
+
+	// SRV contains SRV-specific fields when Type is "SRV".
+	SRV *SRVHints
+}
+
 // Hostname represents a hostname extracted from container labels.
 //
 // Each hostname carries context about where it was discovered, which is
@@ -155,8 +188,19 @@ type Hostname struct {
 
 	// Router is an optional identifier for the router/upstream that defined this hostname.
 	// For Traefik, this would be the router name (e.g., "myapp@docker").
+	// For dnsweaver labels, this is the record name (e.g., "myapp" from dnsweaver.records.myapp.*).
 	// May be empty if the source doesn't support this concept.
 	Router string
+
+	// RecordHints contains optional hints for DNS record creation.
+	// These allow per-hostname overrides for record type, target, TTL, and provider.
+	// nil means use provider defaults for everything.
+	RecordHints *RecordHints
+}
+
+// HasRecordHints returns true if this hostname has any record hints set.
+func (h Hostname) HasRecordHints() bool {
+	return h.RecordHints != nil
 }
 
 // String returns a human-readable representation of the hostname.

@@ -409,7 +409,7 @@ dnsweaver discovers hostnames from Docker container labels by default. Additiona
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DNSWEAVER_SOURCES` | `traefik` | Comma-separated list of source types |
+| `DNSWEAVER_SOURCES` | `traefik` | Comma-separated list of source types: `traefik`, `dnsweaver` |
 | `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS` | *(none)* | Comma-separated paths to Traefik config directories or files |
 | `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATTERN` | `*.yml,*.yaml,*.toml` | Glob pattern for config files |
 | `DNSWEAVER_SOURCE_TRAEFIK_POLL_INTERVAL` | `60s` | How often to re-scan files for changes |
@@ -433,6 +433,66 @@ With file discovery enabled, dnsweaver parses Traefik dynamic configuration file
 - Hostnames defined in static Traefik files (not container labels)
 - External services routed through Traefik
 - Pre-provisioning DNS before container deployment
+
+### Native dnsweaver Labels
+
+The `dnsweaver` source allows containers to define DNS records directly, without needing Traefik or other reverse proxy labels. This is useful for:
+- Services that don't use a reverse proxy
+- Explicit control over record type, target, and TTL
+- Routing different records to different DNS providers
+- SRV records for service discovery
+
+**Enable the dnsweaver source:**
+```yaml
+environment:
+  - DNSWEAVER_SOURCES=traefik,dnsweaver
+```
+
+**Simple hostname** (uses provider defaults):
+```yaml
+labels:
+  dnsweaver.hostname: "myapp.example.com"
+```
+
+**Named records with explicit settings:**
+```yaml
+labels:
+  # Internal A record
+  dnsweaver.records.internal.hostname: "myapp.internal.example.com"
+  dnsweaver.records.internal.type: "A"
+  dnsweaver.records.internal.target: "10.1.20.100"
+  dnsweaver.records.internal.provider: "internal-dns"
+  dnsweaver.records.internal.ttl: "300"
+  
+  # Public CNAME record
+  dnsweaver.records.public.hostname: "myapp.example.com"
+  dnsweaver.records.public.type: "CNAME"
+  dnsweaver.records.public.target: "lb.example.com"
+  dnsweaver.records.public.provider: "cloudflare"
+```
+
+**SRV record example:**
+```yaml
+labels:
+  dnsweaver.records.minecraft.hostname: "_minecraft._tcp.mc.example.com"
+  dnsweaver.records.minecraft.type: "SRV"
+  dnsweaver.records.minecraft.target: "mc-server.example.com"
+  dnsweaver.records.minecraft.port: "25565"
+  dnsweaver.records.minecraft.priority: "10"
+  dnsweaver.records.minecraft.weight: "5"
+```
+
+| Label | Description |
+|-------|-------------|
+| `dnsweaver.hostname` | Simple hostname (uses provider defaults) |
+| `dnsweaver.records.<name>.hostname` | Hostname for named record |
+| `dnsweaver.records.<name>.type` | Record type: `A`, `AAAA`, `CNAME`, `SRV`, `PTR`, `TXT` |
+| `dnsweaver.records.<name>.target` | IP address or target hostname |
+| `dnsweaver.records.<name>.provider` | Route to specific provider by name |
+| `dnsweaver.records.<name>.ttl` | TTL in seconds (overrides provider default) |
+| `dnsweaver.records.<name>.port` | SRV port |
+| `dnsweaver.records.<name>.priority` | SRV priority |
+| `dnsweaver.records.<name>.weight` | SRV weight |
 
 ### Environment Variables Reference
 

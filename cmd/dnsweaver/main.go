@@ -26,6 +26,7 @@ import (
 	"gitlab.bluewillows.net/root/dnsweaver/providers/pihole"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/technitium"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/webhook"
+	dnsweaversource "gitlab.bluewillows.net/root/dnsweaver/sources/dnsweaver"
 	"gitlab.bluewillows.net/root/dnsweaver/sources/traefik"
 )
 
@@ -299,8 +300,14 @@ func registerSources(registry *source.Registry, cfg *config.Config, logger *slog
 				slog.Bool("file_discovery", src.SupportsDiscovery()),
 			)
 		case "dnsweaver":
-			// Native dnsweaver labels - could be added here
-			logger.Debug("dnsweaver source not yet implemented", slog.String("source", name))
+			src := dnsweaversource.New(dnsweaversource.WithLogger(logger))
+			if err := registry.Register(src); err != nil {
+				return fmt.Errorf("registering dnsweaver source: %w", err)
+			}
+			logger.Info("registered source",
+				slog.String("name", name),
+				slog.Bool("file_discovery", src.SupportsDiscovery()),
+			)
 		default:
 			logger.Warn("unknown source, skipping", slog.String("source", name))
 		}

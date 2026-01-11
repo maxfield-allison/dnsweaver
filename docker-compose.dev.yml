@@ -1,0 +1,54 @@
+# Local development environment for dnsweaver testing
+# Usage: docker compose -f docker-compose.dev.yml up --build
+#
+# Uses existing Technitium DNS at 10.1.20.246 with test.local.bluewillows.net zone
+# Requires TECHNITIUM_TOKEN env var or secrets/technitium-api-token.txt
+
+services:
+  # dnsweaver service
+  dnsweaver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dnsweaver-dev
+    user: root  # Required for Docker socket access in local dev
+    environment:
+      - DNSWEAVER_LOG_LEVEL=debug
+      - DNSWEAVER_LOG_FORMAT=text
+      - DNSWEAVER_DOCKER_MODE=standalone
+      - DNSWEAVER_RECONCILE_INTERVAL=10s
+      - DNSWEAVER_DEFAULT_TTL=60
+      - DNSWEAVER_ADOPT_EXISTING=true
+      - DNSWEAVER_CLEANUP_ON_STOP=false
+      # Source configuration - enable dnsweaver native labels
+      - DNSWEAVER_SOURCES=dnsweaver
+      # Technitium provider configuration - uses existing prod server
+      - DNSWEAVER_INSTANCES=test-dns
+      - DNSWEAVER_TEST_DNS_TYPE=technitium
+      - DNSWEAVER_TEST_DNS_URL=http://10.1.20.246:5380
+      - DNSWEAVER_TEST_DNS_TOKEN=${TECHNITIUM_TOKEN}
+      - DNSWEAVER_TEST_DNS_ZONE=test.local.bluewillows.net
+      - DNSWEAVER_TEST_DNS_DOMAIN_FILTER=test.local.bluewillows.net
+      - DNSWEAVER_TEST_DNS_TARGET=10.1.20.210
+      - DNSWEAVER_TEST_DNS_DOMAINS=*.test.local.bluewillows.net
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # Test service with DNS labels
+  test-app:
+    image: traefik/whoami:latest
+    container_name: dnsweaver-test-app
+    labels:
+      # Standard A record
+      - "dnsweaver.hostname=whoami.test.local.bluewillows.net"
+      # Named records for additional testing
+      - "dnsweaver.records.ipv6.hostname=whoami-v6.test.local.bluewillows.net"
+      - "dnsweaver.records.ipv6.type=AAAA"
+      - "dnsweaver.records.ipv6.target=fd00::1"
+      # SRV record for testing
+      - "dnsweaver.records.minecraft.hostname=_minecraft._tcp.test.local.bluewillows.net"
+      - "dnsweaver.records.minecraft.type=SRV"
+      - "dnsweaver.records.minecraft.target=mc.test.local.bluewillows.net"
+      - "dnsweaver.records.minecraft.port=25565"
+      - "dnsweaver.records.minecraft.priority=10"
+      - "dnsweaver.records.minecraft.weight=100"

@@ -75,6 +75,7 @@ func run() error {
 		docker.WithHost(cfg.DockerHost()),
 		docker.WithMode(parseDockerMode(cfg.DockerMode())),
 		docker.WithLogger(logger),
+		docker.WithCleanupOnStop(cfg.CleanupOnStop()),
 	)
 	if err != nil {
 		return fmt.Errorf("creating docker client: %w", err)

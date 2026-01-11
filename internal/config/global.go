@@ -13,6 +13,7 @@ const (
 	DefaultLogFormat          = "json"
 	DefaultDryRun             = false
 	DefaultCleanupOrphans     = true
+	DefaultCleanupOnStop      = true
 	DefaultOwnershipTracking  = true
 	DefaultAdoptExisting      = false
 	DefaultTTL                = 300
@@ -33,6 +34,7 @@ type GlobalConfig struct {
 	// Behavior
 	DryRun            bool          // If true, don't make actual DNS changes
 	CleanupOrphans    bool          // If true, delete DNS records for removed workloads
+	CleanupOnStop     bool          // If true, delete DNS records when containers stop; if false, only when removed
 	OwnershipTracking bool          // If true, use TXT records to track record ownership
 	AdoptExisting     bool          // If true, adopt existing DNS records by creating ownership TXT records
 	DefaultTTL        int           // Default TTL for records if not specified per-provider
@@ -116,6 +118,13 @@ func loadGlobalConfig() (*GlobalConfig, []string) {
 		cfg.CleanupOrphans = parseBool(cleanupStr, DefaultCleanupOrphans)
 	} else {
 		cfg.CleanupOrphans = DefaultCleanupOrphans
+	}
+
+	// Parse CLEANUP_ON_STOP
+	if cleanupOnStopStr := getEnv("DNSWEAVER_CLEANUP_ON_STOP"); cleanupOnStopStr != "" {
+		cfg.CleanupOnStop = parseBool(cleanupOnStopStr, DefaultCleanupOnStop)
+	} else {
+		cfg.CleanupOnStop = DefaultCleanupOnStop
 	}
 
 	// Parse OWNERSHIP_TRACKING

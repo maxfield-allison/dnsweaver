@@ -289,7 +289,7 @@ func TestReconciler_CleanupOrphans(t *testing.T) {
 
 	// Since no providers match, we won't get actual delete actions,
 	// but we can verify the orphan detection logic runs
-	actions := r.cleanupOrphans(context.Background(), currentHostnames)
+	actions := r.cleanupOrphans(context.Background(), currentHostnames, nil)
 
 	// With no matching providers, actions will be empty
 	// But we've verified the logic doesn't panic and handles the case

@@ -1,0 +1,177 @@
+# ===================================
+# golangci-lint configuration
+# ===================================
+# This file ensures reproducible linting across local development and CI.
+# Docs: https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+  modules-download-mode: readonly
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters:
+  enable:
+    # Default linters
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Suspicious constructs
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Static analysis
+    - unused        # Unused code
+
+    # Additional recommended
+    - bodyclose     # HTTP response body close
+    - dogsled       # Too many blank identifiers
+    - dupl          # Code duplication (threshold below)
+    - errorlint     # Error wrapping issues
+    - exhaustive    # Enum switch completeness
+    - gochecknoinits  # No init functions
+    - goconst       # Repeated strings → const
+    - gocritic      # Opinionated linter
+    - gofmt         # Formatting check
+    - goimports     # Import formatting
+    - gosec         # Security issues
+    - misspell      # Spelling mistakes
+    - nakedret      # Naked returns in long functions
+    - nilerr        # Return nil after error check
+    - noctx         # HTTP requests without context
+    - prealloc      # Slice preallocation
+    - predeclared   # Shadowing predeclared identifiers
+    - revive        # Replacement for golint
+    - unconvert     # Unnecessary conversions
+    - unparam       # Unused function parameters
+    - whitespace    # Unnecessary whitespace
+
+  disable:
+    - depguard      # Requires configuration for allowed packages
+    - funlen        # Often too restrictive for table-driven tests
+    - gocognit      # Cognitive complexity - use judiciously
+    - gocyclo       # Cyclomatic complexity - use judiciously
+    - lll           # Line length - gofmt handles wrapping
+
+linters-settings:
+  dupl:
+    threshold: 150  # Tokens before flagging duplication
+
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    exclude-functions:
+      - io.Copy
+      - io.ReadAll
+      - (io.ReadCloser).Close
+
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
+
+  exhaustive:
+    default-signifies-exhaustive: true
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - whyNoLint  # Sometimes we need nolint without explanation
+
+  goimports:
+    local-prefixes: gitlab.bluewillows.net
+
+  gosec:
+    excludes:
+      - G104  # Errors unhandled - errcheck covers this
+      - G304  # File path from variable - often intentional
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment  # Too noisy, minor optimization
+
+  misspell:
+    locale: US
+
+  nakedret:
+    max-func-lines: 30
+
+  prealloc:
+    simple: true
+    for-loops: true
+
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: increment-decrement
+      - name: indent-error-flow
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: var-declaration
+      - name: var-naming
+
+  unparam:
+    check-exported: false  # Can cause issues with interfaces
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # Test files can have longer functions and more complexity
+    - path: _test\.go
+      linters:
+        - dupl
+        - gosec
+        - goconst
+
+    # Allow fmt.Print in main for CLI output
+    - path: cmd/
+      linters:
+        - forbidigo
+
+    # Generated code should be excluded
+    - path: ".*\\.gen\\.go$"
+      linters:
+        - dupl
+        - goconst
+        - gocritic
+
+    # Mock files often have unused parameters by design
+    - path: mock
+      linters:
+        - unparam
+
+    # Provider implementations may have similar patterns
+    - path: providers/
+      linters:
+        - dupl
+      text: "duplicate of"
+
+severity:
+  default-severity: warning
+  rules:
+    - linters: [gosec, errcheck]
+      severity: error

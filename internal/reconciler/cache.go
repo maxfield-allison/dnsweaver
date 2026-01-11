@@ -78,6 +78,31 @@ func (c *recordCache) getExistingRecords(providerName, hostname string) ([]provi
 	return filtered, true
 }
 
+// getAllRecordsForHostname returns all cached records (A, AAAA, CNAME, SRV) for a hostname.
+// This is used during orphan cleanup to know what record types actually exist.
+// Returns nil if the provider cache is unavailable (failed to load).
+// Returns empty slice if cached but no records exist for this hostname.
+func (c *recordCache) getAllRecordsForHostname(providerName, hostname string) ([]provider.Record, bool) {
+	byHostname, exists := c.records[providerName]
+	if !exists || byHostname == nil {
+		// Provider not cached or failed to load
+		return nil, false
+	}
+
+	records := byHostname[hostname]
+
+	// Filter to data records (A, AAAA, CNAME, SRV) - exclude TXT ownership records
+	var filtered []provider.Record
+	for _, r := range records {
+		switch r.Type {
+		case provider.RecordTypeA, provider.RecordTypeAAAA, provider.RecordTypeCNAME, provider.RecordTypeSRV:
+			filtered = append(filtered, r)
+		}
+	}
+
+	return filtered, true
+}
+
 // hasOwnershipRecord checks if an ownership TXT record exists for the given hostname.
 // Returns false if the provider cache is unavailable.
 func (c *recordCache) hasOwnershipRecord(providerName, hostname string) bool {

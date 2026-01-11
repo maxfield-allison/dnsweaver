@@ -98,12 +98,20 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 
 	var records []provider.Record
 	for _, r := range apiRecords {
-		// Only return A, CNAME, and TXT records (the types we manage)
+		// Only return A, AAAA, CNAME, TXT, and SRV records (the types we manage)
 		switch r.Type {
 		case "A":
 			records = append(records, provider.Record{
 				Hostname:   r.Name,
 				Type:       provider.RecordTypeA,
+				Target:     r.RData.IPAddress,
+				TTL:        r.TTL,
+				ProviderID: fmt.Sprintf("%s:%s:%s", r.Name, r.Type, r.RData.IPAddress),
+			})
+		case "AAAA":
+			records = append(records, provider.Record{
+				Hostname:   r.Name,
+				Type:       provider.RecordTypeAAAA,
 				Target:     r.RData.IPAddress,
 				TTL:        r.TTL,
 				ProviderID: fmt.Sprintf("%s:%s:%s", r.Name, r.Type, r.RData.IPAddress),
@@ -123,6 +131,19 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 				Target:     r.RData.Text,
 				TTL:        r.TTL,
 				ProviderID: fmt.Sprintf("%s:%s:%s", r.Name, r.Type, r.RData.Text),
+			})
+		case "SRV":
+			records = append(records, provider.Record{
+				Hostname:   r.Name,
+				Type:       provider.RecordTypeSRV,
+				Target:     r.RData.SrvTarget,
+				TTL:        r.TTL,
+				ProviderID: fmt.Sprintf("%s:%s:%d:%d:%d:%s", r.Name, r.Type, r.RData.Priority, r.RData.Weight, r.RData.Port, r.RData.SrvTarget),
+				SRV: &provider.SRVData{
+					Priority: uint16(r.RData.Priority),
+					Weight:   uint16(r.RData.Weight),
+					Port:     uint16(r.RData.Port),
+				},
 			})
 		}
 		// Skip other record types (NS, SOA, etc.)
@@ -149,6 +170,10 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 		if err := p.client.AddARecord(ctx, p.zone, record.Hostname, record.Target, ttl); err != nil {
 			return fmt.Errorf("creating A record: %w", err)
 		}
+	case provider.RecordTypeAAAA:
+		if err := p.client.AddAAAARecord(ctx, p.zone, record.Hostname, record.Target, ttl); err != nil {
+			return fmt.Errorf("creating AAAA record: %w", err)
+		}
 	case provider.RecordTypeCNAME:
 		if err := p.client.AddCNAMERecord(ctx, p.zone, record.Hostname, record.Target, ttl); err != nil {
 			return fmt.Errorf("creating CNAME record: %w", err)
@@ -156,6 +181,13 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 	case provider.RecordTypeTXT:
 		if err := p.client.AddTXTRecord(ctx, p.zone, record.Hostname, record.Target, ttl); err != nil {
 			return fmt.Errorf("creating TXT record: %w", err)
+		}
+	case provider.RecordTypeSRV:
+		if record.SRV == nil {
+			return fmt.Errorf("creating SRV record: SRV data is required")
+		}
+		if err := p.client.AddSRVRecord(ctx, p.zone, record.Hostname, int(record.SRV.Priority), int(record.SRV.Weight), int(record.SRV.Port), record.Target, ttl); err != nil {
+			return fmt.Errorf("creating SRV record: %w", err)
 		}
 	default:
 		return fmt.Errorf("unsupported record type: %s", record.Type)
@@ -179,6 +211,10 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 		if err := p.client.DeleteARecord(ctx, p.zone, record.Hostname, record.Target); err != nil {
 			return fmt.Errorf("deleting A record: %w", err)
 		}
+	case provider.RecordTypeAAAA:
+		if err := p.client.DeleteAAAARecord(ctx, p.zone, record.Hostname, record.Target); err != nil {
+			return fmt.Errorf("deleting AAAA record: %w", err)
+		}
 	case provider.RecordTypeCNAME:
 		if err := p.client.DeleteCNAMERecord(ctx, p.zone, record.Hostname, record.Target); err != nil {
 			return fmt.Errorf("deleting CNAME record: %w", err)
@@ -186,6 +222,13 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 	case provider.RecordTypeTXT:
 		if err := p.client.DeleteTXTRecord(ctx, p.zone, record.Hostname, record.Target); err != nil {
 			return fmt.Errorf("deleting TXT record: %w", err)
+		}
+	case provider.RecordTypeSRV:
+		if record.SRV == nil {
+			return fmt.Errorf("deleting SRV record: SRV data is required")
+		}
+		if err := p.client.DeleteSRVRecord(ctx, p.zone, record.Hostname, int(record.SRV.Priority), int(record.SRV.Weight), int(record.SRV.Port), record.Target); err != nil {
+			return fmt.Errorf("deleting SRV record: %w", err)
 		}
 	default:
 		return fmt.Errorf("unsupported record type: %s", record.Type)

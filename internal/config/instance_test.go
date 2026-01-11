@@ -338,7 +338,7 @@ func TestLoadInstanceConfig_InvalidValues(t *testing.T) {
 			name: "invalid record type",
 			setup: func(p string) {
 				os.Setenv(p+"TYPE", "technitium")
-				os.Setenv(p+"RECORD_TYPE", "AAAA")
+				os.Setenv(p+"RECORD_TYPE", "MX")
 				os.Setenv(p+"TARGET", "10.0.0.1")
 				os.Setenv(p+"DOMAINS", "*")
 			},

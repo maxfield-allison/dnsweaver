@@ -51,13 +51,25 @@ type zonesResponse struct {
 
 // dnsRecord represents a DNS record from the Cloudflare API.
 type dnsRecord struct {
-	ID      string `json:"id"`
-	Type    string `json:"type"`
-	Name    string `json:"name"`
-	Content string `json:"content"`
-	TTL     int    `json:"ttl"`
-	Proxied bool   `json:"proxied"`
-	ZoneID  string `json:"zone_id"`
+	ID      string       `json:"id"`
+	Type    string       `json:"type"`
+	Name    string       `json:"name"`
+	Content string       `json:"content"`
+	TTL     int          `json:"ttl"`
+	Proxied bool         `json:"proxied"`
+	ZoneID  string       `json:"zone_id"`
+	Data    *srvRecordData `json:"data,omitempty"` // For SRV records
+}
+
+// srvRecordData contains the structured data for SRV records in Cloudflare.
+type srvRecordData struct {
+	Priority uint16 `json:"priority"`
+	Weight   uint16 `json:"weight"`
+	Port     uint16 `json:"port"`
+	Target   string `json:"target"`
+	Service  string `json:"service,omitempty"` // e.g., "_minecraft"
+	Proto    string `json:"proto,omitempty"`   // e.g., "_tcp"
+	Name     string `json:"name,omitempty"`    // e.g., "example.com"
 }
 
 // dnsRecordsResponse wraps the DNS records list response.
@@ -67,11 +79,12 @@ type dnsRecordsResponse struct {
 
 // createRecordRequest is the request body for creating a DNS record.
 type createRecordRequest struct {
-	Type    string `json:"type"`
-	Name    string `json:"name"`
-	Content string `json:"content"`
-	TTL     int    `json:"ttl"`
-	Proxied bool   `json:"proxied"`
+	Type    string         `json:"type"`
+	Name    string         `json:"name"`
+	Content string         `json:"content,omitempty"`
+	TTL     int            `json:"ttl"`
+	Proxied bool           `json:"proxied"`
+	Data    *srvRecordData `json:"data,omitempty"` // For SRV records
 }
 
 // Client is a Cloudflare DNS API client.
@@ -289,6 +302,45 @@ func (c *Client) CreateRecord(ctx context.Context, zoneID string, recordType, na
 		slog.String("content", content),
 		slog.Int("ttl", ttl),
 		slog.Bool("proxied", proxied),
+	)
+
+	return nil
+}
+
+// CreateSRVRecord creates an SRV record in the specified zone.
+// The name should be in the format "_service._proto.name" (e.g., "_minecraft._tcp.example.com").
+func (c *Client) CreateSRVRecord(ctx context.Context, zoneID string, name string, priority, weight, port uint16, target string, ttl int) error {
+	reqBody := createRecordRequest{
+		Type: "SRV",
+		Name: name,
+		TTL:  ttl,
+		Data: &srvRecordData{
+			Priority: priority,
+			Weight:   weight,
+			Port:     port,
+			Target:   target,
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshaling request: %w", err)
+	}
+
+	path := fmt.Sprintf("/zones/%s/dns_records", zoneID)
+	_, err = c.doRequest(ctx, http.MethodPost, path, strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		return fmt.Errorf("creating SRV record: %w", err)
+	}
+
+	c.logger.Info("created SRV record",
+		slog.String("zone_id", zoneID),
+		slog.String("name", name),
+		slog.Uint64("priority", uint64(priority)),
+		slog.Uint64("weight", uint64(weight)),
+		slog.Uint64("port", uint64(port)),
+		slog.String("target", target),
+		slog.Int("ttl", ttl),
 	)
 
 	return nil

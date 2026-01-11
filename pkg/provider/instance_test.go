@@ -43,6 +43,71 @@ func TestIsIPAddress(t *testing.T) {
 	}
 }
 
+func TestIsIPv4Address(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		// Valid IPv4
+		{"10.0.0.1", true},
+		{"192.168.1.1", true},
+		{"255.255.255.255", true},
+		{"0.0.0.0", true},
+
+		// IPv6 should return false
+		{"::1", false},
+		{"fe80::1", false},
+		{"2001:db8::1", false},
+
+		// Note: IPv4-mapped IPv6 addresses return true for To4()
+		// This is correct behavior for our use case
+
+		// Invalid
+		{"example.com", false},
+		{"", false},
+		{"10.0.0.256", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := isIPv4Address(tt.input)
+			if got != tt.want {
+				t.Errorf("isIPv4Address(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsIPv6Address(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		// Valid IPv6
+		{"::1", true},
+		{"fe80::1", true},
+		{"2001:db8::1", true},
+
+		// IPv4 should return false
+		{"10.0.0.1", false},
+		{"192.168.1.1", false},
+		{"0.0.0.0", false},
+
+		// Invalid
+		{"example.com", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := isIPv6Address(tt.input)
+			if got != tt.want {
+				t.Errorf("isIPv6Address(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestProviderInstanceConfig_Validate_RecordTypeTargetMismatch(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -59,9 +124,15 @@ func TestProviderInstanceConfig_Validate_RecordTypeTargetMismatch(t *testing.T) 
 			wantErr:    false,
 		},
 		{
-			name:       "A record with IPv6",
-			recordType: RecordTypeA,
+			name:       "AAAA record with IPv6",
+			recordType: RecordTypeAAAA,
 			target:     "2001:db8::1",
+			wantErr:    false,
+		},
+		{
+			name:       "AAAA record with loopback IPv6",
+			recordType: RecordTypeAAAA,
+			target:     "::1",
 			wantErr:    false,
 		},
 		{
@@ -97,14 +168,28 @@ func TestProviderInstanceConfig_Validate_RecordTypeTargetMismatch(t *testing.T) 
 			recordType: RecordTypeA,
 			target:     "example.com",
 			wantErr:    true,
-			errContain: "A records must point to IP addresses",
+			errContain: "A records must point to IPv4 addresses",
 		},
 		{
-			name:       "A record with subdomain target",
+			name:       "A record with IPv6 target",
 			recordType: RecordTypeA,
-			target:     "app.example.com",
+			target:     "2001:db8::1",
 			wantErr:    true,
-			errContain: "A records must point to IP addresses",
+			errContain: "A records must point to IPv4 addresses",
+		},
+		{
+			name:       "AAAA record with IPv4 target",
+			recordType: RecordTypeAAAA,
+			target:     "10.0.0.1",
+			wantErr:    true,
+			errContain: "AAAA records must point to IPv6 addresses",
+		},
+		{
+			name:       "AAAA record with hostname target",
+			recordType: RecordTypeAAAA,
+			target:     "example.com",
+			wantErr:    true,
+			errContain: "AAAA records must point to IPv6 addresses",
 		},
 	}
 
@@ -171,6 +256,27 @@ func TestProviderInstanceConfig_Validate_CNAME_Complete(t *testing.T) {
 		ExcludeDomains: []string{"*.local.bluewillows.net"},
 		ProviderConfig: map[string]string{
 			"zone_id": "abc123",
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("expected valid config, got error: %v", err)
+	}
+}
+
+func TestProviderInstanceConfig_Validate_AAAA_Complete(t *testing.T) {
+	// Test a complete valid AAAA (IPv6) configuration
+	cfg := ProviderInstanceConfig{
+		Name:           "ipv6-dns",
+		TypeName:       "technitium",
+		RecordType:     RecordTypeAAAA,
+		Target:         "2001:db8::1",
+		TTL:            300,
+		Domains:        []string{"*.local.bluewillows.net"},
+		ExcludeDomains: []string{"admin.*"},
+		ProviderConfig: map[string]string{
+			"url":  "http://dns:5380",
+			"zone": "local.bluewillows.net",
 		},
 	}
 

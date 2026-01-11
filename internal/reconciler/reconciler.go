@@ -159,7 +159,8 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 
 	// Step 2: Extract hostnames from each workload
 	// Track hostname -> first workload that defined it (for duplicate detection)
-	discoveredHostnames := make(map[string]struct{})
+	// Use map to source.Hostname to preserve RecordHints from native labels
+	discoveredHostnames := make(map[string]*source.Hostname)
 	hostnameOrigins := make(map[string]string) // hostname -> workload name
 
 	for _, workload := range workloads {
@@ -186,7 +187,8 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 			)
 		}
 
-		for _, hostname := range hostnames {
+		for i := range hostnames {
+			hostname := &hostnames[i]
 			if existingWorkload, exists := hostnameOrigins[hostname.Name]; exists {
 				// Duplicate hostname detected
 				r.logger.Warn("duplicate hostname found in multiple workloads",
@@ -198,7 +200,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 				// First workload wins - don't update hostnameOrigins
 			} else {
 				hostnameOrigins[hostname.Name] = workload.Name
-				discoveredHostnames[hostname.Name] = struct{}{}
+				discoveredHostnames[hostname.Name] = hostname
 			}
 		}
 	}
@@ -223,8 +225,11 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 			slog.Int("count", len(fileHostnames)),
 			slog.Any("hostnames", fileHostnames.Names()),
 		)
-		for _, hostname := range fileHostnames {
-			discoveredHostnames[hostname.Name] = struct{}{}
+		for i := range fileHostnames {
+			hostname := &fileHostnames[i]
+			if _, exists := discoveredHostnames[hostname.Name]; !exists {
+				discoveredHostnames[hostname.Name] = hostname
+			}
 		}
 	}
 
@@ -242,7 +247,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	}
 
 	// Step 4: Ensure records exist for all discovered hostnames
-	for hostname := range discoveredHostnames {
+	for _, hostname := range discoveredHostnames {
 		actions := r.ensureRecord(ctx, hostname, cache)
 		for _, action := range actions {
 			result.AddAction(action)
@@ -251,15 +256,19 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 
 	// Step 4: Orphan cleanup (if enabled)
 	if r.config.CleanupOrphans {
-		orphanActions := r.cleanupOrphans(ctx, discoveredHostnames)
+		orphanActions := r.cleanupOrphans(ctx, discoveredHostnames, cache)
 		for _, action := range orphanActions {
 			result.AddAction(action)
 		}
 	}
 
 	// Update known hostnames for next orphan check
+	// Convert from map[string]*source.Hostname to map[string]struct{}
 	r.mu.Lock()
-	r.knownHostnames = discoveredHostnames
+	r.knownHostnames = make(map[string]struct{}, len(discoveredHostnames))
+	for name := range discoveredHostnames {
+		r.knownHostnames[name] = struct{}{}
+	}
 	r.mu.Unlock()
 
 	result.Complete()
@@ -282,10 +291,10 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 // ReconcileHostname performs reconciliation for a single hostname.
 // This is useful for event-driven updates when a specific workload changes.
 // Note: This does not use the record cache since it's a single hostname operation.
-func (r *Reconciler) ReconcileHostname(ctx context.Context, hostname string) (*Result, error) {
+func (r *Reconciler) ReconcileHostname(ctx context.Context, hostnameStr string) (*Result, error) {
 	if !r.config.Enabled {
 		r.logger.Debug("reconciliation disabled, skipping hostname",
-			slog.String("hostname", hostname),
+			slog.String("hostname", hostnameStr),
 		)
 		result := NewResult(r.config.DryRun)
 		result.Complete()
@@ -293,7 +302,7 @@ func (r *Reconciler) ReconcileHostname(ctx context.Context, hostname string) (*R
 	}
 
 	r.logger.Debug("reconciling single hostname",
-		slog.String("hostname", hostname),
+		slog.String("hostname", hostnameStr),
 		slog.Bool("dry_run", r.config.DryRun),
 	)
 
@@ -301,6 +310,8 @@ func (r *Reconciler) ReconcileHostname(ctx context.Context, hostname string) (*R
 	result.HostnamesDiscovered = 1
 
 	// No cache for single-hostname reconciliation (not worth it for one query)
+	// Create a hostname without hints since we only have the name
+	hostname := &source.Hostname{Name: hostnameStr, Source: "api"}
 	actions := r.ensureRecord(ctx, hostname, nil)
 	for _, action := range actions {
 		result.AddAction(action)
@@ -308,7 +319,7 @@ func (r *Reconciler) ReconcileHostname(ctx context.Context, hostname string) (*R
 
 	// Track this hostname as known
 	r.mu.Lock()
-	r.knownHostnames[hostname] = struct{}{}
+	r.knownHostnames[hostnameStr] = struct{}{}
 	r.mu.Unlock()
 
 	result.Complete()
@@ -351,19 +362,46 @@ func (r *Reconciler) RemoveHostname(ctx context.Context, hostname string) (*Resu
 // 2. If exists with same target → skip (idempotent)
 // 3. If exists with different target (same type) → delete old, create new
 // 4. If exists with different type → log warning, skip (don't delete manual records)
-func (r *Reconciler) ensureRecord(ctx context.Context, hostname string, cache *recordCache) []Action {
+//
+// When hostname has RecordHints, they override provider defaults:
+// - RecordHints.Provider: route directly to named provider instead of domain matching
+// - RecordHints.Type/Target/TTL: override provider instance defaults
+func (r *Reconciler) ensureRecord(ctx context.Context, hostname *source.Hostname, cache *recordCache) []Action {
 	var actions []Action
 
-	matchingProviders := r.providers.MatchingProviders(hostname)
+	// Check for explicit provider targeting via RecordHints
+	if hostname.RecordHints != nil && hostname.RecordHints.Provider != "" {
+		targetProvider := hostname.RecordHints.Provider
+		inst, exists := r.providers.Get(targetProvider)
+		if !exists {
+			r.logger.Warn("explicit provider not found",
+				slog.String("hostname", hostname.Name),
+				slog.String("target_provider", targetProvider),
+			)
+			actions = append(actions, Action{
+				Type:     ActionSkip,
+				Status:   StatusSkipped,
+				Hostname: hostname.Name,
+				Error:    fmt.Sprintf("explicit provider %q not found", targetProvider),
+			})
+			return actions
+		}
+		// Route to explicit provider, bypassing domain matching
+		action := r.ensureRecordForProvider(ctx, hostname, inst, cache)
+		return append(actions, action)
+	}
+
+	// Standard domain-based matching
+	matchingProviders := r.providers.MatchingProviders(hostname.Name)
 
 	if len(matchingProviders) == 0 {
 		r.logger.Debug("no matching providers for hostname",
-			slog.String("hostname", hostname),
+			slog.String("hostname", hostname.Name),
 		)
 		actions = append(actions, Action{
 			Type:     ActionSkip,
 			Status:   StatusSkipped,
-			Hostname: hostname,
+			Hostname: hostname.Name,
 			Error:    "no matching provider",
 		})
 		return actions
@@ -378,23 +416,52 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname string, cache *r
 }
 
 // ensureRecordForProvider handles record creation for a single provider with List+Compare logic.
-func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname string, inst *provider.ProviderInstance, cache *recordCache) Action {
+// When hostname has RecordHints, they override provider instance defaults.
+func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *source.Hostname, inst *provider.ProviderInstance, cache *recordCache) Action {
+	// Determine effective record type, target, and TTL
+	// RecordHints override provider defaults when present
+	recordType := inst.RecordType
+	target := inst.Target
+	ttl := inst.TTL
+	var srvData *provider.SRVData
+
+	if hints := hostname.RecordHints; hints != nil {
+		if hints.Type != "" {
+			recordType = provider.RecordType(hints.Type)
+		}
+		if hints.Target != "" {
+			target = hints.Target
+		}
+		if hints.TTL > 0 {
+			ttl = hints.TTL
+		}
+		// Extract SRV-specific data for SRV records
+		if hints.SRV != nil {
+			srvData = &provider.SRVData{
+				Priority: hints.SRV.Priority,
+				Weight:   hints.SRV.Weight,
+				Port:     hints.SRV.Port,
+			}
+		}
+	}
+
 	action := Action{
 		Type:       ActionCreate,
 		Provider:   inst.Name(),
-		Hostname:   hostname,
-		RecordType: string(inst.RecordType),
-		Target:     inst.Target,
+		Hostname:   hostname.Name,
+		RecordType: string(recordType),
+		Target:     target,
 	}
 
 	if r.config.DryRun {
 		action.Status = StatusSuccess
 		r.logger.Info("would create record (dry-run)",
-			slog.String("hostname", hostname),
+			slog.String("hostname", hostname.Name),
 			slog.String("provider", inst.Name()),
-			slog.String("type", string(inst.RecordType)),
-			slog.String("target", inst.Target),
+			slog.String("type", string(recordType)),
+			slog.String("target", target),
 			slog.Bool("ownership_tracking", r.config.OwnershipTracking),
+			slog.Bool("has_hints", hostname.HasRecordHints()),
 		)
 		return action
 	}
@@ -403,18 +470,18 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname strin
 	var existingRecords []provider.Record
 	if cache != nil {
 		var cached bool
-		existingRecords, cached = cache.getExistingRecords(inst.Name(), hostname)
+		existingRecords, cached = cache.getExistingRecords(inst.Name(), hostname.Name)
 		if !cached {
 			// Cache miss (provider failed to load) - fall back to direct query
 			r.logger.Debug("cache miss, querying provider directly",
-				slog.String("hostname", hostname),
+				slog.String("hostname", hostname.Name),
 				slog.String("provider", inst.Name()),
 			)
 			var err error
-			existingRecords, err = inst.GetExistingRecords(ctx, hostname)
+			existingRecords, err = inst.GetExistingRecords(ctx, hostname.Name)
 			if err != nil {
 				r.logger.Warn("failed to list existing records, proceeding with create",
-					slog.String("hostname", hostname),
+					slog.String("hostname", hostname.Name),
 					slog.String("provider", inst.Name()),
 					slog.String("error", err.Error()),
 				)
@@ -428,7 +495,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname strin
 	var conflictingTypeRecords []provider.Record
 
 	for _, existing := range existingRecords {
-		if existing.Type == inst.RecordType {
+		if existing.Type == recordType {
 			sameTypeRecords = append(sameTypeRecords, existing)
 		} else {
 			conflictingTypeRecords = append(conflictingTypeRecords, existing)
@@ -438,76 +505,110 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname strin
 	// Step 3: Handle type conflicts (A vs CNAME)
 	if len(conflictingTypeRecords) > 0 {
 		conflictTypes := make([]string, 0, len(conflictingTypeRecords))
-		for _, r := range conflictingTypeRecords {
-			conflictTypes = append(conflictTypes, string(r.Type))
+		for _, rec := range conflictingTypeRecords {
+			conflictTypes = append(conflictTypes, string(rec.Type))
 		}
 		action.Type = ActionSkip
 		action.Status = StatusSkipped
 		action.Error = fmt.Sprintf("type conflict: existing %v record(s) conflict with %s",
-			conflictTypes, inst.RecordType)
+			conflictTypes, recordType)
 		r.logger.Warn("skipping due to record type conflict",
-			slog.String("hostname", hostname),
+			slog.String("hostname", hostname.Name),
 			slog.String("provider", inst.Name()),
-			slog.String("desired_type", string(inst.RecordType)),
+			slog.String("desired_type", string(recordType)),
 			slog.Any("existing_types", conflictTypes),
 		)
 		return action
 	}
 
 	// Step 4: Check if record with correct target already exists
+	// For SRV records, we need to handle multiple records with the same target but different SRV data
+	var exactMatchFound bool
+	var staleSrvRecords []provider.Record
 	for _, existing := range sameTypeRecords {
-		if existing.Target == inst.Target {
-			// Perfect match - record already exists with correct target
-			action.Type = ActionSkip
-			action.Status = StatusSkipped
-			action.Error = "record already exists"
-
-			// Check if we already own this record
-			hasOwnership := false
-			if cache != nil {
-				hasOwnership = cache.hasOwnershipRecord(inst.Name(), hostname)
-			}
-
-			if hasOwnership {
-				// We already own this record - just a normal skip
-				r.logger.Debug("record already exists with correct target",
-					slog.String("hostname", hostname),
-					slog.String("provider", inst.Name()),
-					slog.String("target", inst.Target),
-				)
-				// Ensure ownership record exists (idempotent)
-				r.ensureOwnershipRecord(ctx, hostname, inst)
-			} else if r.config.AdoptExisting {
-				// Existing record without ownership - adopt it
-				r.logger.Info("adopting existing record",
-					slog.String("hostname", hostname),
-					slog.String("provider", inst.Name()),
-					slog.String("target", inst.Target),
-				)
-				r.ensureOwnershipRecord(ctx, hostname, inst)
+		if existing.Target == target {
+			// For SRV records, check if SRV-specific data matches
+			if recordType == provider.RecordTypeSRV {
+				if srvDataEquals(existing.SRV, srvData) {
+					// Perfect match for SRV record
+					exactMatchFound = true
+				} else {
+					// Same target but different SRV data - this is a stale record
+					staleSrvRecords = append(staleSrvRecords, existing)
+				}
 			} else {
-				// Existing record without ownership - skip adoption
-				r.logger.Info("existing record found, skipping adoption (set ADOPT_EXISTING=true to manage)",
-					slog.String("hostname", hostname),
-					slog.String("provider", inst.Name()),
-					slog.String("target", inst.Target),
-				)
+				// Non-SRV record with matching target - exact match
+				exactMatchFound = true
 			}
-			return action
 		}
 	}
 
-	// Step 5: Delete records with wrong targets (IP changed)
+	// Step 4a: Delete stale SRV records (same target, different priority/weight/port)
+	for _, stale := range staleSrvRecords {
+		r.logger.Info("deleting stale SRV record with outdated data",
+			slog.String("hostname", hostname.Name),
+			slog.String("provider", inst.Name()),
+			slog.String("target", stale.Target),
+			slog.Int("old_priority", int(stale.SRV.Priority)),
+			slog.Int("old_port", int(stale.SRV.Port)),
+		)
+		if err := inst.DeleteSRVRecord(ctx, hostname.Name, stale.Target, stale.SRV); err != nil {
+			r.logger.Error("failed to delete stale SRV record",
+				slog.String("hostname", hostname.Name),
+				slog.String("provider", inst.Name()),
+				slog.String("error", err.Error()),
+			)
+			// Continue trying other deletes
+		}
+	}
+
+	// Step 4b: If exact match exists, skip creation
+	if exactMatchFound {
+		action.Type = ActionSkip
+		action.Status = StatusSkipped
+		action.Error = "record already exists"
+
+		// Check if we already own this record
+		hasOwnership := false
+		if cache != nil {
+			hasOwnership = cache.hasOwnershipRecord(inst.Name(), hostname.Name)
+		}
+
+		if hasOwnership {
+			r.logger.Debug("record already exists with correct target",
+				slog.String("hostname", hostname.Name),
+				slog.String("provider", inst.Name()),
+				slog.String("target", target),
+			)
+			r.ensureOwnershipRecord(ctx, hostname.Name, inst)
+		} else if r.config.AdoptExisting {
+			r.logger.Info("adopting existing record",
+				slog.String("hostname", hostname.Name),
+				slog.String("provider", inst.Name()),
+				slog.String("target", target),
+			)
+			r.ensureOwnershipRecord(ctx, hostname.Name, inst)
+		} else {
+			r.logger.Info("existing record found, skipping adoption (set ADOPT_EXISTING=true to manage)",
+				slog.String("hostname", hostname.Name),
+				slog.String("provider", inst.Name()),
+				slog.String("target", target),
+			)
+		}
+		return action
+	}
+
+	// Step 5: Delete records with wrong targets (IP/hostname changed)
 	for _, existing := range sameTypeRecords {
 		r.logger.Info("target changed, deleting old record",
-			slog.String("hostname", hostname),
+			slog.String("hostname", hostname.Name),
 			slog.String("provider", inst.Name()),
 			slog.String("old_target", existing.Target),
-			slog.String("new_target", inst.Target),
+			slog.String("new_target", target),
 		)
-		if err := inst.DeleteRecordByTarget(ctx, hostname, existing.Type, existing.Target); err != nil {
+		if err := inst.DeleteRecordByTarget(ctx, hostname.Name, existing.Type, existing.Target); err != nil {
 			r.logger.Error("failed to delete old record before update",
-				slog.String("hostname", hostname),
+				slog.String("hostname", hostname.Name),
 				slog.String("provider", inst.Name()),
 				slog.String("target", existing.Target),
 				slog.String("error", err.Error()),
@@ -517,31 +618,32 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname strin
 	}
 
 	// Step 6: Create the record with the desired target
-	if err := inst.CreateRecord(ctx, hostname); err != nil {
+	// Use CreateRecordWithValues to respect RecordHints overrides
+	if err := inst.CreateRecordWithValues(ctx, hostname.Name, recordType, target, ttl, srvData); err != nil {
 		// Handle conflict error (shouldn't happen after our checks, but be safe)
 		if provider.IsConflict(err) {
 			action.Type = ActionSkip
 			action.Status = StatusSkipped
 			action.Error = "record already exists"
 			r.logger.Debug("record already exists, skipping",
-				slog.String("hostname", hostname),
+				slog.String("hostname", hostname.Name),
 				slog.String("provider", inst.Name()),
 			)
-			r.ensureOwnershipRecord(ctx, hostname, inst)
+			r.ensureOwnershipRecord(ctx, hostname.Name, inst)
 		} else if provider.IsTypeConflict(err) {
 			action.Type = ActionSkip
 			action.Status = StatusSkipped
 			action.Error = "record type conflict"
 			r.logger.Warn("record type conflict detected",
-				slog.String("hostname", hostname),
+				slog.String("hostname", hostname.Name),
 				slog.String("provider", inst.Name()),
-				slog.String("type", string(inst.RecordType)),
+				slog.String("type", string(recordType)),
 			)
 		} else {
 			action.Status = StatusFailed
 			action.Error = err.Error()
 			r.logger.Error("failed to create record",
-				slog.String("hostname", hostname),
+				slog.String("hostname", hostname.Name),
 				slog.String("provider", inst.Name()),
 				slog.String("error", err.Error()),
 			)
@@ -551,21 +653,21 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname strin
 		if len(sameTypeRecords) > 0 {
 			action.Type = ActionUpdate
 			r.logger.Info("updated record",
-				slog.String("hostname", hostname),
+				slog.String("hostname", hostname.Name),
 				slog.String("provider", inst.Name()),
-				slog.String("type", string(inst.RecordType)),
-				slog.String("target", inst.Target),
+				slog.String("type", string(recordType)),
+				slog.String("target", target),
 			)
 		} else {
 			r.logger.Info("created record",
-				slog.String("hostname", hostname),
+				slog.String("hostname", hostname.Name),
 				slog.String("provider", inst.Name()),
-				slog.String("type", string(inst.RecordType)),
-				slog.String("target", inst.Target),
+				slog.String("type", string(recordType)),
+				slog.String("target", target),
 			)
 		}
 		action.Status = StatusSuccess
-		r.ensureOwnershipRecord(ctx, hostname, inst)
+		r.ensureOwnershipRecord(ctx, hostname.Name, inst)
 	}
 
 	return action
@@ -658,24 +760,131 @@ func (r *Reconciler) deleteRecord(ctx context.Context, hostname string) []Action
 	return actions
 }
 
-// deleteRecordWithOwnershipCheck removes DNS records only if we own them (have ownership TXT record).
-// This prevents deletion of manually-created DNS records during orphan cleanup.
-func (r *Reconciler) deleteRecordWithOwnershipCheck(ctx context.Context, hostname string) []Action {
+// deleteRecordFromCache removes DNS records using the cache to determine actual record types.
+// This is used during orphan cleanup when ownership tracking is disabled.
+func (r *Reconciler) deleteRecordFromCache(ctx context.Context, hostname string, cache *recordCache) []Action {
 	var actions []Action
 
 	matchingProviders := r.providers.MatchingProviders(hostname)
 
 	for _, inst := range matchingProviders {
-		action := Action{
-			Type:       ActionDelete,
-			Provider:   inst.Name(),
-			Hostname:   hostname,
-			RecordType: string(inst.RecordType),
-			Target:     inst.Target,
+		if r.config.DryRun {
+			action := Action{
+				Type:       ActionDelete,
+				Provider:   inst.Name(),
+				Hostname:   hostname,
+				RecordType: string(inst.RecordType),
+				Target:     inst.Target,
+				Status:     StatusSuccess,
+			}
+			r.logger.Info("would delete record (dry-run)",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+			)
+			actions = append(actions, action)
+			continue
 		}
 
+		// Get actual records from cache to know what types to delete
+		var recordsToDelete []provider.Record
+		if cache != nil {
+			cachedRecords, ok := cache.getAllRecordsForHostname(inst.Name(), hostname)
+			if ok && len(cachedRecords) > 0 {
+				recordsToDelete = cachedRecords
+			}
+		}
+
+		// If no cached records found, fall back to querying the provider
+		if len(recordsToDelete) == 0 {
+			allRecords, err := inst.Provider.List(ctx)
+			if err != nil {
+				r.logger.Warn("failed to list records for deletion",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("error", err.Error()),
+				)
+				action := Action{
+					Type:       ActionDelete,
+					Provider:   inst.Name(),
+					Hostname:   hostname,
+					RecordType: string(inst.RecordType),
+					Target:     inst.Target,
+					Status:     StatusFailed,
+					Error:      "failed to list records: " + err.Error(),
+				}
+				actions = append(actions, action)
+				continue
+			}
+			for _, r := range allRecords {
+				if r.Hostname == hostname {
+					switch r.Type {
+					case provider.RecordTypeA, provider.RecordTypeAAAA, provider.RecordTypeCNAME, provider.RecordTypeSRV:
+						recordsToDelete = append(recordsToDelete, r)
+					}
+				}
+			}
+		}
+
+		// Delete each record found
+		for _, record := range recordsToDelete {
+			action := Action{
+				Type:       ActionDelete,
+				Provider:   inst.Name(),
+				Hostname:   hostname,
+				RecordType: string(record.Type),
+				Target:     record.Target,
+			}
+
+			var err error
+			if record.Type == provider.RecordTypeSRV {
+				err = inst.DeleteSRVRecord(ctx, hostname, record.Target, record.SRV)
+			} else {
+				err = inst.DeleteRecordByTarget(ctx, hostname, record.Type, record.Target)
+			}
+
+			if err != nil {
+				action.Status = StatusFailed
+				action.Error = err.Error()
+				r.logger.Error("failed to delete record",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("type", string(record.Type)),
+					slog.String("error", err.Error()),
+				)
+			} else {
+				action.Status = StatusSuccess
+				r.logger.Info("deleted record",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("type", string(record.Type)),
+					slog.String("target", record.Target),
+				)
+			}
+			actions = append(actions, action)
+		}
+	}
+
+	return actions
+}
+
+// deleteRecordWithOwnershipCheck removes DNS records only if we own them (have ownership TXT record).
+// This prevents deletion of manually-created DNS records during orphan cleanup.
+// It uses the cache to determine actual record types (A, AAAA, SRV, etc.) to delete.
+func (r *Reconciler) deleteRecordWithOwnershipCheck(ctx context.Context, hostname string, cache *recordCache) []Action {
+	var actions []Action
+
+	matchingProviders := r.providers.MatchingProviders(hostname)
+
+	for _, inst := range matchingProviders {
 		if r.config.DryRun {
-			action.Status = StatusSuccess
+			action := Action{
+				Type:       ActionDelete,
+				Provider:   inst.Name(),
+				Hostname:   hostname,
+				RecordType: string(inst.RecordType),
+				Target:     inst.Target,
+				Status:     StatusSuccess,
+			}
 			r.logger.Info("would delete record if owned (dry-run)",
 				slog.String("hostname", hostname),
 				slog.String("provider", inst.Name()),
@@ -684,19 +893,31 @@ func (r *Reconciler) deleteRecordWithOwnershipCheck(ctx context.Context, hostnam
 			continue
 		}
 
-		// Check if we own this record
-		hasOwnership, err := inst.HasOwnershipRecord(ctx, hostname)
-		if err != nil {
-			r.logger.Warn("failed to check ownership record, skipping deletion",
-				slog.String("hostname", hostname),
-				slog.String("provider", inst.Name()),
-				slog.String("error", err.Error()),
-			)
-			action.Type = ActionSkip
-			action.Status = StatusSkipped
-			action.Error = "failed to check ownership: " + err.Error()
-			actions = append(actions, action)
-			continue
+		// Check if we own this record (using cache if available)
+		var hasOwnership bool
+		if cache != nil {
+			hasOwnership = cache.hasOwnershipRecord(inst.Name(), hostname)
+		} else {
+			var err error
+			hasOwnership, err = inst.HasOwnershipRecord(ctx, hostname)
+			if err != nil {
+				r.logger.Warn("failed to check ownership record, skipping deletion",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("error", err.Error()),
+				)
+				action := Action{
+					Type:       ActionSkip,
+					Provider:   inst.Name(),
+					Hostname:   hostname,
+					RecordType: string(inst.RecordType),
+					Target:     inst.Target,
+					Status:     StatusSkipped,
+					Error:      "failed to check ownership: " + err.Error(),
+				}
+				actions = append(actions, action)
+				continue
+			}
 		}
 
 		if !hasOwnership {
@@ -704,53 +925,117 @@ func (r *Reconciler) deleteRecordWithOwnershipCheck(ctx context.Context, hostnam
 				slog.String("hostname", hostname),
 				slog.String("provider", inst.Name()),
 			)
-			action.Type = ActionSkip
-			action.Status = StatusSkipped
-			action.Error = "no ownership record - may be manually created"
+			action := Action{
+				Type:       ActionSkip,
+				Provider:   inst.Name(),
+				Hostname:   hostname,
+				RecordType: string(inst.RecordType),
+				Target:     inst.Target,
+				Status:     StatusSkipped,
+				Error:      "no ownership record - may be manually created",
+			}
 			actions = append(actions, action)
 			continue
 		}
 
-		// We own this record, safe to delete
-		err = inst.DeleteRecord(ctx, hostname)
-		if err != nil {
-			action.Status = StatusFailed
-			action.Error = err.Error()
-			r.logger.Error("failed to delete owned record",
-				slog.String("hostname", hostname),
-				slog.String("provider", inst.Name()),
-				slog.String("error", err.Error()),
-			)
-		} else {
-			action.Status = StatusSuccess
-			r.logger.Info("deleted owned record",
-				slog.String("hostname", hostname),
-				slog.String("provider", inst.Name()),
-			)
-
-			// Also delete ownership TXT record
-			if ownerErr := inst.DeleteOwnershipRecord(ctx, hostname); ownerErr != nil {
-				r.logger.Warn("failed to delete ownership record",
-					slog.String("hostname", hostname),
-					slog.String("provider", inst.Name()),
-					slog.String("error", ownerErr.Error()),
-				)
-			} else {
-				r.logger.Debug("deleted ownership record",
-					slog.String("hostname", hostname),
-					slog.String("provider", inst.Name()),
-				)
+		// We own this record - get actual records from cache to know what types to delete
+		var recordsToDelete []provider.Record
+		if cache != nil {
+			cachedRecords, ok := cache.getAllRecordsForHostname(inst.Name(), hostname)
+			if ok && len(cachedRecords) > 0 {
+				recordsToDelete = cachedRecords
 			}
 		}
 
-		actions = append(actions, action)
+		// If no cached records found, fall back to querying the provider
+		if len(recordsToDelete) == 0 {
+			allRecords, err := inst.Provider.List(ctx)
+			if err != nil {
+				r.logger.Warn("failed to list records for deletion",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("error", err.Error()),
+				)
+				action := Action{
+					Type:       ActionDelete,
+					Provider:   inst.Name(),
+					Hostname:   hostname,
+					RecordType: string(inst.RecordType),
+					Target:     inst.Target,
+					Status:     StatusFailed,
+					Error:      "failed to list records: " + err.Error(),
+				}
+				actions = append(actions, action)
+				continue
+			}
+			for _, r := range allRecords {
+				if r.Hostname == hostname {
+					switch r.Type {
+					case provider.RecordTypeA, provider.RecordTypeAAAA, provider.RecordTypeCNAME, provider.RecordTypeSRV:
+						recordsToDelete = append(recordsToDelete, r)
+					}
+				}
+			}
+		}
+
+		// Delete each record found
+		for _, record := range recordsToDelete {
+			action := Action{
+				Type:       ActionDelete,
+				Provider:   inst.Name(),
+				Hostname:   hostname,
+				RecordType: string(record.Type),
+				Target:     record.Target,
+			}
+
+			var err error
+			if record.Type == provider.RecordTypeSRV {
+				err = inst.DeleteSRVRecord(ctx, hostname, record.Target, record.SRV)
+			} else {
+				err = inst.DeleteRecordByTarget(ctx, hostname, record.Type, record.Target)
+			}
+
+			if err != nil {
+				action.Status = StatusFailed
+				action.Error = err.Error()
+				r.logger.Error("failed to delete owned record",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("type", string(record.Type)),
+					slog.String("error", err.Error()),
+				)
+			} else {
+				action.Status = StatusSuccess
+				r.logger.Info("deleted owned record",
+					slog.String("hostname", hostname),
+					slog.String("provider", inst.Name()),
+					slog.String("type", string(record.Type)),
+					slog.String("target", record.Target),
+				)
+			}
+			actions = append(actions, action)
+		}
+
+		// Delete ownership TXT record
+		if ownerErr := inst.DeleteOwnershipRecord(ctx, hostname); ownerErr != nil {
+			r.logger.Warn("failed to delete ownership record",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+				slog.String("error", ownerErr.Error()),
+			)
+		} else {
+			r.logger.Debug("deleted ownership record",
+				slog.String("hostname", hostname),
+				slog.String("provider", inst.Name()),
+			)
+		}
 	}
 
 	return actions
 }
 
 // cleanupOrphans removes records for hostnames that are no longer in any workload.
-func (r *Reconciler) cleanupOrphans(ctx context.Context, currentHostnames map[string]struct{}) []Action {
+func (r *Reconciler) cleanupOrphans(ctx context.Context, currentHostnames map[string]*source.Hostname, cache *recordCache) []Action {
 	var actions []Action
 
 	r.mu.RLock()
@@ -769,10 +1054,10 @@ func (r *Reconciler) cleanupOrphans(ctx context.Context, currentHostnames map[st
 
 			// If ownership tracking is enabled, only delete if we own the record
 			if r.config.OwnershipTracking {
-				deleteActions := r.deleteRecordWithOwnershipCheck(ctx, hostname)
+				deleteActions := r.deleteRecordWithOwnershipCheck(ctx, hostname, cache)
 				actions = append(actions, deleteActions...)
 			} else {
-				deleteActions := r.deleteRecord(ctx, hostname)
+				deleteActions := r.deleteRecordFromCache(ctx, hostname, cache)
 				actions = append(actions, deleteActions...)
 			}
 		}
@@ -907,4 +1192,16 @@ func (r *Reconciler) recordMetrics(result *Result) {
 			metrics.RecordsSkippedTotal.WithLabelValues(reason).Inc()
 		}
 	}
+}
+
+// srvDataEquals compares two SRVData structs for equality.
+// Returns true if both are nil or have identical priority, weight, and port.
+func srvDataEquals(a, b *provider.SRVData) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return a.Priority == b.Priority && a.Weight == b.Weight && a.Port == b.Port
 }

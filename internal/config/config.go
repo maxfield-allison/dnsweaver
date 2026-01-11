@@ -97,6 +97,13 @@ func (c *Config) CleanupOrphans() bool {
 	return c.Global.CleanupOrphans
 }
 
+// CleanupOnStop returns whether DNS records should be cleaned up when containers stop.
+// If true (default), stopped containers are treated as orphans and their DNS records are removed.
+// If false, DNS records are only removed when containers are deleted, not when stopped.
+func (c *Config) CleanupOnStop() bool {
+	return c.Global.CleanupOnStop
+}
+
 // OwnershipTracking returns whether TXT ownership tracking is enabled.
 func (c *Config) OwnershipTracking() bool {
 	return c.Global.OwnershipTracking

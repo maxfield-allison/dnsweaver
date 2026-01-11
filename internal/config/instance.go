@@ -18,10 +18,10 @@ type ProviderInstanceConfig struct {
 	// TypeName is the provider type (e.g., "technitium", "cloudflare").
 	TypeName string
 
-	// RecordType is "A" or "CNAME".
+	// RecordType is "A", "AAAA", or "CNAME".
 	RecordType provider.RecordType
 
-	// Target is the IP (for A) or hostname (for CNAME) target.
+	// Target is the IPv4 (for A), IPv6 (for AAAA), or hostname (for CNAME) target.
 	Target string
 
 	// TTL for DNS records.
@@ -102,10 +102,12 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 	switch recordTypeStr {
 	case "", "A":
 		cfg.RecordType = provider.RecordTypeA
+	case "AAAA":
+		cfg.RecordType = provider.RecordTypeAAAA
 	case "CNAME":
 		cfg.RecordType = provider.RecordTypeCNAME
 	default:
-		errs = append(errs, fmt.Sprintf("%sRECORD_TYPE: invalid value %q (must be A or CNAME)", prefix, recordTypeStr))
+		errs = append(errs, fmt.Sprintf("%sRECORD_TYPE: invalid value %q (must be A, AAAA, or CNAME)", prefix, recordTypeStr))
 	}
 
 	// TARGET is required

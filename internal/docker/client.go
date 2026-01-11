@@ -69,11 +69,12 @@ var (
 // standalone mode and provides appropriate methods for each. Use ListWorkloads()
 // for mode-agnostic workload listing.
 type Client struct {
-	docker       *client.Client
-	mode         Mode
-	detectedMode Mode
-	logger       *slog.Logger
-	host         string
+	docker        *client.Client
+	mode          Mode
+	detectedMode  Mode
+	logger        *slog.Logger
+	host          string
+	cleanupOnStop bool // If true, only list running containers; if false, include stopped
 }
 
 // NewClient creates a new Docker client with the given options.
@@ -92,8 +93,9 @@ type Client struct {
 //	)
 func NewClient(ctx context.Context, opts ...Option) (*Client, error) {
 	c := &Client{
-		mode:   ModeAuto,
-		logger: slog.Default(),
+		mode:          ModeAuto,
+		logger:        slog.Default(),
+		cleanupOnStop: true, // Default: only list running containers
 	}
 
 	// Apply options
@@ -250,18 +252,35 @@ func (c *Client) ListServices(ctx context.Context) ([]Service, error) {
 	return result, nil
 }
 
-// ListContainers returns all running containers with their labels.
+// ListContainers returns containers with their labels.
+// If cleanupOnStop is true (default), only running containers are returned.
+// If cleanupOnStop is false, both running and stopped containers are returned,
+// allowing DNS records to persist through stop/restart cycles.
 // Returns ErrNotStandaloneMode if in Swarm mode.
 func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 	if c.detectedMode != ModeStandalone {
 		return nil, ErrNotStandaloneMode
 	}
 
-	containers, err := c.docker.ContainerList(ctx, container.ListOptions{
-		Filters: filters.NewArgs(
+	listOpts := container.ListOptions{}
+	if c.cleanupOnStop {
+		// Only list running containers (stopped containers = orphans)
+		listOpts.Filters = filters.NewArgs(
 			filters.Arg("status", "running"),
-		),
-	})
+		)
+	} else {
+		// Include both running and stopped containers
+		// Only truly removed containers will be orphans
+		listOpts.All = true
+		listOpts.Filters = filters.NewArgs(
+			filters.Arg("status", "running"),
+			filters.Arg("status", "paused"),
+			filters.Arg("status", "exited"),
+			filters.Arg("status", "created"),
+		)
+	}
+
+	containers, err := c.docker.ContainerList(ctx, listOpts)
 	if err != nil {
 		return nil, fmt.Errorf("listing containers: %w", err)
 	}
@@ -279,6 +298,7 @@ func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 
 	c.logger.Debug("listed containers",
 		slog.Int("count", len(result)),
+		slog.Bool("include_stopped", !c.cleanupOnStop),
 	)
 
 	return result, nil

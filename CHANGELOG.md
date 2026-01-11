@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-01-11
+
+### Added
+- **CLEANUP_ON_STOP Option**: New `DNSWEAVER_CLEANUP_ON_STOP` configuration option (default: `true`)
+  - When `true` (default): DNS records are deleted when containers stop or are removed
+  - When `false`: DNS records are only deleted when containers are removed, not when stopped
+  - Useful for containers that frequently stop/start and don't need DNS cleanup on stop
+- **Native dnsweaver Labels** (#27): Use dnsweaver without Traefik dependency
+  - New label format: `dnsweaver.hostname`, `dnsweaver.type`, `dnsweaver.target`
+  - Works alongside existing Traefik label parsing
+  - Enables DNS management for services that don't use Traefik
+- **Pi-hole Provider** (#15): Native Pi-hole DNS integration with two operation modes
+  - **API mode**: Uses Pi-hole's Admin API (recommended for Pi-hole v5)
+    - Manages Local DNS Records (A/AAAA) and Local CNAME Records
+    - Authentication via admin password (supports `_FILE` suffix for secrets)
+  - **File mode**: Direct file manipulation for containerized Pi-hole setups
+    - Uses dnsmasq config format internally
+    - Configurable config directory, filename, and reload command
+  - Supports A, AAAA, and CNAME record types
+  - Zone filtering for multi-zone environments
+  - **Note**: Pi-hole v6+ uses a different API; see #74 for v6 support
+- **dnsmasq Provider** (#28): File-based DNS provider for dnsmasq DNS server
+  - Manages records by writing to dnsmasq configuration files
+  - Supports `address=` directive for A/AAAA records
+  - Supports `cname=` directive for CNAME records
+  - Automatic dnsmasq reload after changes (configurable)
+  - Serves as foundation for Pi-hole integration
+  - Configurable config directory, filename, and reload command
+  - **Note**: Orphan cleanup limited due to lack of TXT ownership support; see #73
+- **SRV Record Support** (#62): Service discovery DNS records
+  - Added `SRV` record type for service discovery (Minecraft, SIP, LDAP, XMPP)
+  - SRV records include priority, weight, port, and target fields
+  - SRV naming convention: `_service._proto.name` (e.g., `_minecraft._tcp.example.com`)
+  - Full support across all providers: Technitium, Cloudflare, Webhook
+  - Updated README with SRV record type in reference table
+- **AAAA Record Support** (#63): IPv6 DNS record support
+  - Added `AAAA` record type for IPv6 addresses alongside existing `A` (IPv4) and `CNAME` types
+  - Strict validation: A records require IPv4, AAAA records require IPv6, CNAME requires hostname
+  - Full support across all providers: Technitium, Cloudflare, Webhook
+  - Updated README with IPv6 configuration examples
+
+### Fixed
+- **Cache includes all record types** (#63, #62): Record cache now properly includes AAAA and SRV records
+  - Previously, `getExistingRecords()` only cached A and CNAME records
+  - SRV and AAAA records were being missed during orphan cleanup
+- **Orphan cleanup uses correct record type** (#63, #62): Delete operations now use the actual record type
+  - Previously, orphan cleanup always used `A` record type for deletion regardless of actual type
+  - Now correctly deletes AAAA records as AAAA and SRV records as SRV
+- **SRV record data updates**: Fixed multiple issues with SRV record lifecycle
+  - Proper detection of SRV record data changes (priority, weight, port, target)
+  - Correct API parameter names for Technitium SRV records
+  - SRV data properly passed through reconciler to providers
+  - RFC 2782 validation for SRV record hostnames
+
 ## [0.3.3] - 2026-01-09
 
 ### Added

@@ -172,6 +172,86 @@ func TestHostname_IsValid(t *testing.T) {
 	}
 }
 
+func TestValidateSRVHostname_Valid(t *testing.T) {
+	validSRVHostnames := []string{
+		"_minecraft._tcp.mc.example.com",
+		"_http._tcp.www.example.com",
+		"_sip._udp.voip.example.com",
+		"_ldap._tcp.dc1.example.com",
+		"_kerberos._tcp.kdc.example.com",
+		"_imaps._tcp.mail.example.com",
+		"_xmpp-client._tcp.chat.example.com",
+		"_minecraft._tcp.example.com", // minimal 3 labels after prefix
+	}
+
+	for _, hostname := range validSRVHostnames {
+		t.Run(hostname, func(t *testing.T) {
+			err := ValidateSRVHostname(hostname)
+			if err != nil {
+				t.Errorf("ValidateSRVHostname(%q) returned error: %v", hostname, err)
+			}
+		})
+	}
+}
+
+func TestValidateSRVHostname_Invalid(t *testing.T) {
+	tests := []struct {
+		name     string
+		hostname string
+	}{
+		{"no_underscore_prefix", "minecraft.tcp.example.com"},
+		{"only_one_underscore", "_minecraft.tcp.example.com"},
+		{"too_few_labels", "_minecraft._tcp"},
+		{"empty", ""},
+		{"invalid_service_label", "_min@craft._tcp.example.com"},
+		{"invalid_target_label", "_minecraft._tcp.exam!ple.com"},
+		{"empty_label", "_minecraft._tcp..example.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSRVHostname(tt.hostname)
+			if err == nil {
+				t.Errorf("ValidateSRVHostname(%q) expected error, got nil", tt.hostname)
+			}
+		})
+	}
+}
+
+func TestHostname_Validate_SRV(t *testing.T) {
+	// SRV hostname with SRV RecordHints should use SRV validation
+	srvHostname := Hostname{
+		Name:   "_minecraft._tcp.mc.example.com",
+		Source: "dnsweaver",
+		RecordHints: &RecordHints{
+			Type: "SRV",
+			SRV: &SRVHints{
+				Priority: 10,
+				Weight:   5,
+				Port:     25565,
+			},
+		},
+	}
+	if err := srvHostname.Validate(); err != nil {
+		t.Errorf("Validate() for SRV hostname returned error: %v", err)
+	}
+	if !srvHostname.IsValid() {
+		t.Error("IsValid() for SRV hostname returned false")
+	}
+
+	// Same hostname WITHOUT SRV hints should fail RFC 1123 validation
+	nonSRVHostname := Hostname{
+		Name:   "_minecraft._tcp.mc.example.com",
+		Source: "dnsweaver",
+	}
+	if err := nonSRVHostname.Validate(); err == nil {
+		t.Error("Validate() for underscore hostname without SRV hints expected error, got nil")
+	}
+	if nonSRVHostname.IsValid() {
+		t.Error("IsValid() for underscore hostname without SRV hints returned true")
+	}
+}
+
 func TestHostnames_ValidHostnames(t *testing.T) {
 	hostnames := Hostnames{
 		{Name: "valid1.example.com", Source: "traefik"},

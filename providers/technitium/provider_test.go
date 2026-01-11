@@ -358,6 +358,205 @@ func TestProvider_Delete_CNAMERecord(t *testing.T) {
 	}
 }
 
+func TestProvider_Create_SRVRecord(t *testing.T) {
+	var called bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		query := r.URL.Query()
+		if query.Get("type") != "SRV" {
+			t.Errorf("expected type SRV, got %s", query.Get("type"))
+		}
+		if query.Get("priority") != "10" {
+			t.Errorf("expected priority 10, got %s", query.Get("priority"))
+		}
+		if query.Get("weight") != "5" {
+			t.Errorf("expected weight 5, got %s", query.Get("weight"))
+		}
+		if query.Get("port") != "25565" {
+			t.Errorf("expected port 25565, got %s", query.Get("port"))
+		}
+		if query.Get("target") != "mc.example.com" {
+			t.Errorf("expected target mc.example.com, got %s", query.Get("target"))
+		}
+		if query.Get("ttl") != "300" {
+			t.Errorf("expected ttl 300, got %s", query.Get("ttl"))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "ok",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(t, server.URL)
+	err := p.Create(context.Background(), provider.Record{
+		Hostname: "_minecraft._tcp.example.com",
+		Type:     provider.RecordTypeSRV,
+		Target:   "mc.example.com",
+		TTL:      300,
+		SRV: &provider.SRVData{
+			Priority: 10,
+			Weight:   5,
+			Port:     25565,
+		},
+	})
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("expected API to be called")
+	}
+}
+
+func TestProvider_Create_SRVRecord_MissingSRVData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("API should not be called when SRV data is missing")
+	}))
+	defer server.Close()
+
+	p := newTestProvider(t, server.URL)
+	err := p.Create(context.Background(), provider.Record{
+		Hostname: "_minecraft._tcp.example.com",
+		Type:     provider.RecordTypeSRV,
+		Target:   "mc.example.com",
+		TTL:      300,
+		SRV:      nil, // Missing SRV data
+	})
+
+	if err == nil {
+		t.Error("expected error for missing SRV data, got nil")
+	}
+}
+
+func TestProvider_Delete_SRVRecord(t *testing.T) {
+	var called bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if r.URL.Path != "/api/zones/records/delete" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		query := r.URL.Query()
+		if query.Get("type") != "SRV" {
+			t.Errorf("expected type SRV, got %s", query.Get("type"))
+		}
+		if query.Get("priority") != "10" {
+			t.Errorf("expected priority 10, got %s", query.Get("priority"))
+		}
+		if query.Get("weight") != "5" {
+			t.Errorf("expected weight 5, got %s", query.Get("weight"))
+		}
+		if query.Get("port") != "25565" {
+			t.Errorf("expected port 25565, got %s", query.Get("port"))
+		}
+		if query.Get("target") != "mc.example.com" {
+			t.Errorf("expected target mc.example.com, got %s", query.Get("target"))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "ok",
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(t, server.URL)
+	err := p.Delete(context.Background(), provider.Record{
+		Hostname: "_minecraft._tcp.example.com",
+		Type:     provider.RecordTypeSRV,
+		Target:   "mc.example.com",
+		SRV: &provider.SRVData{
+			Priority: 10,
+			Weight:   5,
+			Port:     25565,
+		},
+	})
+
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("expected API to be called")
+	}
+}
+
+func TestProvider_List_WithSRVRecords(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "ok",
+			"response": map[string]interface{}{
+				"zone": map[string]interface{}{
+					"name":     "example.com",
+					"type":     "Primary",
+					"disabled": false,
+				},
+				"records": []map[string]interface{}{
+					{
+						"name":     "app.example.com",
+						"type":     "A",
+						"ttl":      300,
+						"disabled": false,
+						"rData": map[string]interface{}{
+							"ipAddress": "10.0.0.1",
+						},
+					},
+					{
+						"name":     "_minecraft._tcp.example.com",
+						"type":     "SRV",
+						"ttl":      3600,
+						"disabled": false,
+						"rData": map[string]interface{}{
+							"priority": 10,
+							"weight":   5,
+							"port":     25565,
+							"target":   "mc.example.com",
+						},
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	p := newTestProvider(t, server.URL)
+	records, err := p.List(context.Background())
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(records) != 2 {
+		t.Fatalf("expected 2 records (A and SRV), got %d", len(records))
+	}
+
+	// Check A record
+	if records[0].Type != provider.RecordTypeA {
+		t.Errorf("expected first record type A, got %s", records[0].Type)
+	}
+
+	// Check SRV record
+	if records[1].Type != provider.RecordTypeSRV {
+		t.Errorf("expected second record type SRV, got %s", records[1].Type)
+	}
+	if records[1].Target != "mc.example.com" {
+		t.Errorf("expected SRV target mc.example.com, got %s", records[1].Target)
+	}
+	if records[1].SRV == nil {
+		t.Fatal("expected SRV data to be set")
+	}
+	if records[1].SRV.Priority != 10 {
+		t.Errorf("expected SRV priority 10, got %d", records[1].SRV.Priority)
+	}
+	if records[1].SRV.Weight != 5 {
+		t.Errorf("expected SRV weight 5, got %d", records[1].SRV.Weight)
+	}
+	if records[1].SRV.Port != 25565 {
+		t.Errorf("expected SRV port 25565, got %d", records[1].SRV.Port)
+	}
+}
+
 func TestProvider_ImplementsInterface(t *testing.T) {
 	config := &Config{
 		URL:   "http://localhost:5380",

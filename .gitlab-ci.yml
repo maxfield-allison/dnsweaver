@@ -24,9 +24,12 @@ workflow:
   - if: $CI_COMMIT_TAG
   - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
     changes: &code-files ["{**/*.go,go.mod,go.sum}"]
+  - if: $CI_COMMIT_BRANCH =~ /^(feature|bugfix|hotfix)\//
+    changes: *code-files
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     changes: *code-files
 
+# Feature branches: run validate/test/security/build but NOT docker (no image push)
 .rules-docker: &rules-docker
   - if: $CI_COMMIT_TAG
   - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
@@ -75,7 +78,7 @@ lint:
   stage: test
   script:
     - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-    - golangci-lint run --timeout 5m
+    - golangci-lint run --config .golangci.yml --timeout 5m
   rules: *rules-code-changes
   allow_failure: true
 
@@ -109,6 +112,16 @@ security:govulncheck:
     - govulncheck ./... || true
   rules: *rules-code-changes
   allow_failure: true
+
+security:gitleaks:
+  stage: security
+  image:
+    name: zricethezav/gitleaks:latest
+    entrypoint: [""]
+  script:
+    - gitleaks detect --source . --verbose --no-git
+  rules: *rules-code-changes
+  allow_failure: false  # Block on secrets detection
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Build

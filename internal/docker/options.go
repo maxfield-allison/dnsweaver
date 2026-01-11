@@ -43,3 +43,17 @@ func WithLogger(logger *slog.Logger) Option {
 		}
 	}
 }
+
+// WithCleanupOnStop controls whether stopped containers are considered orphans.
+//
+// When true (default): Only running containers are discovered. Stopped containers
+// are treated as orphans and their DNS records are cleaned up.
+//
+// When false: Both running and stopped containers are discovered. DNS records
+// are only cleaned up when containers are removed, not when they're stopped.
+// This is useful for maintenance windows or brief restarts.
+func WithCleanupOnStop(cleanup bool) Option {
+	return func(c *Client) {
+		c.cleanupOnStop = cleanup
+	}
+}

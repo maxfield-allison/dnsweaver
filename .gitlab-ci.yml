@@ -78,7 +78,7 @@ lint:
   stage: test
   script:
     - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-    - golangci-lint run --timeout 5m
+    - golangci-lint run --config .golangci.yml --timeout 5m
   rules: *rules-code-changes
   allow_failure: true
 
@@ -112,6 +112,16 @@ security:govulncheck:
     - govulncheck ./... || true
   rules: *rules-code-changes
   allow_failure: true
+
+security:gitleaks:
+  stage: security
+  image:
+    name: zricethezav/gitleaks:latest
+    entrypoint: [""]
+  script:
+    - gitleaks detect --source . --verbose --no-git
+  rules: *rules-code-changes
+  allow_failure: false  # Block on secrets detection
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Build

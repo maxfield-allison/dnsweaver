@@ -55,7 +55,8 @@ func newRecordCache(ctx context.Context, providers *provider.Registry, logger *s
 	return cache
 }
 
-// getExistingRecords returns cached A/CNAME records for a hostname from a specific provider.
+// getExistingRecords returns cached DNS records for a hostname from a specific provider.
+// Returns A, AAAA, CNAME, and SRV records (excludes TXT ownership records).
 // Returns nil if the provider cache is unavailable (failed to load).
 // Returns empty slice if cached but no records exist for this hostname.
 func (c *recordCache) getExistingRecords(providerName, hostname string) ([]provider.Record, bool) {
@@ -67,11 +68,14 @@ func (c *recordCache) getExistingRecords(providerName, hostname string) ([]provi
 
 	records := byHostname[hostname]
 
-	// Filter to only A and CNAME records (exclude TXT, etc.)
+	// Filter to DNS data records (exclude TXT ownership markers)
 	var filtered []provider.Record
 	for _, r := range records {
-		if r.Type == provider.RecordTypeA || r.Type == provider.RecordTypeCNAME {
+		switch r.Type {
+		case provider.RecordTypeA, provider.RecordTypeAAAA, provider.RecordTypeCNAME, provider.RecordTypeSRV:
 			filtered = append(filtered, r)
+		case provider.RecordTypeTXT:
+			// Skip TXT records (ownership markers)
 		}
 	}
 

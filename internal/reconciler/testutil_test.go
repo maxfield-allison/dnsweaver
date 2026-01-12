@@ -152,12 +152,20 @@ func (m *testMockProvider) GetCreatedOwnershipRecords() []provider.Record {
 	return result
 }
 
-// testMockSource implements source.Source for testing.
+// =============================================================================
+// Reserved Test Utilities
+// These helpers are prepared for future test expansion (e.g., full Reconcile()
+// function tests, source registry tests). Currently unused but intentionally
+// kept for consistency and future use.
+// =============================================================================
+
+//nolint:unused // Reserved for future Reconcile() function tests
 type testMockSource struct {
 	name      string
 	hostnames []source.Hostname
 }
 
+//nolint:unused // Reserved for future Reconcile() function tests
 func newTestMockSource(name string, hostnames ...source.Hostname) *testMockSource {
 	return &testMockSource{
 		name:      name,
@@ -165,21 +173,27 @@ func newTestMockSource(name string, hostnames ...source.Hostname) *testMockSourc
 	}
 }
 
+//nolint:unused // Reserved for future Reconcile() function tests
 func (m *testMockSource) Name() string { return m.name }
 
+//nolint:unused // Reserved for future Reconcile() function tests
 func (m *testMockSource) Extract(_ context.Context, _ map[string]string) ([]source.Hostname, error) {
 	return m.hostnames, nil
 }
 
+//nolint:unused // Reserved for future Reconcile() function tests
 func (m *testMockSource) Discover(_ context.Context) ([]source.Hostname, error) {
 	return nil, nil
 }
 
+//nolint:unused // Reserved for future Reconcile() function tests
 func (m *testMockSource) SupportsDiscovery() bool {
 	return false
 }
 
 // testProviderRegistry creates a test provider registry with mock provider(s).
+//
+//nolint:unused // Reserved for future Reconcile() function tests
 func testProviderRegistry(logger *slog.Logger, mocks ...*testMockProvider) *provider.Registry {
 	reg := provider.NewRegistry(logger)
 
@@ -199,6 +213,8 @@ func testProviderRegistry(logger *slog.Logger, mocks ...*testMockProvider) *prov
 }
 
 // testProviderInstance creates a ProviderInstance wrapping a mock provider.
+//
+//nolint:unused // Reserved for future Reconcile() function tests
 func testProviderInstance(mock *testMockProvider, domains []string, recordType provider.RecordType, target string) *provider.ProviderInstance {
 	matcherCfg := matcher.DomainMatcherConfig{
 		Includes: domains,
@@ -217,6 +233,8 @@ func testProviderInstance(mock *testMockProvider, domains []string, recordType p
 }
 
 // testSourceRegistry creates a test source registry with mock source(s).
+//
+//nolint:unused // Reserved for future Reconcile() function tests
 func testSourceRegistry(logger *slog.Logger, sources ...*testMockSource) *source.Registry {
 	reg := source.NewRegistry(logger)
 	for _, s := range sources {
@@ -231,11 +249,15 @@ func quietLogger() *slog.Logger {
 }
 
 // testLogger returns a logger suitable for tests.
+//
+//nolint:unused // Reserved for future debug-level test logging
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
 // hostnamePtr creates a source.Hostname and returns its pointer.
+//
+//nolint:unused // Reserved for future pointer-based hostname tests
 func hostnamePtr(name, src string) *source.Hostname {
 	return &source.Hostname{Name: name, Source: src}
 }

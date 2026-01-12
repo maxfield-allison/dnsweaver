@@ -598,7 +598,177 @@ func TestEnsureRecord_SRVRecord(t *testing.T) {
 	}
 }
 
-// Note: SRV record skip-existing detection is not yet supported.
-// Both cache.getExistingRecords and ProviderInstance.GetExistingRecords
-// only return A/AAAA/CNAME records, so existing SRV records are not detected.
-// See issue #75 for the fix: https://gitlab.bluewillows.net/root/dnsweaver/-/issues/75
+// TestEnsureRecord_SRVRecordSkipsMatchingExisting verifies that when an SRV record
+// with matching hostname, target, and SRV data (priority, weight, port) already exists,
+// the reconciler returns ActionSkip instead of creating a duplicate.
+// This was fixed in issue #75.
+func TestEnsureRecord_SRVRecordSkipsMatchingExisting(t *testing.T) {
+	mock := newTestMockProvider("test-dns")
+	// Pre-populate with an existing SRV record
+	mock.AddRecord(provider.Record{
+		Hostname: "_minecraft._tcp.mc.example.com",
+		Type:     provider.RecordTypeSRV,
+		Target:   "mc.example.com",
+		TTL:      300,
+		SRV: &provider.SRVData{
+			Priority: 10,
+			Weight:   5,
+			Port:     25565,
+		},
+	})
+
+	logger := quietLogger()
+	providers := provider.NewRegistry(logger)
+	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+		return mock, nil
+	})
+	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
+		Name:       "test-dns",
+		TypeName:   "mock",
+		RecordType: provider.RecordTypeA,
+		Target:     "10.0.0.1",
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+	})
+
+	r := &Reconciler{
+		providers:      providers,
+		config:         Config{Enabled: true, OwnershipTracking: false},
+		logger:         logger,
+		knownHostnames: make(map[string]struct{}),
+	}
+
+	// Build cache from the mock provider's existing records
+	cache := newRecordCache(context.Background(), providers, logger)
+
+	// Request the same SRV record that already exists
+	hostname := &source.Hostname{
+		Name:   "_minecraft._tcp.mc.example.com",
+		Source: "test",
+		RecordHints: &source.RecordHints{
+			Type:   "SRV",
+			Target: "mc.example.com",
+			TTL:    300,
+			SRV: &source.SRVHints{
+				Priority: 10,
+				Weight:   5,
+				Port:     25565,
+			},
+		},
+	}
+	actions := r.ensureRecord(context.Background(), hostname, cache)
+
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+
+	action := actions[0]
+	if action.Type != ActionSkip {
+		t.Errorf("expected ActionSkip, got %v", action.Type)
+	}
+	if action.Status != StatusSkipped {
+		t.Errorf("expected StatusSkipped, got %v", action.Status)
+	}
+
+	// Verify no new records were created
+	created := mock.GetCreated()
+	if len(created) != 0 {
+		t.Errorf("expected no records created, got %d: %+v", len(created), created)
+	}
+}
+
+// TestEnsureRecord_SRVRecordCreatesWhenDifferentData verifies that an SRV record
+// is updated when the existing SRV has different priority/weight/port.
+func TestEnsureRecord_SRVRecordCreatesWhenDifferentData(t *testing.T) {
+	mock := newTestMockProvider("test-dns")
+	// Pre-populate with an existing SRV record with DIFFERENT port
+	mock.AddRecord(provider.Record{
+		Hostname: "_minecraft._tcp.mc.example.com",
+		Type:     provider.RecordTypeSRV,
+		Target:   "mc.example.com",
+		TTL:      300,
+		SRV: &provider.SRVData{
+			Priority: 10,
+			Weight:   5,
+			Port:     25566, // Different port
+		},
+	})
+
+	logger := quietLogger()
+	providers := provider.NewRegistry(logger)
+	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+		return mock, nil
+	})
+	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
+		Name:       "test-dns",
+		TypeName:   "mock",
+		RecordType: provider.RecordTypeA,
+		Target:     "10.0.0.1",
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+	})
+
+	r := &Reconciler{
+		providers:      providers,
+		config:         Config{Enabled: true, OwnershipTracking: false},
+		logger:         logger,
+		knownHostnames: make(map[string]struct{}),
+	}
+
+	// Build cache from the mock provider's existing records
+	cache := newRecordCache(context.Background(), providers, logger)
+
+	// Request an SRV record with different port
+	hostname := &source.Hostname{
+		Name:   "_minecraft._tcp.mc.example.com",
+		Source: "test",
+		RecordHints: &source.RecordHints{
+			Type:   "SRV",
+			Target: "mc.example.com",
+			TTL:    300,
+			SRV: &source.SRVHints{
+				Priority: 10,
+				Weight:   5,
+				Port:     25565, // Different from existing (25566)
+			},
+		},
+	}
+	actions := r.ensureRecord(context.Background(), hostname, cache)
+
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action, got %d", len(actions))
+	}
+
+	action := actions[0]
+	// When SRV data differs, the reconciler detects the change and performs
+	// an update (delete old + create new). The action type is ActionUpdate.
+	if action.Type != ActionUpdate {
+		t.Errorf("expected ActionUpdate (SRV data changed), got %v", action.Type)
+	}
+	if action.Status != StatusSuccess {
+		t.Errorf("expected StatusSuccess, got %v with error: %s", action.Status, action.Error)
+	}
+
+	// Verify the old record was deleted and new one created
+	deleted := mock.GetDeleted()
+	var foundDeletedSRV bool
+	for _, d := range deleted {
+		if d.Type == provider.RecordTypeSRV && d.SRV != nil && d.SRV.Port == 25566 {
+			foundDeletedSRV = true
+		}
+	}
+	if !foundDeletedSRV {
+		t.Error("expected old SRV record with port 25566 to be deleted")
+	}
+
+	created := mock.GetCreated()
+	var foundCreatedSRV bool
+	for _, c := range created {
+		if c.Type == provider.RecordTypeSRV && c.SRV != nil && c.SRV.Port == 25565 {
+			foundCreatedSRV = true
+		}
+	}
+	if !foundCreatedSRV {
+		t.Error("expected new SRV record with port 25565 to be created")
+	}
+}

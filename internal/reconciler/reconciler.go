@@ -15,6 +15,12 @@ import (
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/source"
 )
 
+// Common error messages used in reconciliation actions.
+const (
+	errRecordAlreadyExists = "record already exists"
+	errRecordTypeConflict  = "record type conflict"
+)
+
 // Config holds reconciler configuration options.
 type Config struct {
 	// DryRun if true, logs changes without applying them.
@@ -566,7 +572,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 	if exactMatchFound {
 		action.Type = ActionSkip
 		action.Status = StatusSkipped
-		action.Error = "record already exists"
+		action.Error = errRecordAlreadyExists
 
 		// Check if we already own this record
 		hasOwnership := false
@@ -624,7 +630,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		if provider.IsConflict(err) {
 			action.Type = ActionSkip
 			action.Status = StatusSkipped
-			action.Error = "record already exists"
+			action.Error = errRecordAlreadyExists
 			r.logger.Debug("record already exists, skipping",
 				slog.String("hostname", hostname.Name),
 				slog.String("provider", inst.Name()),
@@ -633,7 +639,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		} else if provider.IsTypeConflict(err) {
 			action.Type = ActionSkip
 			action.Status = StatusSkipped
-			action.Error = "record type conflict"
+			action.Error = errRecordTypeConflict
 			r.logger.Warn("record type conflict detected",
 				slog.String("hostname", hostname.Name),
 				slog.String("provider", inst.Name()),

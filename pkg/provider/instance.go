@@ -157,9 +157,14 @@ func (pi *ProviderInstance) GetExistingRecords(ctx context.Context, hostname str
 
 	var matching []Record
 	for _, r := range allRecords {
-		// Only return A, AAAA, and CNAME records for the hostname (skip TXT, etc.)
-		if r.Hostname == hostname && (r.Type == RecordTypeA || r.Type == RecordTypeAAAA || r.Type == RecordTypeCNAME) {
-			matching = append(matching, r)
+		// Only return DNS data records for the hostname (skip TXT ownership markers)
+		if r.Hostname == hostname {
+			switch r.Type {
+			case RecordTypeA, RecordTypeAAAA, RecordTypeCNAME, RecordTypeSRV:
+				matching = append(matching, r)
+			case RecordTypeTXT:
+				// Skip TXT records (ownership markers)
+			}
 		}
 	}
 

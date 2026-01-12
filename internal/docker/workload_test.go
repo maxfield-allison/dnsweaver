@@ -195,7 +195,7 @@ func TestWorkloadGetLabelOr(t *testing.T) {
 		expected     string
 	}{
 		{"traefik.enable", "default", "true"},
-		{"empty.label", "default", ""},        // empty string is still a valid value
+		{"empty.label", "default", ""},          // empty string is still a valid value
 		{"missing.label", "default", "default"}, // uses default when missing
 	}
 

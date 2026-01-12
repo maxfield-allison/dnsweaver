@@ -16,9 +16,9 @@ type Factory func(name string, config map[string]string) (Provider, error)
 // Registry manages provider type factories and active provider instances.
 type Registry struct {
 	mu        sync.RWMutex
-	factories map[string]Factory            // type name -> factory function
-	instances []*ProviderInstance           // instances in priority order
-	byName    map[string]*ProviderInstance  // instance name -> instance
+	factories map[string]Factory           // type name -> factory function
+	instances []*ProviderInstance          // instances in priority order
+	byName    map[string]*ProviderInstance // instance name -> instance
 	logger    *slog.Logger
 }
 

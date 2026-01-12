@@ -150,7 +150,7 @@ func TestLoadSourceInstanceConfig(t *testing.T) {
 			name:       "watch method poll",
 			sourceName: "traefik",
 			envVars: map[string]string{
-				"DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS":    "/rules",
+				"DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS":   "/rules",
 				"DNSWEAVER_SOURCE_TRAEFIK_WATCH_METHOD": "poll",
 			},
 			wantPaths:  []string{"/rules"},
@@ -161,7 +161,7 @@ func TestLoadSourceInstanceConfig(t *testing.T) {
 			name:       "watch method inotify",
 			sourceName: "traefik",
 			envVars: map[string]string{
-				"DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS":    "/rules",
+				"DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS":   "/rules",
 				"DNSWEAVER_SOURCE_TRAEFIK_WATCH_METHOD": "inotify",
 			},
 			wantPaths:  []string{"/rules"},
@@ -272,7 +272,7 @@ func TestSourceConfig_HasFileDiscovery(t *testing.T) {
 		{
 			name: "file paths configured for one of multiple sources",
 			envVars: map[string]string{
-				"DNSWEAVER_SOURCES":                   "traefik,caddy",
+				"DNSWEAVER_SOURCES":                 "traefik,caddy",
 				"DNSWEAVER_SOURCE_CADDY_FILE_PATHS": "/etc/caddy",
 			},
 			want: true,

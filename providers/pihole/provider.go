@@ -230,13 +230,13 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 
 // createAPI creates a record via the Pi-hole API.
 func (p *Provider) createAPI(ctx context.Context, record provider.Record) error {
-	piholeRecord := piholeRecord{
+	rec := piholeRecord{
 		Hostname: record.Hostname,
 		Type:     record.Type,
 		Target:   record.Target,
 	}
 
-	if err := p.apiClient.Create(ctx, piholeRecord); err != nil {
+	if err := p.apiClient.Create(ctx, rec); err != nil {
 		return fmt.Errorf("creating %s record: %w", record.Type, err)
 	}
 
@@ -272,13 +272,13 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 
 // deleteAPI deletes a record via the Pi-hole API.
 func (p *Provider) deleteAPI(ctx context.Context, record provider.Record) error {
-	piholeRecord := piholeRecord{
+	rec := piholeRecord{
 		Hostname: record.Hostname,
 		Type:     record.Type,
 		Target:   record.Target,
 	}
 
-	if err := p.apiClient.Delete(ctx, piholeRecord); err != nil {
+	if err := p.apiClient.Delete(ctx, rec); err != nil {
 		return fmt.Errorf("deleting %s record: %w", record.Type, err)
 	}
 

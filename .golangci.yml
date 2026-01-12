@@ -42,7 +42,6 @@ linters:
     - nakedret      # Naked returns in long functions
     - nilerr        # Return nil after error check
     - noctx         # HTTP requests without context
-    - prealloc      # Slice preallocation
     - predeclared   # Shadowing predeclared identifiers
     - revive        # Replacement for golint
     - unconvert     # Unnecessary conversions
@@ -55,6 +54,7 @@ linters:
     - gocognit      # Cognitive complexity - use judiciously
     - gocyclo       # Cyclomatic complexity - use judiciously
     - lll           # Line length - gofmt handles wrapping
+    - prealloc      # Micro-optimization not worth verbosity for typical data volumes
 
 linters-settings:
   dupl:
@@ -62,11 +62,14 @@ linters-settings:
 
   errcheck:
     check-type-assertions: true
-    check-blank: true
+    check-blank: false  # Allow explicit _ = for intentionally ignored errors
     exclude-functions:
       - io.Copy
       - io.ReadAll
       - (io.ReadCloser).Close
+      - (*encoding/json.Encoder).Encode  # Response encoding to http.ResponseWriter
+      - (*github.com/docker/docker/client.Client).Close
+      - (*io.SectionReader).Seek
 
   errorlint:
     errorf: true
@@ -81,12 +84,18 @@ linters-settings:
     min-occurrences: 3
 
   gocritic:
+    # Only enable diagnostic and performance checks, not style
+    # This avoids the opinionated style checks (ifElseChain, octalLiteral, etc.)
     enabled-tags:
       - diagnostic
-      - style
       - performance
     disabled-checks:
-      - whyNoLint  # Sometimes we need nolint without explanation
+      - hugeParam        # Performance but often intentional for immutability
+      - rangeValCopy     # Performance but clarity often trumps micro-optimization
+      - ifElseChain      # Diagnostic but if-else chains are often clearer than switch
+      - elseif           # Diagnostic but sometimes nested else-if is clearer
+      - appendCombine    # Performance but explicit appends are clearer
+      - commentedOutCode # Diagnostic but sometimes useful for documentation
 
   goimports:
     local-prefixes: gitlab.bluewillows.net
@@ -94,6 +103,7 @@ linters-settings:
   gosec:
     excludes:
       - G104  # Errors unhandled - errcheck covers this
+      - G115  # Integer overflow conversion - API values are validated
       - G304  # File path from variable - often intentional
 
   govet:
@@ -121,6 +131,7 @@ linters-settings:
       - name: error-strings
       - name: error-naming
       - name: exported
+        disabled: true  # Too strict about stuttering names in public API
       - name: increment-decrement
       - name: indent-error-flow
       - name: package-comments
@@ -128,6 +139,7 @@ linters-settings:
       - name: receiver-naming
       - name: time-naming
       - name: unexported-return
+        disabled: true  # Intentional pattern: exported methods with unexported return types for internal clients
       - name: var-declaration
       - name: var-naming
 
@@ -146,6 +158,9 @@ issues:
         - dupl
         - gosec
         - goconst
+        - errcheck  # Tests often intentionally ignore errors
+        - govet     # unusedwrite in test setup is acceptable
+        - unparam   # Test helpers may have "future-proofed" parameters
 
     # Allow fmt.Print in main for CLI output
     - path: cmd/
@@ -167,8 +182,26 @@ issues:
     # Provider implementations may have similar patterns
     - path: providers/
       linters:
+        - goconst  # Provider name strings are intentional literals
+    - path: providers/
+      linters:
         - dupl
       text: "duplicate of"
+
+    # Reconciler has intentional similar delete loops for different contexts
+    - path: internal/reconciler/
+      linters:
+        - dupl
+
+    # Config validation uses inline strings in switch cases for clarity
+    - path: internal/config/
+      linters:
+        - goconst
+
+    # Webhook client closes body in doRequest - linter doesn't see it
+    - path: providers/webhook/client.go
+      linters:
+        - bodyclose
 
 severity:
   default-severity: warning

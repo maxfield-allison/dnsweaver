@@ -178,7 +178,7 @@ func TestLoadConfigFromMap(t *testing.T) {
 		wantConfig *Config
 	}{
 		{
-			name: "minimal config uses defaults",
+			name:      "minimal config uses defaults",
 			configMap: map[string]string{
 				// No overrides, use defaults
 			},

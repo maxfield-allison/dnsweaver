@@ -6,10 +6,53 @@ import (
 	"os"
 	"sync"
 
+	"gitlab.bluewillows.net/root/dnsweaver/internal/docker"
 	"gitlab.bluewillows.net/root/dnsweaver/internal/matcher"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/source"
 )
+
+// =============================================================================
+// Mock WorkloadLister for Reconcile() tests
+// =============================================================================
+
+// testMockWorkloadLister implements WorkloadLister for testing.
+type testMockWorkloadLister struct {
+	mode      docker.Mode
+	workloads []docker.Workload
+	listErr   error
+}
+
+func newTestMockWorkloadLister(mode docker.Mode) *testMockWorkloadLister {
+	return &testMockWorkloadLister{
+		mode:      mode,
+		workloads: make([]docker.Workload, 0),
+	}
+}
+
+func (m *testMockWorkloadLister) ListWorkloads(_ context.Context) ([]docker.Workload, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	return m.workloads, nil
+}
+
+func (m *testMockWorkloadLister) Mode() docker.Mode {
+	return m.mode
+}
+
+func (m *testMockWorkloadLister) AddWorkload(name string, labels map[string]string) {
+	m.workloads = append(m.workloads, docker.Workload{
+		ID:     "id-" + name,
+		Name:   name,
+		Labels: labels,
+		Type:   docker.WorkloadTypeService,
+	})
+}
+
+func (m *testMockWorkloadLister) SetListError(err error) {
+	m.listErr = err
+}
 
 // testMockProvider implements provider.Provider for testing.
 // It tracks all Create/Delete calls for verification.

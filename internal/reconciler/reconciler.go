@@ -59,6 +59,15 @@ func DefaultConfig() Config {
 	}
 }
 
+// WorkloadLister is the interface required for listing Docker workloads.
+// This abstraction enables testing without a real Docker connection.
+type WorkloadLister interface {
+	// ListWorkloads returns all workloads (services in Swarm, containers in standalone).
+	ListWorkloads(ctx context.Context) ([]docker.Workload, error)
+	// Mode returns the Docker operating mode (swarm or standalone).
+	Mode() docker.Mode
+}
+
 // Reconciler coordinates DNS record synchronization between sources and providers.
 //
 // The reconciler:
@@ -68,7 +77,7 @@ func DefaultConfig() Config {
 //  4. Ensures DNS records exist for discovered hostnames
 //  5. Optionally removes orphan records (hostnames no longer in workloads)
 type Reconciler struct {
-	docker    *docker.Client
+	docker    WorkloadLister
 	sources   *source.Registry
 	providers *provider.Registry
 	config    Config
@@ -101,11 +110,11 @@ func WithConfig(cfg Config) Option {
 // New creates a new Reconciler with the given dependencies.
 //
 // The reconciler requires:
-//   - docker: Client for listing workloads
+//   - docker: WorkloadLister for listing workloads (typically *docker.Client)
 //   - sources: Registry of hostname extractors (Traefik, etc.)
 //   - providers: Registry of DNS provider instances
 func New(
-	dockerClient *docker.Client,
+	dockerClient WorkloadLister,
 	sources *source.Registry,
 	providers *provider.Registry,
 	opts ...Option,

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-01-12
+
+### Fixed
+- **Lint Compliance**: Resolved all golangci-lint issues for stricter configuration
+  - Fixed gofmt formatting across 45 files
+  - Fixed exhaustive switch statements (RecordType, Validator interface)
+  - Fixed errorlint issues (use `errors.Is` instead of direct comparison)
+  - Fixed variable shadowing in dnsmasq/Pi-hole providers
+  - Fixed typos (cancelled → canceled)
+  - Added status constants for health checks and provider metrics
+
+### Changed
+- **Linter Configuration**: Refined `.golangci.yml` for long-term maintainability
+  - Disabled `prealloc` (micro-optimization not worth verbosity)
+  - Disabled `revive:unexported-return` (intentional API pattern)
+  - Added structured exclusions for tests, providers, and config
+  - Enabled only diagnostic and performance gocritic tags
+- **Contributing Guide**: Fixed internal GitLab URL to public GitHub URL
+
 ## [0.4.1] - 2026-01-11
 
 ### Added

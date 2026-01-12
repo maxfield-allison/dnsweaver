@@ -280,10 +280,10 @@ func TestParser_RecordNameVariations(t *testing.T) {
 	parser := NewParser(WithParserLogger(testLogger()))
 
 	labels := map[string]string{
-		"dnsweaver.records.simple.hostname":     "a.example.com",
-		"dnsweaver.records.with-hyphen.hostname": "b.example.com",
+		"dnsweaver.records.simple.hostname":          "a.example.com",
+		"dnsweaver.records.with-hyphen.hostname":     "b.example.com",
 		"dnsweaver.records.with_underscore.hostname": "c.example.com",
-		"dnsweaver.records.MixedCase123.hostname": "d.example.com",
+		"dnsweaver.records.MixedCase123.hostname":    "d.example.com",
 	}
 
 	extractions := parser.ExtractHostnames(labels)

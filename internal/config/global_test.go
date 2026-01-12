@@ -244,9 +244,9 @@ func TestLoadGlobalConfig_CaseInsensitive(t *testing.T) {
 
 func TestLoadGlobalConfig_AdoptExisting(t *testing.T) {
 	tests := []struct {
-		name    string
-		envVal  string
-		want    bool
+		name   string
+		envVal string
+		want   bool
 	}{
 		{"default when unset", "", false},
 		{"explicit true", "true", true},

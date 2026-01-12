@@ -53,11 +53,19 @@ func validateTargetRecordType(inst *ProviderInstanceConfig) []string {
 		if net.ParseIP(inst.Target) == nil {
 			errs = append(errs, fmt.Sprintf("%sTARGET: A records must point to an IP address, got %q", prefix, inst.Target))
 		}
+	case provider.RecordTypeAAAA:
+		// AAAA records must have an IPv6 address as target
+		ip := net.ParseIP(inst.Target)
+		if ip == nil || ip.To4() != nil {
+			errs = append(errs, fmt.Sprintf("%sTARGET: AAAA records must point to an IPv6 address, got %q", prefix, inst.Target))
+		}
 	case provider.RecordTypeCNAME:
 		// CNAME records must have a hostname, not an IP
 		if net.ParseIP(inst.Target) != nil {
 			errs = append(errs, fmt.Sprintf("%sTARGET: CNAME records cannot point to IP addresses, got %q", prefix, inst.Target))
 		}
+	case provider.RecordTypeTXT, provider.RecordTypeSRV:
+		// TXT and SRV records have flexible targets, no validation needed
 	}
 
 	return errs

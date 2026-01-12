@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"strings"
@@ -189,7 +190,7 @@ func TestListServices_WrongMode(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when calling ListServices in standalone mode")
 	}
-	if err != ErrNotSwarmMode {
+	if !errors.Is(err, ErrNotSwarmMode) {
 		t.Errorf("expected ErrNotSwarmMode, got %v", err)
 	}
 }
@@ -205,7 +206,7 @@ func TestListContainers_WrongMode(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when calling ListContainers in swarm mode")
 	}
-	if err != ErrNotStandaloneMode {
+	if !errors.Is(err, ErrNotStandaloneMode) {
 		t.Errorf("expected ErrNotStandaloneMode, got %v", err)
 	}
 }
@@ -221,7 +222,7 @@ func TestGetServiceLabels_WrongMode(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when calling GetServiceLabels in standalone mode")
 	}
-	if err != ErrNotSwarmMode {
+	if !errors.Is(err, ErrNotSwarmMode) {
 		t.Errorf("expected ErrNotSwarmMode, got %v", err)
 	}
 }
@@ -237,7 +238,7 @@ func TestGetContainerLabels_WrongMode(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when calling GetContainerLabels in swarm mode")
 	}
-	if err != ErrNotStandaloneMode {
+	if !errors.Is(err, ErrNotStandaloneMode) {
 		t.Errorf("expected ErrNotStandaloneMode, got %v", err)
 	}
 }

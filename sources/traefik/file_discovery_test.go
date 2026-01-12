@@ -2,6 +2,7 @@ package traefik
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -319,7 +320,7 @@ func TestParser_DiscoverFromFiles_ContextCancellation(t *testing.T) {
 		"*.yml",
 	)
 
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled error, got: %v", err)
 	}
 }

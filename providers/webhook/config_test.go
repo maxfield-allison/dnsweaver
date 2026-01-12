@@ -202,7 +202,8 @@ func TestLoadConfig(t *testing.T) {
 		}
 		defer os.Remove(tmpfile.Name())
 
-		if _, err := tmpfile.WriteString("secret-from-file\n"); err != nil {
+		_, err = tmpfile.WriteString("secret-from-file\n")
+		if err != nil {
 			t.Fatal(err)
 		}
 		tmpfile.Close()
@@ -232,7 +233,8 @@ func TestLoadConfig(t *testing.T) {
 		}
 		defer os.Remove(tmpfile.Name())
 
-		if _, err := tmpfile.WriteString("from-file"); err != nil {
+		_, err = tmpfile.WriteString("from-file")
+		if err != nil {
 			t.Fatal(err)
 		}
 		tmpfile.Close()

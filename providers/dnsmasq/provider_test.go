@@ -29,7 +29,7 @@ func TestNew(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "invalid config",
+			name:   "invalid config",
 			config: &Config{
 				// Missing required fields
 			},

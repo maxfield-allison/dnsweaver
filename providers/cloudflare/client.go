@@ -51,13 +51,13 @@ type zonesResponse struct {
 
 // dnsRecord represents a DNS record from the Cloudflare API.
 type dnsRecord struct {
-	ID      string       `json:"id"`
-	Type    string       `json:"type"`
-	Name    string       `json:"name"`
-	Content string       `json:"content"`
-	TTL     int          `json:"ttl"`
-	Proxied bool         `json:"proxied"`
-	ZoneID  string       `json:"zone_id"`
+	ID      string         `json:"id"`
+	Type    string         `json:"type"`
+	Name    string         `json:"name"`
+	Content string         `json:"content"`
+	TTL     int            `json:"ttl"`
+	Proxied bool           `json:"proxied"`
+	ZoneID  string         `json:"zone_id"`
 	Data    *srvRecordData `json:"data,omitempty"` // For SRV records
 }
 

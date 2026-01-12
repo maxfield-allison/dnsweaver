@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -84,7 +85,7 @@ func TestMockWatcher_SimulatedError(t *testing.T) {
 	mock.SimulatedError = context.DeadlineExceeded
 
 	err := mock.Start(context.Background())
-	if err != context.DeadlineExceeded {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("expected DeadlineExceeded error, got %v", err)
 	}
 

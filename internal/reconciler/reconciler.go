@@ -820,6 +820,8 @@ func (r *Reconciler) deleteRecordFromCache(ctx context.Context, hostname string,
 					switch r.Type {
 					case provider.RecordTypeA, provider.RecordTypeAAAA, provider.RecordTypeCNAME, provider.RecordTypeSRV:
 						recordsToDelete = append(recordsToDelete, r)
+					case provider.RecordTypeTXT:
+						// Skip TXT records (ownership markers)
 					}
 				}
 			}
@@ -973,6 +975,8 @@ func (r *Reconciler) deleteRecordWithOwnershipCheck(ctx context.Context, hostnam
 					switch r.Type {
 					case provider.RecordTypeA, provider.RecordTypeAAAA, provider.RecordTypeCNAME, provider.RecordTypeSRV:
 						recordsToDelete = append(recordsToDelete, r)
+					case provider.RecordTypeTXT:
+						// Skip TXT records (ownership markers)
 					}
 				}
 			}
@@ -1179,6 +1183,11 @@ func (r *Reconciler) recordMetrics(result *Result) {
 				metrics.RecordsDeletedTotal.WithLabelValues(action.Provider).Inc()
 			} else if action.Status == StatusFailed {
 				metrics.RecordsFailedTotal.WithLabelValues(action.Provider, "delete").Inc()
+			}
+		case ActionUpdate:
+			// Update actions are currently not emitted, but handle for completeness
+			if action.Status == StatusFailed {
+				metrics.RecordsFailedTotal.WithLabelValues(action.Provider, "update").Inc()
 			}
 		case ActionSkip:
 			reason := "unknown"

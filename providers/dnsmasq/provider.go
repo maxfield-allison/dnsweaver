@@ -170,13 +170,13 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 		return fmt.Errorf("unsupported record type: %s", record.Type)
 	}
 
-	dnsmasqRecord := dnsmasqRecord{
+	rec := dnsmasqRecord{
 		Hostname: record.Hostname,
 		Type:     record.Type,
 		Target:   record.Target,
 	}
 
-	if err := p.client.Create(ctx, dnsmasqRecord); err != nil {
+	if err := p.client.Create(ctx, rec); err != nil {
 		return fmt.Errorf("creating %s record: %w", record.Type, err)
 	}
 
@@ -208,13 +208,13 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 		return nil
 	}
 
-	dnsmasqRecord := dnsmasqRecord{
+	rec := dnsmasqRecord{
 		Hostname: record.Hostname,
 		Type:     record.Type,
 		Target:   record.Target,
 	}
 
-	if err := p.client.Delete(ctx, dnsmasqRecord); err != nil {
+	if err := p.client.Delete(ctx, rec); err != nil {
 		return fmt.Errorf("deleting %s record: %w", record.Type, err)
 	}
 

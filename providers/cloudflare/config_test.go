@@ -66,8 +66,8 @@ func TestConfig_Validate_InvalidTTL(t *testing.T) {
 		{"valid 60", 60, false},
 		{"valid automatic", 1, false},
 		{"valid 86400", 86400, false},
-		{"invalid 30", 30, true},  // Less than minimum
-		{"invalid 59", 59, true},  // Less than minimum
+		{"invalid 30", 30, true}, // Less than minimum
+		{"invalid 59", 59, true}, // Less than minimum
 		{"negative", -1, true},
 		{"zero is ok", 0, false}, // Zero TTL is allowed (default will be used)
 	}
@@ -205,9 +205,9 @@ func TestLoadConfig_InvalidTTL(t *testing.T) {
 
 func TestLoadConfig_ProxiedVariations(t *testing.T) {
 	tests := []struct {
-		name    string
-		value   string
-		want    bool
+		name  string
+		value string
+		want  bool
 	}{
 		{"true", "true", true},
 		{"TRUE", "TRUE", true},

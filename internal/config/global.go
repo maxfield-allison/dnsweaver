@@ -9,19 +9,19 @@ import (
 
 // Global configuration defaults.
 const (
-	DefaultLogLevel           = "info"
-	DefaultLogFormat          = "json"
-	DefaultDryRun             = false
-	DefaultCleanupOrphans     = true
-	DefaultCleanupOnStop      = true
-	DefaultOwnershipTracking  = true
-	DefaultAdoptExisting      = false
-	DefaultTTL                = 300
-	DefaultReconcileInterval  = 60 * time.Second
-	DefaultHealthPort         = 8080
-	DefaultDockerHost         = "unix:///var/run/docker.sock"
-	DefaultDockerMode         = "auto"
-	DefaultSource             = "traefik"
+	DefaultLogLevel          = "info"
+	DefaultLogFormat         = "json"
+	DefaultDryRun            = false
+	DefaultCleanupOrphans    = true
+	DefaultCleanupOnStop     = true
+	DefaultOwnershipTracking = true
+	DefaultAdoptExisting     = false
+	DefaultTTL               = 300
+	DefaultReconcileInterval = 60 * time.Second
+	DefaultHealthPort        = 8080
+	DefaultDockerHost        = "unix:///var/run/docker.sock"
+	DefaultDockerMode        = "auto"
+	DefaultSource            = "traefik"
 )
 
 // GlobalConfig holds application-wide settings.

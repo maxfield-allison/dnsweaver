@@ -13,6 +13,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+// Health status values.
+const (
+	StatusReady    = "ready"
+	StatusNotReady = "not_ready"
+)
+
 // HealthChecker is a function that checks the health of a component.
 // Returns an error if the component is unhealthy.
 type HealthChecker func(ctx context.Context) error
@@ -130,10 +136,10 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 
 	resp := Response{Components: components}
 	if allHealthy {
-		resp.Status = "ready"
+		resp.Status = StatusReady
 		w.WriteHeader(http.StatusOK)
 	} else {
-		resp.Status = "not_ready"
+		resp.Status = StatusNotReady
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 

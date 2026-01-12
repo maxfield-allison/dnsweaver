@@ -30,11 +30,11 @@ type Config struct {
 	TTL           int    // Record TTL (for consistency with other providers)
 
 	// SSH configuration for remote dnsmasq management (optional)
-	SSHHost       string // SSH host (e.g., "pihole.local" or "192.168.1.100")
-	SSHPort       int    // SSH port (default: 22)
-	SSHUser       string // SSH username
-	SSHKeyFile    string // Path to SSH private key file
-	SSHPassword   string // SSH password (alternative to key, not recommended)
+	SSHHost     string // SSH host (e.g., "pihole.local" or "192.168.1.100")
+	SSHPort     int    // SSH port (default: 22)
+	SSHUser     string // SSH username
+	SSHKeyFile  string // Path to SSH private key file
+	SSHPassword string // SSH password (alternative to key, not recommended)
 }
 
 // Validate checks that all required configuration is present.

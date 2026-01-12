@@ -10,20 +10,19 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 
 ## Milestone Overview
 
-| Version | Theme | Key Deliverables |
-|---------|-------|------------------|
-| v0.1.x | Foundation | Technitium, Traefik, Docker/Swarm, TOML support |
-| v0.2.x | Cloudflare + Webhook | Cloudflare, Webhook, Ownership tracking |
-| v0.3.x | Reconciliation | IP change detection, caching, API improvements |
-| v0.4.x | Labels + nginx | Native dnsweaver labels, nginx source |
-| v0.5.x | Interleaved Providers | Route53, Pi-hole |
-| v0.6.x | Sources + Private DNS | Caddy, dnsmasq, unbound |
-| v0.7.x | Public Cloud DNS | Google Cloud DNS, DigitalOcean |
-| v0.8.x | Enterprise + AdGuard | HAProxy, Azure DNS, AdGuard Home |
-| v0.9.x | Standards + PowerDNS | PowerDNS, RFC2136 |
-| v0.10.x | Hardening + Review | Security audit, code review, edge cases |
-| v1.0.0 | Stable Release | Documentation, stability, production-ready |
-| v2.0.0 | Kubernetes | Ingress, Gateway API, Services |
+| Version | Theme | Status | Key Deliverables |
+|---------|-------|--------|------------------|
+| v0.1.x | Foundation | ✅ Complete | Technitium, Traefik, Docker/Swarm |
+| v0.2.x | Cloudflare + Webhook | ✅ Complete | Cloudflare, Webhook, Ownership tracking |
+| v0.3.x | Reconciliation | ✅ Complete | IP change detection, caching, API improvements |
+| v0.4.x | Record Types & Local DNS | ✅ Complete | Pi-hole, dnsmasq, SRV, AAAA, Native labels |
+| v0.5.x | Foundation Hardening | 🔄 Active | Test coverage, architecture review, logging |
+| v0.6.x | Additional Sources | Planned | nginx, Caddy, HAProxy |
+| v0.7.x | Public Cloud DNS | Planned | Route53, Google Cloud DNS, DigitalOcean, Azure |
+| v0.8.x | Enterprise DNS | Planned | unbound, AdGuard Home, PowerDNS, RFC2136 |
+| v0.9.x | Pre-Release Polish | Planned | Security audit, edge cases, performance |
+| v1.0.0 | Stable Release | Planned | Documentation, stability, production-ready |
+| v2.0.0 | Kubernetes | Future | Ingress, Gateway API, Services |
 
 ---
 
@@ -40,9 +39,6 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 - Prometheus metrics
 - Health endpoints (/health, /ready, /metrics)
 - Multi-arch images (amd64, arm64)
-
-### v0.1.1 (Planned)
-- TOML file support for Traefik static file discovery (#25)
 
 ---
 
@@ -68,76 +64,111 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 
 ---
 
-## v0.4.x - Labels + nginx
+## v0.4.x - Record Types & Local DNS ✅
 
-**Theme:** Native dnsweaver labels and first non-Traefik source
+**Theme:** Expanded record type support and local DNS providers
 
-### Planned
-- Native dnsweaver labels source (#27)
-- nginx source (labels + nginx.conf) (#13)
-
----
-
-## v0.5.x - Interleaved Providers
-
-**Theme:** Mix of public and private DNS providers
-
-### Planned
-- AWS Route53 DNS provider (#30)
+### v0.4.0 (Released)
 - Pi-hole DNS provider (#15)
+- dnsmasq DNS provider (#28)
+- Native dnsweaver labels source (#27)
+
+### v0.4.1 (Released)
+- SRV record support (#60)
+- AAAA record support (#61)
+- Provider `Update()` method implementation
+- Enhanced configuration validation
+
+### v0.4.2 (Released)
+- Lint compliance improvements
+- `DNSWEAVER_TRAEFIK_` environment variable prefix
+- Configuration improvements and cleanup
 
 ---
 
-## v0.6.x - Sources + Private DNS
+## v0.5.x - Foundation Hardening 🔄
 
-**Theme:** Additional sources and private DNS providers
+**Theme:** Strengthen the codebase before adding new features
+
+The v0.4.x milestone delivered significant functionality rapidly. Before continuing to add providers and sources, we need to ensure the foundation is solid with proper test coverage, consistent architecture, and well-documented code.
+
+### Focus Areas
+
+1. **Test Coverage** - Core reconciler at 26%, needs significant improvement
+2. **Architecture Review** - Ensure consistent patterns across all providers
+3. **Logging & Observability** - Consistent log output, better debugging
+4. **Bug Fixes** - Address known issues before they compound
+
+### Issues Assigned
+
+**High Priority:**
+- #68 - Unit test coverage for core reconciliation logic
+- #70 - Implement Update() method in Technitium/Webhook providers
+- #67 - Clean up logging output (consistent format, reduce noise)
+- #38 - Architecture review across all providers
+
+**Medium Priority:**
+- #50, #51, #55 - Provider-specific improvements
+- #64 - SRV record refinements
+- #45, #57 - Orphan delay persistence issues
+
+**Technical Debt:**
+- #65, #66 - Test file organization
+- #69 - Configuration validation
+- #71, #73 - Documentation improvements
+
+### Success Criteria
+- Reconciler test coverage > 60%
+- All providers implement consistent interface patterns
+- Logging follows structured slog patterns throughout
+- No known bugs blocking production use
+
+---
+
+## v0.6.x - Additional Sources
+
+**Theme:** Support for more reverse proxy sources
 
 ### Planned
+- nginx source (labels + nginx.conf) (#13)
 - Caddy source (labels + Caddyfile) (#12)
-- dnsmasq DNS provider (#28)
-- unbound DNS provider (#29)
+- HAProxy source (labels + haproxy.cfg) (#14)
 
 ---
 
 ## v0.7.x - Public Cloud DNS
 
-**Theme:** Additional public cloud DNS providers
+**Theme:** Public cloud DNS providers for external domains
 
 ### Planned
+- AWS Route53 DNS provider (#30)
 - Google Cloud DNS provider (#33)
 - DigitalOcean DNS provider (#31)
-
----
-
-## v0.8.x - Enterprise + AdGuard
-
-**Theme:** Enterprise sources and homelab-popular providers
-
-### Planned
-- HAProxy source (labels + haproxy.cfg) (#14)
 - Azure DNS provider (#32)
-- AdGuard Home DNS provider (#34)
 
 ---
 
-## v0.9.x - Standards + PowerDNS
+## v0.8.x - Enterprise DNS
 
-**Theme:** Enterprise and standards-based DNS
+**Theme:** Enterprise and standards-based DNS providers
 
 ### Planned
+- unbound DNS provider (#29)
+- AdGuard Home DNS provider (#34)
 - PowerDNS provider (#16)
 - RFC2136 (Dynamic DNS) provider (#18)
 
 ---
 
-## v0.10.x - Hardening + Review
+## v0.9.x - Pre-Release Polish
 
-**Theme:** Pre-release hardening and quality assurance
+**Theme:** Final hardening before v1.0
 
 ### Planned
 - Security and code quality audit (#36)
 - Edge case testing
 - Performance optimization
+- API stability review
 
 ---
 
@@ -147,24 +178,24 @@ This document outlines the planned development path for DNSWeaver from v0.1.0 to
 
 ### v1.0.0 Targets
 
-**Providers (13):**
+**Providers (12):**
 - Technitium ✅
-- Cloudflare
-- Webhook
+- Cloudflare ✅
+- Webhook ✅
+- Pi-hole ✅
+- dnsmasq ✅
 - Route53
-- Pi-hole
-- dnsmasq
-- unbound
 - Google Cloud DNS
 - DigitalOcean
 - Azure DNS
+- unbound
 - AdGuard Home
 - PowerDNS
 - RFC2136
 
 **Sources (5):**
 - Traefik ✅
-- Native dnsweaver labels
+- Native dnsweaver labels ✅
 - nginx
 - Caddy
 - HAProxy

@@ -452,8 +452,8 @@ func TestNormalizeHostname(t *testing.T) {
 		{"EXAMPLE.COM", "example.com"},
 		{"App.Example.Com", "app.example.com"},
 		{"app.EXAMPLE.com", "app.example.com"},
-		{"example.com.", "example.com"},    // trailing dot stripped
-		{"EXAMPLE.COM.", "example.com"},    // uppercase + trailing dot
+		{"example.com.", "example.com"}, // trailing dot stripped
+		{"EXAMPLE.COM.", "example.com"}, // uppercase + trailing dot
 		{"App.Example.Com.", "app.example.com"},
 		{"", ""},
 		{"A", "a"},

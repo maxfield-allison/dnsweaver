@@ -204,7 +204,9 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 
 		for i := range hostnames {
 			hostname := &hostnames[i]
-			if existingWorkload, exists := hostnameOrigins[hostname.Name]; exists {
+			// Use normalized (lowercase) name as key for case-insensitive comparison (RFC 1035)
+			normalizedName := hostname.NormalizedName()
+			if existingWorkload, exists := hostnameOrigins[normalizedName]; exists {
 				// Duplicate hostname detected
 				r.logger.Warn("duplicate hostname found in multiple workloads",
 					slog.String("hostname", hostname.Name),
@@ -214,8 +216,8 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 				result.HostnamesDuplicate++
 				// First workload wins - don't update hostnameOrigins
 			} else {
-				hostnameOrigins[hostname.Name] = workload.Name
-				discoveredHostnames[hostname.Name] = hostname
+				hostnameOrigins[normalizedName] = workload.Name
+				discoveredHostnames[normalizedName] = hostname
 			}
 		}
 	}
@@ -242,8 +244,10 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 		)
 		for i := range fileHostnames {
 			hostname := &fileHostnames[i]
-			if _, exists := discoveredHostnames[hostname.Name]; !exists {
-				discoveredHostnames[hostname.Name] = hostname
+			// Use normalized (lowercase) name as key for case-insensitive comparison (RFC 1035)
+			normalizedName := hostname.NormalizedName()
+			if _, exists := discoveredHostnames[normalizedName]; !exists {
+				discoveredHostnames[normalizedName] = hostname
 			}
 		}
 	}
@@ -332,9 +336,10 @@ func (r *Reconciler) ReconcileHostname(ctx context.Context, hostnameStr string) 
 		result.AddAction(action)
 	}
 
-	// Track this hostname as known
+	// Track this hostname as known (normalized for case-insensitive comparison)
+	normalizedHostname := source.NormalizeHostname(hostnameStr)
 	r.mu.Lock()
-	r.knownHostnames[hostnameStr] = struct{}{}
+	r.knownHostnames[normalizedHostname] = struct{}{}
 	r.mu.Unlock()
 
 	result.Complete()
@@ -1149,7 +1154,9 @@ func (r *Reconciler) RecoverOwnership(ctx context.Context) error {
 		if len(hostnames) > 0 {
 			r.mu.Lock()
 			for _, hostname := range hostnames {
-				r.knownHostnames[hostname] = struct{}{}
+				// Normalize hostname for case-insensitive comparison (RFC 1035)
+				normalized := source.NormalizeHostname(hostname)
+				r.knownHostnames[normalized] = struct{}{}
 			}
 			r.mu.Unlock()
 

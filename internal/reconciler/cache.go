@@ -7,13 +7,15 @@ import (
 	"log/slog"
 
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
+	"gitlab.bluewillows.net/root/dnsweaver/pkg/source"
 )
 
 // recordCache holds a snapshot of DNS records from all providers.
 // It is built once at the start of each reconciliation cycle and used
 // to avoid repeated List() API calls when checking existing records.
+// All hostname keys are normalized to lowercase for case-insensitive lookups.
 type recordCache struct {
-	// records maps provider name -> hostname -> list of records
+	// records maps provider name -> normalized hostname -> list of records
 	records map[string]map[string][]provider.Record
 	logger  *slog.Logger
 }
@@ -38,10 +40,11 @@ func newRecordCache(ctx context.Context, providers *provider.Registry, logger *s
 			continue
 		}
 
-		// Index records by hostname for fast lookup
+		// Index records by normalized hostname for case-insensitive lookup (RFC 1035)
 		byHostname := make(map[string][]provider.Record)
 		for _, r := range providerRecords {
-			byHostname[r.Hostname] = append(byHostname[r.Hostname], r)
+			normalized := source.NormalizeHostname(r.Hostname)
+			byHostname[normalized] = append(byHostname[normalized], r)
 		}
 
 		cache.records[inst.Name()] = byHostname
@@ -59,6 +62,7 @@ func newRecordCache(ctx context.Context, providers *provider.Registry, logger *s
 // Returns A, AAAA, CNAME, and SRV records (excludes TXT ownership records).
 // Returns nil if the provider cache is unavailable (failed to load).
 // Returns empty slice if cached but no records exist for this hostname.
+// Hostname lookup is case-insensitive per RFC 1035.
 func (c *recordCache) getExistingRecords(providerName, hostname string) ([]provider.Record, bool) {
 	byHostname, exists := c.records[providerName]
 	if !exists || byHostname == nil {
@@ -66,7 +70,8 @@ func (c *recordCache) getExistingRecords(providerName, hostname string) ([]provi
 		return nil, false
 	}
 
-	records := byHostname[hostname]
+	normalized := source.NormalizeHostname(hostname)
+	records := byHostname[normalized]
 
 	// Filter to DNS data records (exclude TXT ownership markers)
 	var filtered []provider.Record
@@ -86,6 +91,7 @@ func (c *recordCache) getExistingRecords(providerName, hostname string) ([]provi
 // This is used during orphan cleanup to know what record types actually exist.
 // Returns nil if the provider cache is unavailable (failed to load).
 // Returns empty slice if cached but no records exist for this hostname.
+// Hostname lookup is case-insensitive per RFC 1035.
 func (c *recordCache) getAllRecordsForHostname(providerName, hostname string) ([]provider.Record, bool) {
 	byHostname, exists := c.records[providerName]
 	if !exists || byHostname == nil {
@@ -93,7 +99,8 @@ func (c *recordCache) getAllRecordsForHostname(providerName, hostname string) ([
 		return nil, false
 	}
 
-	records := byHostname[hostname]
+	normalized := source.NormalizeHostname(hostname)
+	records := byHostname[normalized]
 
 	// Filter to data records (A, AAAA, CNAME, SRV) - exclude TXT ownership records
 	var filtered []provider.Record
@@ -111,6 +118,7 @@ func (c *recordCache) getAllRecordsForHostname(providerName, hostname string) ([
 
 // hasOwnershipRecord checks if an ownership TXT record exists for the given hostname.
 // Returns false if the provider cache is unavailable.
+// Hostname lookup is case-insensitive per RFC 1035.
 func (c *recordCache) hasOwnershipRecord(providerName, hostname string) bool {
 	byHostname, exists := c.records[providerName]
 	if !exists || byHostname == nil {
@@ -118,7 +126,8 @@ func (c *recordCache) hasOwnershipRecord(providerName, hostname string) bool {
 	}
 
 	ownershipName := provider.OwnershipRecordName(hostname)
-	records := byHostname[ownershipName]
+	normalized := source.NormalizeHostname(ownershipName)
+	records := byHostname[normalized]
 
 	for _, r := range records {
 		if r.Type == provider.RecordTypeTXT && r.Target == provider.OwnershipValue {

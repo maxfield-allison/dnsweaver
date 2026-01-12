@@ -862,3 +862,342 @@ func TestRecoverOwnership_MultipleProviders(t *testing.T) {
 		t.Errorf("expected 2 recovered hostnames from 2 providers, got %d", len(known))
 	}
 }
+
+// =============================================================================
+// Edge Case Tests — Potential Bug Detection
+// =============================================================================
+
+// TestReconcile_CaseSensitivity verifies that hostnames differing only in case
+// are treated as the same hostname (DNS is case-insensitive per RFC 1035).
+// BUG: Currently the code uses case-sensitive map keys, so this test FAILS.
+func TestReconcile_CaseSensitivity(t *testing.T) {
+	// Two workloads with same hostname in different cases
+	dockerMock := newTestMockWorkloadLister(docker.ModeSwarm)
+	dockerMock.AddWorkload("app-lowercase", map[string]string{
+		"traefik.http.routers.app1.rule": "Host(`app.example.com`)",
+	})
+	dockerMock.AddWorkload("app-uppercase", map[string]string{
+		"traefik.http.routers.app2.rule": "Host(`APP.EXAMPLE.COM`)",
+	})
+
+	logger := quietLogger()
+
+	sources := source.NewRegistry(logger)
+	sources.Register(traefik.New(traefik.WithLogger(logger)))
+
+	mockProvider := newTestMockProvider("test-dns")
+	providers := provider.NewRegistry(logger)
+	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+		return mockProvider, nil
+	})
+	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
+		Name:       "test-dns",
+		TypeName:   "mock",
+		RecordType: provider.RecordTypeA,
+		Target:     "10.0.0.1",
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+	})
+
+	r := New(dockerMock, sources, providers,
+		WithConfig(DefaultConfig()),
+		WithLogger(logger),
+	)
+
+	result, err := r.Reconcile(context.Background())
+
+	if err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	// DNS is case-insensitive, so these should be treated as duplicates
+	// Currently FAILS because code uses case-sensitive comparison
+	if result.HostnamesDuplicate != 1 {
+		t.Errorf("HostnamesDuplicate = %d, want 1 (DNS is case-insensitive)", result.HostnamesDuplicate)
+	}
+
+	// Should only create ONE DNS record
+	created := mockProvider.GetCreatedDNSRecords()
+	if len(created) != 1 {
+		t.Errorf("expected 1 DNS record (case-insensitive dedup), got %d", len(created))
+	}
+}
+
+// TestReconcile_ProviderCreateFailsAfterDelete tests the scenario where:
+// 1. Old record exists with wrong target
+// 2. Old record is deleted successfully
+// 3. New record creation FAILS
+// Result: Hostname has NO DNS record - partial failure state
+func TestReconcile_ProviderCreateFailsAfterDelete(t *testing.T) {
+	dockerMock := newTestMockWorkloadLister(docker.ModeSwarm)
+	dockerMock.AddWorkload("my-app", map[string]string{
+		"traefik.http.routers.myapp.rule": "Host(`app.example.com`)",
+	})
+
+	logger := quietLogger()
+
+	sources := source.NewRegistry(logger)
+	sources.Register(traefik.New(traefik.WithLogger(logger)))
+
+	mockProvider := newTestMockProvider("test-dns")
+	// Add existing record with OLD target
+	mockProvider.AddRecord(provider.Record{
+		Hostname: "app.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.99", // Old target - will be deleted
+		TTL:      300,
+	})
+
+	// Make Create fail
+	createCallCount := 0
+	mockProvider.createFn = func(_ context.Context, r provider.Record) error {
+		createCallCount++
+		// Fail DNS record creation but not ownership TXT
+		if r.Type != provider.RecordTypeTXT {
+			return errors.New("provider temporarily unavailable")
+		}
+		return nil
+	}
+
+	providers := provider.NewRegistry(logger)
+	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+		return mockProvider, nil
+	})
+	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
+		Name:       "test-dns",
+		TypeName:   "mock",
+		RecordType: provider.RecordTypeA,
+		Target:     "10.0.0.1", // New target - creation will fail
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+	})
+
+	r := New(dockerMock, sources, providers,
+		WithConfig(DefaultConfig()),
+		WithLogger(logger),
+	)
+
+	// Build cache first
+	result, err := r.Reconcile(context.Background())
+
+	if err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	// Old record should have been deleted
+	deleted := mockProvider.GetDeleted()
+	if len(deleted) < 1 {
+		t.Errorf("expected old record to be deleted, got %d deletions", len(deleted))
+	}
+
+	// Create should have been attempted and failed
+	if createCallCount == 0 {
+		t.Error("expected Create to be called")
+	}
+
+	// Result should show a FAILED action
+	failed := result.Failed()
+	if len(failed) != 1 {
+		t.Errorf("expected 1 failed action, got %d", len(failed))
+	}
+
+	// The concerning state: old record deleted, new record not created
+	// This is a known limitation - the test documents it
+	t.Log("Note: After this failure, the hostname has no DNS record (old deleted, new failed)")
+}
+
+// TestReconcile_FirstRunAfterRestart verifies that the first reconciliation
+// after restart (empty knownHostnames) doesn't delete valid records as orphans.
+func TestReconcile_FirstRunAfterRestart(t *testing.T) {
+	dockerMock := newTestMockWorkloadLister(docker.ModeSwarm)
+	dockerMock.AddWorkload("my-app", map[string]string{
+		"traefik.http.routers.myapp.rule": "Host(`app.example.com`)",
+	})
+
+	logger := quietLogger()
+
+	sources := source.NewRegistry(logger)
+	sources.Register(traefik.New(traefik.WithLogger(logger)))
+
+	mockProvider := newTestMockProvider("test-dns")
+	// Existing record from before restart
+	mockProvider.AddRecord(provider.Record{
+		Hostname: "app.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.1",
+		TTL:      300,
+	})
+	mockProvider.AddRecord(provider.Record{
+		Hostname: "_dnsweaver.app.example.com",
+		Type:     provider.RecordTypeTXT,
+		Target:   "heritage=dnsweaver",
+		TTL:      300,
+	})
+
+	providers := provider.NewRegistry(logger)
+	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+		return mockProvider, nil
+	})
+	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
+		Name:       "test-dns",
+		TypeName:   "mock",
+		RecordType: provider.RecordTypeA,
+		Target:     "10.0.0.1",
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+	})
+
+	r := New(dockerMock, sources, providers,
+		WithConfig(Config{
+			Enabled:           true,
+			CleanupOrphans:    true,
+			OwnershipTracking: true,
+		}),
+		WithLogger(logger),
+	)
+
+	// First reconciliation - knownHostnames is empty
+	result, err := r.Reconcile(context.Background())
+
+	if err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	// Record should NOT be deleted (it's discovered from workload, not orphan)
+	deleted := mockProvider.GetDeleted()
+	if len(deleted) != 0 {
+		t.Errorf("expected 0 deletions on first run, got %d: %+v", len(deleted), deleted)
+	}
+
+	// Record should be recognized as existing (skip, not create)
+	skipped := result.Skipped()
+	foundSkip := false
+	for _, s := range skipped {
+		if s.Hostname == "app.example.com" && s.Error == "record already exists" {
+			foundSkip = true
+			break
+		}
+	}
+	if !foundSkip {
+		t.Error("expected existing record to be skipped")
+	}
+}
+
+// TestReconcile_AdoptExistingEnabled verifies that AdoptExisting=true creates
+// ownership TXT records for pre-existing DNS records.
+func TestReconcile_AdoptExistingEnabled(t *testing.T) {
+	dockerMock := newTestMockWorkloadLister(docker.ModeSwarm)
+	dockerMock.AddWorkload("my-app", map[string]string{
+		"traefik.http.routers.myapp.rule": "Host(`app.example.com`)",
+	})
+
+	logger := quietLogger()
+
+	sources := source.NewRegistry(logger)
+	sources.Register(traefik.New(traefik.WithLogger(logger)))
+
+	mockProvider := newTestMockProvider("test-dns")
+	// Existing record WITHOUT ownership TXT (created manually or by another system)
+	mockProvider.AddRecord(provider.Record{
+		Hostname: "app.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.1", // Same target as provider config
+		TTL:      300,
+	})
+	// NO ownership TXT record
+
+	providers := provider.NewRegistry(logger)
+	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+		return mockProvider, nil
+	})
+	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
+		Name:       "test-dns",
+		TypeName:   "mock",
+		RecordType: provider.RecordTypeA,
+		Target:     "10.0.0.1",
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+	})
+
+	cfg := DefaultConfig()
+	cfg.AdoptExisting = true
+	cfg.OwnershipTracking = true
+
+	r := New(dockerMock, sources, providers,
+		WithConfig(cfg),
+		WithLogger(logger),
+	)
+
+	_, err := r.Reconcile(context.Background())
+	if err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	// Should have created ownership TXT record (adopting the existing record)
+	ownershipRecords := mockProvider.GetCreatedOwnershipRecords()
+	if len(ownershipRecords) != 1 {
+		t.Errorf("expected 1 ownership TXT record (adoption), got %d", len(ownershipRecords))
+	}
+
+	// DNS record should NOT be re-created (it already exists)
+	dnsRecords := mockProvider.GetCreatedDNSRecords()
+	if len(dnsRecords) != 0 {
+		t.Errorf("expected 0 DNS records created (already exists), got %d", len(dnsRecords))
+	}
+}
+
+// TestReconcile_AdoptExistingDisabled verifies that AdoptExisting=false does NOT
+// create ownership TXT records for pre-existing DNS records.
+func TestReconcile_AdoptExistingDisabled(t *testing.T) {
+	dockerMock := newTestMockWorkloadLister(docker.ModeSwarm)
+	dockerMock.AddWorkload("my-app", map[string]string{
+		"traefik.http.routers.myapp.rule": "Host(`app.example.com`)",
+	})
+
+	logger := quietLogger()
+
+	sources := source.NewRegistry(logger)
+	sources.Register(traefik.New(traefik.WithLogger(logger)))
+
+	mockProvider := newTestMockProvider("test-dns")
+	// Existing record WITHOUT ownership TXT
+	mockProvider.AddRecord(provider.Record{
+		Hostname: "app.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.1",
+		TTL:      300,
+	})
+
+	providers := provider.NewRegistry(logger)
+	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+		return mockProvider, nil
+	})
+	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
+		Name:       "test-dns",
+		TypeName:   "mock",
+		RecordType: provider.RecordTypeA,
+		Target:     "10.0.0.1",
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+	})
+
+	cfg := DefaultConfig()
+	cfg.AdoptExisting = false // Explicitly disabled
+	cfg.OwnershipTracking = true
+
+	r := New(dockerMock, sources, providers,
+		WithConfig(cfg),
+		WithLogger(logger),
+	)
+
+	_, err := r.Reconcile(context.Background())
+	if err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	// Should NOT create ownership TXT (AdoptExisting is false)
+	ownershipRecords := mockProvider.GetCreatedOwnershipRecords()
+	if len(ownershipRecords) != 0 {
+		t.Errorf("expected 0 ownership TXT records (no adoption), got %d", len(ownershipRecords))
+	}
+}

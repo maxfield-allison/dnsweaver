@@ -17,12 +17,12 @@ func TestValidateHostname_Valid(t *testing.T) {
 		"123.example.com",
 		"a.example.com",
 		"x",
-		"example.com.",     // trailing dot (FQDN)
-		"*.example.com",    // wildcard
+		"example.com.",      // trailing dot (FQDN)
+		"*.example.com",     // wildcard
 		"*.sub.example.com", // wildcard with subdomain
-		"APP.EXAMPLE.COM",  // uppercase (valid, DNS is case-insensitive)
-		"App.Example.Com",  // mixed case
-		"xn--nxasmq5b.com", // punycode (internationalized domain)
+		"APP.EXAMPLE.COM",   // uppercase (valid, DNS is case-insensitive)
+		"App.Example.Com",   // mixed case
+		"xn--nxasmq5b.com",  // punycode (internationalized domain)
 		"a-b-c.example.com",
 		"a1.example.com",
 		"1a.example.com",
@@ -96,9 +96,9 @@ func TestValidateHostname_Invalid(t *testing.T) {
 			wantErr:  ErrInvalidCharacters,
 		},
 		{
-			name:        "hostname too long",
-			hostname:    strings.Repeat("a", 64) + "." + strings.Repeat("b", 64) + "." + strings.Repeat("c", 64) + "." + strings.Repeat("d", 64),
-			wantErr:     ErrHostnameTooLong,
+			name:     "hostname too long",
+			hostname: strings.Repeat("a", 64) + "." + strings.Repeat("b", 64) + "." + strings.Repeat("c", 64) + "." + strings.Repeat("d", 64),
+			wantErr:  ErrHostnameTooLong,
 		},
 		{
 			name:     "label too long",
@@ -369,7 +369,7 @@ func TestHostnames_Deduplicate(t *testing.T) {
 	hostnames := Hostnames{
 		{Name: "app.example.com", Source: "traefik", Router: "app1"},
 		{Name: "other.example.com", Source: "traefik", Router: "other"},
-		{Name: "app.example.com", Source: "caddy", Router: "app2"}, // duplicate name, different source
+		{Name: "app.example.com", Source: "caddy", Router: "app2"},   // duplicate name, different source
 		{Name: "app.example.com", Source: "traefik", Router: "app3"}, // duplicate name, same source
 	}
 

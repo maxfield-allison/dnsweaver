@@ -80,7 +80,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("creating docker client: %w", err)
 	}
-	defer dockerClient.Close()
+	defer func() { _ = dockerClient.Close() }()
 
 	logger.Info("docker client connected",
 		slog.String("mode", dockerClient.Mode().String()),
@@ -366,5 +366,3 @@ func createProviderInstances(registry *provider.Registry, cfg *config.Config) er
 	}
 	return nil
 }
-
-

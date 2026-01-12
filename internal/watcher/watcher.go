@@ -157,7 +157,7 @@ func (w *Watcher) watchLoop(ctx context.Context) {
 		default:
 			if err := w.watch(ctx); err != nil {
 				if ctx.Err() != nil {
-					// Context cancelled, exit cleanly
+					// Context canceled, exit cleanly
 					return
 				}
 				w.logger.Warn("event stream error, reconnecting",

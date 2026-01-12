@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -211,8 +212,8 @@ func TestLoad_MissingInstances(t *testing.T) {
 		t.Fatal("Load() should return error when DNSWEAVER_INSTANCES is not set")
 	}
 
-	validationErr, ok := err.(*ValidationError)
-	if !ok {
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
 		t.Fatalf("error should be *ValidationError, got %T", err)
 	}
 
@@ -244,8 +245,8 @@ func TestLoad_MultipleErrors(t *testing.T) {
 		t.Fatal("Load() should return error")
 	}
 
-	validationErr, ok := err.(*ValidationError)
-	if !ok {
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
 		t.Fatalf("error should be *ValidationError, got %T", err)
 	}
 

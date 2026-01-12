@@ -300,9 +300,9 @@ func TestRealWorldSplitHorizon(t *testing.T) {
 	}
 
 	tests := []struct {
-		hostname  string
-		wantTech  bool
-		wantCF    bool
+		hostname string
+		wantTech bool
+		wantCF   bool
 	}{
 		{"sonarr.local.bluewillows.net", true, false},
 		{"sonarr.bluewillows.net", false, true},

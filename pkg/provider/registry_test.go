@@ -15,12 +15,12 @@ type mockProvider struct {
 	records  []Record
 }
 
-func (m *mockProvider) Name() string                           { return m.name }
-func (m *mockProvider) Type() string                           { return m.typeName }
-func (m *mockProvider) Ping(ctx context.Context) error         { return m.pingErr }
+func (m *mockProvider) Name() string                               { return m.name }
+func (m *mockProvider) Type() string                               { return m.typeName }
+func (m *mockProvider) Ping(ctx context.Context) error             { return m.pingErr }
 func (m *mockProvider) List(ctx context.Context) ([]Record, error) { return m.records, nil }
-func (m *mockProvider) Create(ctx context.Context, r Record) error  { return nil }
-func (m *mockProvider) Delete(ctx context.Context, r Record) error  { return nil }
+func (m *mockProvider) Create(ctx context.Context, r Record) error { return nil }
+func (m *mockProvider) Delete(ctx context.Context, r Record) error { return nil }
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))

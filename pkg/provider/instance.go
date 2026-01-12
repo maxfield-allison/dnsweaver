@@ -9,6 +9,12 @@ import (
 	"gitlab.bluewillows.net/root/dnsweaver/internal/metrics"
 )
 
+// Metrics status values.
+const (
+	statusSuccess = "success"
+	statusError   = "error"
+)
+
 // isIPAddress returns true if the given string is a valid IPv4 or IPv6 address.
 func isIPAddress(s string) bool {
 	return net.ParseIP(s) != nil
@@ -96,9 +102,9 @@ func (pi *ProviderInstance) CreateRecordWithValues(ctx context.Context, hostname
 	err := pi.Provider.Create(ctx, record)
 	duration := time.Since(start).Seconds()
 
-	status := "success"
+	status := statusSuccess
 	if err != nil {
-		status = "error"
+		status = statusError
 	}
 
 	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "create", status).Inc()
@@ -119,9 +125,9 @@ func (pi *ProviderInstance) DeleteRecord(ctx context.Context, hostname string) e
 	err := pi.Provider.Delete(ctx, record)
 	duration := time.Since(start).Seconds()
 
-	status := "success"
+	status := statusSuccess
 	if err != nil {
-		status = "error"
+		status = statusError
 	}
 
 	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", status).Inc()
@@ -138,9 +144,9 @@ func (pi *ProviderInstance) GetExistingRecords(ctx context.Context, hostname str
 	allRecords, err := pi.Provider.List(ctx)
 	duration := time.Since(start).Seconds()
 
-	status := "success"
+	status := statusSuccess
 	if err != nil {
-		status = "error"
+		status = statusError
 		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "list", status).Inc()
 		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "list").Observe(duration)
 		return nil, err
@@ -174,9 +180,9 @@ func (pi *ProviderInstance) DeleteRecordByTarget(ctx context.Context, hostname s
 	err := pi.Provider.Delete(ctx, record)
 	duration := time.Since(start).Seconds()
 
-	status := "success"
+	status := statusSuccess
 	if err != nil {
-		status = "error"
+		status = statusError
 	}
 
 	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", status).Inc()
@@ -200,9 +206,9 @@ func (pi *ProviderInstance) DeleteSRVRecord(ctx context.Context, hostname string
 	err := pi.Provider.Delete(ctx, record)
 	duration := time.Since(start).Seconds()
 
-	status := "success"
+	status := statusSuccess
 	if err != nil {
-		status = "error"
+		status = statusError
 	}
 
 	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", status).Inc()
@@ -220,13 +226,13 @@ func (pi *ProviderInstance) CreateOwnershipRecord(ctx context.Context, hostname 
 	err := pi.Provider.Create(ctx, record)
 	duration := time.Since(start).Seconds()
 
-	status := "success"
+	status := statusSuccess
 	if err != nil {
 		// Ignore conflict errors - ownership record may already exist
 		if IsConflict(err) {
 			return nil
 		}
-		status = "error"
+		status = statusError
 	}
 
 	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "create_ownership", status).Inc()
@@ -243,9 +249,9 @@ func (pi *ProviderInstance) DeleteOwnershipRecord(ctx context.Context, hostname 
 	err := pi.Provider.Delete(ctx, record)
 	duration := time.Since(start).Seconds()
 
-	status := "success"
+	status := statusSuccess
 	if err != nil {
-		status = "error"
+		status = statusError
 	}
 
 	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete_ownership", status).Inc()
@@ -262,9 +268,9 @@ func (pi *ProviderInstance) HasOwnershipRecord(ctx context.Context, hostname str
 	records, err := pi.Provider.List(ctx)
 	duration := time.Since(start).Seconds()
 
-	status := "success"
+	status := statusSuccess
 	if err != nil {
-		status = "error"
+		status = statusError
 		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "list", status).Inc()
 		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "list").Observe(duration)
 		return false, err
@@ -290,9 +296,9 @@ func (pi *ProviderInstance) RecoverOwnedHostnames(ctx context.Context) ([]string
 	records, err := pi.Provider.List(ctx)
 	duration := time.Since(start).Seconds()
 
-	status := "success"
+	status := statusSuccess
 	if err != nil {
-		status = "error"
+		status = statusError
 		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "list", status).Inc()
 		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "list").Observe(duration)
 		return nil, err
@@ -321,10 +327,10 @@ func (pi *ProviderInstance) Ping(ctx context.Context) error {
 	err := pi.Provider.Ping(ctx)
 	duration := time.Since(start).Seconds()
 
-	status := "success"
+	status := statusSuccess
 	healthy := float64(1)
 	if err != nil {
-		status = "error"
+		status = statusError
 		healthy = 0
 	}
 

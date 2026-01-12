@@ -149,9 +149,9 @@ func TestRecordCache_GetExistingRecords(t *testing.T) {
 			name:         "provider not cached returns false",
 			providerName: "missing-provider",
 			hostname:     "app.example.com",
-			records:     map[string]map[string][]provider.Record{},
-			wantRecords: 0,
-			wantCached:  false,
+			records:      map[string]map[string][]provider.Record{},
+			wantRecords:  0,
+			wantCached:   false,
 		},
 	}
 

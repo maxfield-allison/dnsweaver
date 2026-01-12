@@ -97,6 +97,8 @@ func (c *recordCache) getAllRecordsForHostname(providerName, hostname string) ([
 		switch r.Type {
 		case provider.RecordTypeA, provider.RecordTypeAAAA, provider.RecordTypeCNAME, provider.RecordTypeSRV:
 			filtered = append(filtered, r)
+		case provider.RecordTypeTXT:
+			// Skip TXT records (ownership markers)
 		}
 	}
 

@@ -159,9 +159,9 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 	// Load provider-specific config
 	// Common fields that most providers need (with _FILE support for secrets)
 	providerFields := []struct {
-		name      string
-		isSecret  bool
-		required  bool // Note: providers validate their own required fields
+		name     string
+		isSecret bool
+		required bool // Note: providers validate their own required fields
 	}{
 		{"URL", false, false},
 		{"TOKEN", true, false},
@@ -169,12 +169,12 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 		{"ZONE_ID", false, false},
 		{"API_KEY", true, false},
 		{"API_EMAIL", false, false},
-		{"PROXIED", false, false},      // Cloudflare-specific
-		{"AUTH_HEADER", false, false},  // Webhook-specific
-		{"AUTH_TOKEN", true, false},    // Webhook-specific
-		{"TIMEOUT", false, false},      // Webhook-specific
-		{"RETRIES", false, false},      // Webhook-specific
-		{"RETRY_DELAY", false, false},  // Webhook-specific
+		{"PROXIED", false, false},     // Cloudflare-specific
+		{"AUTH_HEADER", false, false}, // Webhook-specific
+		{"AUTH_TOKEN", true, false},   // Webhook-specific
+		{"TIMEOUT", false, false},     // Webhook-specific
+		{"RETRIES", false, false},     // Webhook-specific
+		{"RETRY_DELAY", false, false}, // Webhook-specific
 	}
 
 	for _, field := range providerFields {

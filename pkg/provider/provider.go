@@ -32,7 +32,7 @@ type SRVData struct {
 type Record struct {
 	Hostname   string
 	Type       RecordType
-	Target     string   // IP for A/AAAA, hostname for CNAME/SRV target
+	Target     string // IP for A/AAAA, hostname for CNAME/SRV target
 	TTL        int
 	ProviderID string   // Provider-specific record identifier
 	SRV        *SRVData // SRV-specific data (only set when Type is SRV)

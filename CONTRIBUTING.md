@@ -6,7 +6,7 @@ Thank you for your interest in contributing to DNSWeaver!
 
 ### Prerequisites
 
-- Go 1.23 or later
+- Go 1.24 or later
 - Docker (for testing)
 - Access to a Docker Swarm cluster (optional, for integration testing)
 
@@ -14,7 +14,7 @@ Thank you for your interest in contributing to DNSWeaver!
 
 1. Clone the repository:
    ```bash
-   git clone ssh://git@gitlab.bluewillows.net:2424/root/dnsweaver.git
+   git clone https://github.com/maxfield-allison/dnsweaver.git
    cd dnsweaver
    ```
 

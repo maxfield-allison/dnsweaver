@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
@@ -17,6 +18,7 @@ func clearInstanceEnv(t *testing.T, instanceName string) {
 		prefix + "RECORD_TYPE",
 		prefix + "TARGET",
 		prefix + "TTL",
+		prefix + "MODE",
 		prefix + "DOMAINS",
 		prefix + "DOMAINS_REGEX",
 		prefix + "EXCLUDE_DOMAINS",
@@ -133,7 +135,7 @@ func TestLoadInstanceConfig_Minimal(t *testing.T) {
 
 	prefix := envPrefix(instanceName)
 	os.Setenv(prefix+"TYPE", "technitium")
-	os.Setenv(prefix+"TARGET", "10.1.20.210")
+	os.Setenv(prefix+"TARGET", "10.0.0.100")
 	os.Setenv(prefix+"DOMAINS", "*.example.com")
 
 	cfg, errs := loadInstanceConfig(instanceName, 300)
@@ -151,8 +153,8 @@ func TestLoadInstanceConfig_Minimal(t *testing.T) {
 	if cfg.RecordType != provider.RecordTypeA {
 		t.Errorf("RecordType = %q, want %q", cfg.RecordType, provider.RecordTypeA)
 	}
-	if cfg.Target != "10.1.20.210" {
-		t.Errorf("Target = %q, want %q", cfg.Target, "10.1.20.210")
+	if cfg.Target != "10.0.0.100" {
+		t.Errorf("Target = %q, want %q", cfg.Target, "10.0.0.100")
 	}
 	if cfg.TTL != 300 {
 		t.Errorf("TTL = %d, want %d", cfg.TTL, 300)
@@ -177,7 +179,7 @@ func TestLoadInstanceConfig_Complete(t *testing.T) {
 	prefix := envPrefix(instanceName)
 	os.Setenv(prefix+"TYPE", "technitium")
 	os.Setenv(prefix+"RECORD_TYPE", "A")
-	os.Setenv(prefix+"TARGET", "10.1.20.210")
+	os.Setenv(prefix+"TARGET", "10.0.0.100")
 	os.Setenv(prefix+"TTL", "600")
 	os.Setenv(prefix+"DOMAINS", "*.internal.example.com,app.example.com")
 	os.Setenv(prefix+"EXCLUDE_DOMAINS", "admin.internal.example.com")
@@ -197,8 +199,8 @@ func TestLoadInstanceConfig_Complete(t *testing.T) {
 	if cfg.RecordType != provider.RecordTypeA {
 		t.Errorf("RecordType = %q, want %q", cfg.RecordType, provider.RecordTypeA)
 	}
-	if cfg.Target != "10.1.20.210" {
-		t.Errorf("Target = %q, want %q", cfg.Target, "10.1.20.210")
+	if cfg.Target != "10.0.0.100" {
+		t.Errorf("Target = %q, want %q", cfg.Target, "10.0.0.100")
 	}
 	if cfg.TTL != 600 {
 		t.Errorf("TTL = %d, want %d", cfg.TTL, 600)
@@ -462,5 +464,92 @@ func TestSplitPatterns(t *testing.T) {
 				t.Errorf("splitPatterns(%q)[%d] = %q, want %q", tc.input, i, got[i], tc.expected[i])
 			}
 		}
+	}
+}
+
+func TestLoadInstanceConfig_OperationalMode(t *testing.T) {
+	tests := []struct {
+		name        string
+		modeEnv     string
+		wantMode    provider.OperationalMode
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:     "default mode when not set",
+			modeEnv:  "",
+			wantMode: provider.ModeManaged,
+		},
+		{
+			name:     "explicit managed mode",
+			modeEnv:  "managed",
+			wantMode: provider.ModeManaged,
+		},
+		{
+			name:     "authoritative mode",
+			modeEnv:  "authoritative",
+			wantMode: provider.ModeAuthoritative,
+		},
+		{
+			name:     "additive mode",
+			modeEnv:  "additive",
+			wantMode: provider.ModeAdditive,
+		},
+		{
+			name:     "uppercase mode",
+			modeEnv:  "AUTHORITATIVE",
+			wantMode: provider.ModeAuthoritative,
+		},
+		{
+			name:        "invalid mode",
+			modeEnv:     "readonly",
+			wantErr:     true,
+			errContains: "invalid operational mode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			const instanceName = "mode-test"
+			clearInstanceEnv(t, instanceName)
+			defer clearInstanceEnv(t, instanceName)
+
+			prefix := envPrefix(instanceName)
+			os.Setenv(prefix+"TYPE", "technitium")
+			os.Setenv(prefix+"TARGET", "10.0.0.1")
+			os.Setenv(prefix+"DOMAINS", "*.example.com")
+			if tt.modeEnv != "" {
+				os.Setenv(prefix+"MODE", tt.modeEnv)
+			}
+
+			cfg, errs := loadInstanceConfig(instanceName, 300)
+
+			if tt.wantErr {
+				if len(errs) == 0 {
+					t.Error("expected error but got none")
+					return
+				}
+				found := false
+				for _, err := range errs {
+					if strings.Contains(err, tt.errContains) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected error containing %q, got: %v", tt.errContains, errs)
+				}
+				return
+			}
+
+			if len(errs) > 0 {
+				t.Errorf("unexpected errors: %v", errs)
+				return
+			}
+
+			if cfg.Mode != tt.wantMode {
+				t.Errorf("Mode = %q, want %q", cfg.Mode, tt.wantMode)
+			}
+		})
 	}
 }

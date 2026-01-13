@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-01-13
+
+### Added
+- **YAML Configuration File Support** (#66): Full YAML config file support
+  - Load configuration from YAML file via `DNSWEAVER_CONFIG` env var or `--config` flag
+  - Environment variable interpolation with `${VAR}` and `${VAR:-default}` syntax
+  - Configuration priority: env vars > config file > defaults
+  - Example config file at `docs/config.example.yml`
+  - Supports all existing configuration options in structured YAML format
+- **Version Flag**: Added `--version` flag to display version and build date
+- **Provider Capabilities Interface** (#79): Providers report their capabilities
+  - `SupportsOwnershipTXT` — whether provider can create TXT records for ownership
+  - `SupportsNativeUpdate` — whether provider implements `Updater` interface
+  - `SupportedRecordTypes` — list of record types the provider handles (A, AAAA, CNAME, SRV)
+- **Updater Interface** (#70): Optional provider interface for native record updates
+  - Providers implementing `Updater` can update records in-place without delete+create
+  - Reconciler automatically falls back to delete+create for providers without native update
+  - Technitium provider implements native update support
+- **Per-Instance Operational Modes** (#80): Control how dnsweaver manages records per provider
+  - `managed` (default) — only touch records dnsweaver created (with ownership TXT)
+  - `authoritative` — full control over configured scope; deletes unmatched in-scope records
+  - `additive` — write-only mode; never deletes any records
+  - Configure via `DNSWEAVER_{INSTANCE}_MODE` environment variable
+- **Comprehensive Test Coverage** (#68): Core reconciler coverage increased from 26% to 83%+
+  - Added tests for reconciler, watcher, provider registry, and error handling
+  - Edge case coverage for debouncing, lifecycle, and event filtering
+
+### Changed
+- **Reconciler Refactored** (#78): Split monolithic reconciler into focused modules
+  - `reconciler.go` — main loop and orchestration (~300 lines)
+  - `actions.go` — create/update/delete operations
+  - `comparison.go` — record diffing with `CompareRecordSets()` helper
+  - `orphan.go` — orphan detection and cleanup
+  - `ownership.go` — TXT record ownership tracking
+  - `cache.go` — provider state caching
+  - Each module under 400 lines for maintainability
+
 ## [0.4.2] - 2026-01-12
 
 ### Fixed

@@ -37,7 +37,7 @@ func TestLoad_MinimalConfig(t *testing.T) {
 	// Minimal required config
 	os.Setenv("DNSWEAVER_INSTANCES", "internal-dns")
 	os.Setenv("DNSWEAVER_INTERNAL_DNS_TYPE", "technitium")
-	os.Setenv("DNSWEAVER_INTERNAL_DNS_TARGET", "10.1.20.210")
+	os.Setenv("DNSWEAVER_INTERNAL_DNS_TARGET", "10.0.0.100")
 	os.Setenv("DNSWEAVER_INTERNAL_DNS_DOMAINS", "*.example.com")
 
 	cfg, err := Load()
@@ -88,8 +88,8 @@ func TestLoad_MinimalConfig(t *testing.T) {
 	if inst.TypeName != "technitium" {
 		t.Errorf("inst.TypeName = %q, want %q", inst.TypeName, "technitium")
 	}
-	if inst.Target != "10.1.20.210" {
-		t.Errorf("inst.Target = %q, want %q", inst.Target, "10.1.20.210")
+	if inst.Target != "10.0.0.100" {
+		t.Errorf("inst.Target = %q, want %q", inst.Target, "10.0.0.100")
 	}
 }
 
@@ -121,7 +121,7 @@ func TestLoad_CompleteConfig(t *testing.T) {
 	// Internal DNS (Technitium with secrets file)
 	os.Setenv("DNSWEAVER_INTERNAL_DNS_TYPE", "technitium")
 	os.Setenv("DNSWEAVER_INTERNAL_DNS_RECORD_TYPE", "A")
-	os.Setenv("DNSWEAVER_INTERNAL_DNS_TARGET", "10.1.20.210")
+	os.Setenv("DNSWEAVER_INTERNAL_DNS_TARGET", "10.0.0.100")
 	os.Setenv("DNSWEAVER_INTERNAL_DNS_TTL", "300")
 	os.Setenv("DNSWEAVER_INTERNAL_DNS_DOMAINS", "*.internal.example.com")
 	os.Setenv("DNSWEAVER_INTERNAL_DNS_EXCLUDE_DOMAINS", "admin.internal.example.com")
@@ -286,7 +286,7 @@ func TestLoad_CNAMEWithIPTarget(t *testing.T) {
 	os.Setenv("DNSWEAVER_INSTANCES", "bad-cname")
 	os.Setenv("DNSWEAVER_BAD_CNAME_TYPE", "cloudflare")
 	os.Setenv("DNSWEAVER_BAD_CNAME_RECORD_TYPE", "CNAME")
-	os.Setenv("DNSWEAVER_BAD_CNAME_TARGET", "10.1.20.210") // Should be hostname
+	os.Setenv("DNSWEAVER_BAD_CNAME_TARGET", "10.0.0.100") // Should be hostname
 	os.Setenv("DNSWEAVER_BAD_CNAME_DOMAINS", "*")
 
 	_, err := Load()

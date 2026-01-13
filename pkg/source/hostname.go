@@ -51,6 +51,13 @@ var singleCharLabelRegex = regexp.MustCompile(`^[a-zA-Z0-9]$`)
 // These labels start with underscore followed by alphanumeric (e.g., _minecraft, _tcp, _udp).
 var srvLabelRegex = regexp.MustCompile(`^_[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$`)
 
+// NormalizeHostname returns the canonical lowercase form of a hostname.
+// DNS is case-insensitive per RFC 1035 Section 2.3.3, so this ensures
+// consistent comparison and map key usage.
+func NormalizeHostname(hostname string) string {
+	return strings.ToLower(strings.TrimSuffix(hostname, "."))
+}
+
 // HostnameValidationError provides detailed information about validation failures.
 type HostnameValidationError struct {
 	Hostname string
@@ -317,6 +324,13 @@ func (h Hostname) IsValid() bool {
 	return ValidateHostname(h.Name) == nil
 }
 
+// NormalizedName returns the canonical lowercase form of this hostname.
+// DNS is case-insensitive per RFC 1035 Section 2.3.3, so use this for
+// map keys and comparisons where case-insensitive semantics are required.
+func (h Hostname) NormalizedName() string {
+	return NormalizeHostname(h.Name)
+}
+
 // Hostnames is a slice of Hostname with helper methods.
 type Hostnames []Hostname
 
@@ -331,13 +345,15 @@ func (hs Hostnames) Names() []string {
 
 // Deduplicate returns a new slice with duplicate hostnames removed.
 // The first occurrence of each hostname is kept.
+// Comparison is case-insensitive per DNS RFC 1035 Section 2.3.3.
 func (hs Hostnames) Deduplicate() Hostnames {
 	seen := make(map[string]struct{}, len(hs))
 	result := make(Hostnames, 0, len(hs))
 
 	for _, h := range hs {
-		if _, exists := seen[h.Name]; !exists {
-			seen[h.Name] = struct{}{}
+		normalized := h.NormalizedName()
+		if _, exists := seen[normalized]; !exists {
+			seen[normalized] = struct{}{}
 			result = append(result, h)
 		}
 	}

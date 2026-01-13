@@ -460,7 +460,7 @@ labels:
   # Internal A record
   dnsweaver.records.internal.hostname: "myapp.internal.example.com"
   dnsweaver.records.internal.type: "A"
-  dnsweaver.records.internal.target: "10.1.20.100"
+  dnsweaver.records.internal.target: "10.0.0.100"
   dnsweaver.records.internal.provider: "internal-dns"
   dnsweaver.records.internal.ttl: "300"
   
@@ -575,7 +575,7 @@ File-based provider for dnsmasq DNS server. Manages records by writing to dnsmas
 
 **dnsmasq record format:**
 ```bash
-address=/myapp.example.com/10.1.20.210      # A record
+address=/myapp.example.com/10.0.0.100       # A record
 address=/myapp.example.com/fd00::1          # AAAA record
 cname=alias.example.com,target.example.com  # CNAME
 ```

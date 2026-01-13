@@ -139,6 +139,43 @@ func (p *Provider) Type() string {
 	return "pihole"
 }
 
+// Capabilities returns the provider's feature support.
+// Pi-hole capabilities depend on the operating mode:
+// - API mode: full TXT support and native update via the Pi-hole API
+// - File mode: no TXT ownership (uses dnsmasq file format), no native update
+func (p *Provider) Capabilities() provider.Capabilities {
+	switch p.mode {
+	case ModeAPI:
+		return provider.Capabilities{
+			SupportsOwnershipTXT: true,
+			SupportsNativeUpdate: true,
+			SupportedRecordTypes: []provider.RecordType{
+				provider.RecordTypeA,
+				provider.RecordTypeCNAME,
+			},
+		}
+	case ModeFile:
+		// File mode uses dnsmasq underneath - same limitations
+		return provider.Capabilities{
+			SupportsOwnershipTXT: false,
+			SupportsNativeUpdate: false,
+			SupportedRecordTypes: []provider.RecordType{
+				provider.RecordTypeA,
+				provider.RecordTypeCNAME,
+			},
+		}
+	default:
+		// Fallback to most restrictive
+		return provider.Capabilities{
+			SupportsOwnershipTXT: false,
+			SupportsNativeUpdate: false,
+			SupportedRecordTypes: []provider.RecordType{
+				provider.RecordTypeA,
+			},
+		}
+	}
+}
+
 // Zone returns the configured DNS zone.
 func (p *Provider) Zone() string {
 	return p.zone

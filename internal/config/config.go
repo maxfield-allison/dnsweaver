@@ -1,14 +1,17 @@
 // Package config handles loading and validation of DNSWeaver configuration
-// from environment variables.
+// from environment variables and optional YAML configuration files.
 //
 // Configuration follows the patterns defined in docs/DECISIONS.md:
 //   - All env vars use DNSWEAVER_ prefix
 //   - _FILE suffix for Docker secrets (e.g., TOKEN_FILE)
+//   - YAML config file via DNSWEAVER_CONFIG env var or --config flag
+//   - Priority: env vars > config file > defaults
 //   - Fail fast on any configuration error
 package config
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -29,42 +32,96 @@ type Config struct {
 	// Sources contains configuration for hostname sources (traefik, caddy, etc.).
 	// Includes file-based discovery configuration per source.
 	Sources *SourceConfig
+
+	// ConfigFile is the path to the config file used, if any.
+	ConfigFile string
 }
 
-// Load reads configuration from environment variables and validates it.
+// Load reads configuration from environment variables and an optional YAML file.
 // Returns an error if any required configuration is missing or invalid.
+//
+// Configuration priority (highest to lowest):
+//  1. Environment variables
+//  2. Config file values (if DNSWEAVER_CONFIG is set)
+//  3. Default values
 //
 // Per DECISIONS.md: Fail fast with clear error messages. Do not start
 // with partial configuration.
 func Load() (*Config, error) {
 	var allErrors []string
 
-	// Load global configuration
-	global, globalErrs := loadGlobalConfig()
+	// Check for config file
+	configPath := GetConfigFilePath()
+
+	var fileGlobal *GlobalConfig
+	var fileProviders []*ProviderInstanceConfig
+	var fileSources *SourceConfig
+
+	if configPath != "" {
+		// Load from file first
+		var fileErrs []string
+		fileGlobal, fileProviders, fileSources, fileErrs = loadFromFile(configPath)
+		allErrors = append(allErrors, fileErrs...)
+
+		// If file loading had errors, we still try to proceed with env vars
+		if len(fileErrs) == 0 && fileGlobal != nil {
+			slog.Debug("config file loaded, applying environment overrides")
+		}
+	}
+
+	// Merge global config with env var overrides
+	var global *GlobalConfig
+	var globalErrs []string
+	if fileGlobal != nil {
+		global, globalErrs = mergeGlobalConfig(fileGlobal)
+	} else {
+		global, globalErrs = loadGlobalConfig()
+	}
 	allErrors = append(allErrors, globalErrs...)
 
-	// Parse instance names
-	providerNames := parseInstances()
-	if len(providerNames) == 0 {
-		allErrors = append(allErrors, "DNSWEAVER_INSTANCES: required but not set (comma-separated list of instance names)")
-	}
-
-	// Load each provider instance configuration
+	// Determine providers: file config + env var overrides/additions
+	var providerNames []string
 	var instances []*ProviderInstanceConfig
-	for _, name := range providerNames {
-		inst, instErrs := loadInstanceConfig(name, global.DefaultTTL)
-		allErrors = append(allErrors, instErrs...)
-		instances = append(instances, inst)
+
+	// Check if env vars define providers (takes precedence over file)
+	envProviderNames := parseInstances()
+	if len(envProviderNames) > 0 {
+		// Env vars define providers - use env var loading
+		providerNames = envProviderNames
+		for _, name := range providerNames {
+			inst, instErrs := loadInstanceConfig(name, global.DefaultTTL)
+			allErrors = append(allErrors, instErrs...)
+			instances = append(instances, inst)
+		}
+	} else if len(fileProviders) > 0 {
+		// Use file providers
+		for _, fp := range fileProviders {
+			providerNames = append(providerNames, fp.Name)
+			instances = append(instances, fp)
+		}
+	} else {
+		allErrors = append(allErrors, "no providers configured: set DNSWEAVER_INSTANCES or configure providers in config file")
 	}
 
-	// Load source configuration (traefik, caddy, etc.)
-	sources := loadSourceConfig()
+	// Determine sources: env vars take precedence
+	var sources *SourceConfig
+	if getEnv("DNSWEAVER_SOURCES") != "" {
+		// Env vars define sources
+		sources = loadSourceConfig()
+	} else if fileSources != nil {
+		// Use file sources
+		sources = fileSources
+	} else {
+		// Use default source loading (which defaults to "traefik")
+		sources = loadSourceConfig()
+	}
 
 	cfg := &Config{
 		Global:            global,
 		ProviderNames:     providerNames,
 		ProviderInstances: instances,
 		Sources:           sources,
+		ConfigFile:        configPath,
 	}
 
 	// Run cross-field validation

@@ -300,7 +300,7 @@ func TestDeleteRecordFromCache_DeletesAllTypes(t *testing.T) {
 		knownHostnames: make(map[string]struct{}),
 	}
 
-	actions := r.deleteRecordFromCache(context.Background(), "app.example.com", cache)
+	actions := r.deleteFromCache(context.Background(), "app.example.com", cache)
 
 	// Should delete A and AAAA records
 	if len(actions) != 2 {
@@ -356,7 +356,7 @@ func TestDeleteRecordFromCache_DryRun(t *testing.T) {
 		knownHostnames: make(map[string]struct{}),
 	}
 
-	actions := r.deleteRecordFromCache(context.Background(), "app.example.com", cache)
+	actions := r.deleteFromCache(context.Background(), "app.example.com", cache)
 
 	if len(actions) != 1 {
 		t.Errorf("expected 1 action, got %d", len(actions))
@@ -412,7 +412,7 @@ func TestDeleteRecordWithOwnershipCheck_DeletesOwnedRecords(t *testing.T) {
 		knownHostnames: make(map[string]struct{}),
 	}
 
-	actions := r.deleteRecordWithOwnershipCheck(context.Background(), "app.example.com", cache)
+	actions := r.deleteWithOwnership(context.Background(), "app.example.com", cache)
 
 	// Should have deleted the A record
 	var foundDelete bool
@@ -458,7 +458,7 @@ func TestDeleteRecordWithOwnershipCheck_SkipsUnownedRecords(t *testing.T) {
 		knownHostnames: make(map[string]struct{}),
 	}
 
-	actions := r.deleteRecordWithOwnershipCheck(context.Background(), "app.example.com", cache)
+	actions := r.deleteWithOwnership(context.Background(), "app.example.com", cache)
 
 	// Should skip because no ownership
 	if len(actions) != 1 {
@@ -510,7 +510,7 @@ func TestDeleteRecordWithOwnershipCheck_DryRun(t *testing.T) {
 		knownHostnames: make(map[string]struct{}),
 	}
 
-	actions := r.deleteRecordWithOwnershipCheck(context.Background(), "app.example.com", cache)
+	actions := r.deleteWithOwnership(context.Background(), "app.example.com", cache)
 
 	// Should have a delete action
 	if len(actions) != 1 {

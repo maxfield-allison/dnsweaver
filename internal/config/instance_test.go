@@ -135,7 +135,7 @@ func TestLoadInstanceConfig_Minimal(t *testing.T) {
 
 	prefix := envPrefix(instanceName)
 	os.Setenv(prefix+"TYPE", "technitium")
-	os.Setenv(prefix+"TARGET", "10.1.20.210")
+	os.Setenv(prefix+"TARGET", "10.0.0.100")
 	os.Setenv(prefix+"DOMAINS", "*.example.com")
 
 	cfg, errs := loadInstanceConfig(instanceName, 300)
@@ -153,8 +153,8 @@ func TestLoadInstanceConfig_Minimal(t *testing.T) {
 	if cfg.RecordType != provider.RecordTypeA {
 		t.Errorf("RecordType = %q, want %q", cfg.RecordType, provider.RecordTypeA)
 	}
-	if cfg.Target != "10.1.20.210" {
-		t.Errorf("Target = %q, want %q", cfg.Target, "10.1.20.210")
+	if cfg.Target != "10.0.0.100" {
+		t.Errorf("Target = %q, want %q", cfg.Target, "10.0.0.100")
 	}
 	if cfg.TTL != 300 {
 		t.Errorf("TTL = %d, want %d", cfg.TTL, 300)
@@ -179,7 +179,7 @@ func TestLoadInstanceConfig_Complete(t *testing.T) {
 	prefix := envPrefix(instanceName)
 	os.Setenv(prefix+"TYPE", "technitium")
 	os.Setenv(prefix+"RECORD_TYPE", "A")
-	os.Setenv(prefix+"TARGET", "10.1.20.210")
+	os.Setenv(prefix+"TARGET", "10.0.0.100")
 	os.Setenv(prefix+"TTL", "600")
 	os.Setenv(prefix+"DOMAINS", "*.internal.example.com,app.example.com")
 	os.Setenv(prefix+"EXCLUDE_DOMAINS", "admin.internal.example.com")
@@ -199,8 +199,8 @@ func TestLoadInstanceConfig_Complete(t *testing.T) {
 	if cfg.RecordType != provider.RecordTypeA {
 		t.Errorf("RecordType = %q, want %q", cfg.RecordType, provider.RecordTypeA)
 	}
-	if cfg.Target != "10.1.20.210" {
-		t.Errorf("Target = %q, want %q", cfg.Target, "10.1.20.210")
+	if cfg.Target != "10.0.0.100" {
+		t.Errorf("Target = %q, want %q", cfg.Target, "10.0.0.100")
 	}
 	if cfg.TTL != 600 {
 		t.Errorf("TTL = %d, want %d", cfg.TTL, 600)

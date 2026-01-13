@@ -103,7 +103,7 @@ providers:
     type: technitium
     domains:
       - "*.internal.example.com"
-    target: 10.1.20.210
+    target: 10.0.0.100
     ttl: 300
     config:
       url: http://dns.example.com:5380
@@ -183,8 +183,8 @@ server:
 	if p.Type != "technitium" {
 		t.Errorf("providers[0].type = %q, want %q", p.Type, "technitium")
 	}
-	if p.Target != "10.1.20.210" {
-		t.Errorf("providers[0].target = %q, want %q", p.Target, "10.1.20.210")
+	if p.Target != "10.0.0.100" {
+		t.Errorf("providers[0].target = %q, want %q", p.Target, "10.0.0.100")
 	}
 	// Verify env var interpolation in config
 	if p.Config["token"] != "secret-from-env" {

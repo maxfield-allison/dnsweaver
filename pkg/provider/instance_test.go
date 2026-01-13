@@ -229,7 +229,7 @@ func TestProviderInstanceConfig_Validate_Complete(t *testing.T) {
 		Name:           "internal-dns",
 		TypeName:       "technitium",
 		RecordType:     RecordTypeA,
-		Target:         "10.1.20.210",
+		Target:         "10.0.0.100",
 		TTL:            300,
 		Domains:        []string{"*.local.bluewillows.net"},
 		ExcludeDomains: []string{"admin.*"},

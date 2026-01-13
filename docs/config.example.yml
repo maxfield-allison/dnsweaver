@@ -59,7 +59,7 @@ providers:
       - "*.internal.example.com"
       - "*.home.example.com"
     record_type: A        # A, AAAA, or CNAME
-    target: 10.1.20.210   # Where to point DNS records
+    target: 10.0.0.100    # Where to point DNS records (your load balancer/gateway IP)
     ttl: 300              # TTL in seconds
     mode: managed         # managed, authoritative, or additive
     config:
@@ -115,7 +115,7 @@ providers:
 #   domains_regex:
 #     - "^app-[0-9]+\\.example\\.com$"
 #   record_type: A
-#   target: 10.1.20.210
+#   target: 10.0.0.100
 #   config:
 #     url: http://dns:5380
 #     token: ${TECHNITIUM_TOKEN}

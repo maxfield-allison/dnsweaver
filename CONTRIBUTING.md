@@ -14,7 +14,7 @@ Thank you for your interest in contributing to DNSWeaver!
 
 1. Clone the repository:
    ```bash
-   git clone ssh://git@gitlab.bluewillows.net:2424/root/dnsweaver.git
+   git clone https://github.com/maxfield-allison/dnsweaver.git
    cd dnsweaver
    ```
 

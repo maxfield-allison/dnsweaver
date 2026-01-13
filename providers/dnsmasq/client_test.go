@@ -130,9 +130,9 @@ func TestClient_ParseConfigContent(t *testing.T) {
 		},
 		{
 			name:    "A record",
-			content: "address=/app.example.com/10.1.20.210\n",
+			content: "address=/app.example.com/10.0.0.100\n",
 			want: []dnsmasqRecord{
-				{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "10.1.20.210"},
+				{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "10.0.0.100"},
 			},
 		},
 		{
@@ -152,12 +152,12 @@ func TestClient_ParseConfigContent(t *testing.T) {
 		{
 			name: "mixed records",
 			content: `# Managed by dnsweaver
-address=/app.example.com/10.1.20.210
+address=/app.example.com/10.0.0.100
 address=/ipv6.example.com/2001:db8::1
 cname=www.example.com,app.example.com
 `,
 			want: []dnsmasqRecord{
-				{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "10.1.20.210"},
+				{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "10.0.0.100"},
 				{Hostname: "ipv6.example.com", Type: provider.RecordTypeAAAA, Target: "2001:db8::1"},
 				{Hostname: "www.example.com", Type: provider.RecordTypeCNAME, Target: "app.example.com"},
 			},
@@ -194,7 +194,7 @@ cname=www.example.com,app.example.com
 }
 
 func TestClient_ParseConfigContent_WithZoneFilter(t *testing.T) {
-	content := `address=/app.example.com/10.1.20.210
+	content := `address=/app.example.com/10.0.0.100
 address=/app.other.com/10.1.20.211
 cname=www.example.com,app.example.com
 `
@@ -228,7 +228,7 @@ func TestClient_List(t *testing.T) {
 	}{
 		{
 			name:      "file exists with records",
-			fileData:  "address=/app.example.com/10.1.20.210\n",
+			fileData:  "address=/app.example.com/10.0.0.100\n",
 			fileExist: true,
 			wantCount: 1,
 			wantErr:   false,
@@ -276,9 +276,9 @@ func TestClient_FormatRecord(t *testing.T) {
 			record: dnsmasqRecord{
 				Hostname: "app.example.com",
 				Type:     provider.RecordTypeA,
-				Target:   "10.1.20.210",
+				Target:   "10.0.0.100",
 			},
-			want:    "address=/app.example.com/10.1.20.210",
+			want:    "address=/app.example.com/10.0.0.100",
 			wantErr: false,
 		},
 		{
@@ -343,7 +343,7 @@ func TestClient_Create(t *testing.T) {
 	err := client.Create(ctx, dnsmasqRecord{
 		Hostname: "app.example.com",
 		Type:     provider.RecordTypeA,
-		Target:   "10.1.20.210",
+		Target:   "10.0.0.100",
 	})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -351,7 +351,7 @@ func TestClient_Create(t *testing.T) {
 
 	// Verify file content
 	content := string(mockFS.files["/etc/dnsmasq.d/test.conf"])
-	if !strings.Contains(content, "address=/app.example.com/10.1.20.210") {
+	if !strings.Contains(content, "address=/app.example.com/10.0.0.100") {
 		t.Errorf("file should contain the record, got: %s", content)
 	}
 
@@ -374,7 +374,7 @@ func TestClient_Create(t *testing.T) {
 func TestClient_Delete(t *testing.T) {
 	mockFS := newMockFileSystem()
 	mockFS.files["/etc/dnsmasq.d/test.conf"] = []byte(`# Managed by dnsweaver
-address=/app.example.com/10.1.20.210
+address=/app.example.com/10.0.0.100
 address=/other.example.com/10.1.20.211
 `)
 
@@ -387,14 +387,14 @@ address=/other.example.com/10.1.20.211
 	err := client.Delete(ctx, dnsmasqRecord{
 		Hostname: "app.example.com",
 		Type:     provider.RecordTypeA,
-		Target:   "10.1.20.210",
+		Target:   "10.0.0.100",
 	})
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
 	content := string(mockFS.files["/etc/dnsmasq.d/test.conf"])
-	if strings.Contains(content, "address=/app.example.com/10.1.20.210") {
+	if strings.Contains(content, "address=/app.example.com/10.0.0.100") {
 		t.Errorf("file should not contain deleted record, got: %s", content)
 	}
 	if !strings.Contains(content, "address=/other.example.com/10.1.20.211") {
@@ -413,7 +413,7 @@ func TestClient_Delete_NonExistent(t *testing.T) {
 	err := client.Delete(context.Background(), dnsmasqRecord{
 		Hostname: "notexist.example.com",
 		Type:     provider.RecordTypeA,
-		Target:   "10.1.20.210",
+		Target:   "10.0.0.100",
 	})
 	if err != nil {
 		t.Errorf("Delete() should not error for non-existent record, got: %v", err)
@@ -428,7 +428,7 @@ func TestClient_WriteRecords(t *testing.T) {
 		WithFileSystem(mockFS))
 
 	records := []dnsmasqRecord{
-		{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "10.1.20.210"},
+		{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "10.0.0.100"},
 		{Hostname: "www.example.com", Type: provider.RecordTypeCNAME, Target: "app.example.com"},
 	}
 
@@ -438,7 +438,7 @@ func TestClient_WriteRecords(t *testing.T) {
 	}
 
 	content := string(mockFS.files["/etc/dnsmasq.d/test.conf"])
-	if !strings.Contains(content, "address=/app.example.com/10.1.20.210") {
+	if !strings.Contains(content, "address=/app.example.com/10.0.0.100") {
 		t.Errorf("file should contain A record")
 	}
 	if !strings.Contains(content, "cname=www.example.com,app.example.com") {

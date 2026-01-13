@@ -106,7 +106,7 @@ func TestProvider_Zone(t *testing.T) {
 func TestProvider_List(t *testing.T) {
 	mockFS := newMockFileSystem()
 	mockFS.dirs["/etc/dnsmasq.d"] = true
-	mockFS.files["/etc/dnsmasq.d/dnsweaver.conf"] = []byte(`address=/app.example.com/10.1.20.210
+	mockFS.files["/etc/dnsmasq.d/dnsweaver.conf"] = []byte(`address=/app.example.com/10.0.0.100
 address=/ipv6.example.com/fd00::1
 cname=www.example.com,app.example.com
 `)
@@ -175,7 +175,7 @@ func TestProvider_Create(t *testing.T) {
 	err = p.Create(context.Background(), provider.Record{
 		Hostname: "app.example.com",
 		Type:     provider.RecordTypeA,
-		Target:   "10.1.20.210",
+		Target:   "10.0.0.100",
 		TTL:      300,
 	})
 	if err != nil {
@@ -238,7 +238,7 @@ func TestProvider_Create_UnsupportedType(t *testing.T) {
 func TestProvider_Delete(t *testing.T) {
 	mockFS := newMockFileSystem()
 	mockFS.dirs["/etc/dnsmasq.d"] = true
-	mockFS.files["/etc/dnsmasq.d/dnsweaver.conf"] = []byte("address=/app.example.com/10.1.20.210\n")
+	mockFS.files["/etc/dnsmasq.d/dnsweaver.conf"] = []byte("address=/app.example.com/10.0.0.100\n")
 
 	client := NewClient("/etc/dnsmasq.d", "dnsweaver.conf", "echo reload", "",
 		WithFileSystem(mockFS))
@@ -257,7 +257,7 @@ func TestProvider_Delete(t *testing.T) {
 	err = p.Delete(context.Background(), provider.Record{
 		Hostname: "app.example.com",
 		Type:     provider.RecordTypeA,
-		Target:   "10.1.20.210",
+		Target:   "10.0.0.100",
 	})
 	if err != nil {
 		t.Fatalf("Delete() error = %v", err)

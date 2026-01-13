@@ -1,16 +1,25 @@
+# GitHub-to-GitLab Sync Configuration
+#
+# Sync Direction: GitHub → GitLab (one-way for content)
+#   - GitHub issues → GitLab issues
+#   - GitHub PRs → GitLab issues (for tracking)
+#   - GitLab → GitHub: Only state changes (close/reopen)
+
 gitlab:
   enabled: true
+  host: 'gitlab.bluewillows.net'
+  projectId: 15
   sync:
     branches: { enabled: false }
     tags: { enabled: false }
     releases: { enabled: false }
     issues:
       enabled: true
-      comments: { enabled: false }
+      comments: { enabled: true }
     pullRequests:
       enabled: true
       autoMerge: false
-      comments: { enabled: false }
+      comments: { enabled: true }
 
 github:
   enabled: true

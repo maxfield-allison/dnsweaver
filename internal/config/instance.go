@@ -27,6 +27,10 @@ type ProviderInstanceConfig struct {
 	// TTL for DNS records.
 	TTL int
 
+	// Mode is the operational mode (managed, authoritative, additive).
+	// Defaults to "managed" if not set.
+	Mode provider.OperationalMode
+
 	// Domain matching patterns
 	Domains             []string // Glob patterns (default)
 	DomainsRegex        []string // Regex patterns (opt-in)
@@ -46,6 +50,7 @@ func (c *ProviderInstanceConfig) ToProviderConfig() provider.ProviderInstanceCon
 		RecordType:          c.RecordType,
 		Target:              c.Target,
 		TTL:                 c.TTL,
+		Mode:                c.Mode,
 		Domains:             c.Domains,
 		DomainsRegex:        c.DomainsRegex,
 		ExcludeDomains:      c.ExcludeDomains,
@@ -128,6 +133,18 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 		}
 	} else {
 		cfg.TTL = defaultTTL
+	}
+
+	// MODE (optional, defaults to "managed")
+	if modeStr := getEnv(prefix + "MODE"); modeStr != "" {
+		mode, err := provider.ParseOperationalMode(modeStr)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%sMODE: %s", prefix, err.Error()))
+		} else {
+			cfg.Mode = mode
+		}
+	} else {
+		cfg.Mode = provider.ModeManaged
 	}
 
 	// Domain patterns - either DOMAINS or DOMAINS_REGEX, not both

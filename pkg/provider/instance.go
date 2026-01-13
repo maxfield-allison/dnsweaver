@@ -46,6 +46,7 @@ func isIPv6Address(s string) bool {
 //   - Record type (A or CNAME)
 //   - Target (IP for A, hostname for CNAME)
 //   - TTL
+//   - Operational mode (managed, authoritative, additive)
 type ProviderInstance struct {
 	// Provider is the underlying DNS provider implementation.
 	Provider Provider
@@ -63,6 +64,10 @@ type ProviderInstance struct {
 
 	// TTL is the time-to-live for DNS records in seconds.
 	TTL int
+
+	// Mode is the operational mode for this instance.
+	// Defaults to ModeManaged if not set.
+	Mode OperationalMode
 }
 
 // Name returns the provider instance name (delegates to Provider).
@@ -362,6 +367,10 @@ type ProviderInstanceConfig struct {
 
 	// TTL is the record TTL in seconds.
 	TTL int
+
+	// Mode is the operational mode (managed, authoritative, additive).
+	// Defaults to "managed" if not set.
+	Mode OperationalMode
 
 	// Domains is a list of glob patterns for matching hostnames.
 	// At least one is required.

@@ -979,3 +979,225 @@ func TestEnsureRecord_MultipleMatchingProviders(t *testing.T) {
 		t.Errorf("external-dns should be called once, got %d", createdMock2)
 	}
 }
+
+// =============================================================================
+// Operational Mode Tests
+// =============================================================================
+
+func TestCleanupOrphans_AdditiveMode_NeverDeletes(t *testing.T) {
+	mock := newTestMockProvider("test-dns")
+	mock.AddRecord(provider.Record{
+		Hostname: "orphan.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.1",
+	})
+	// Add ownership record
+	mock.AddRecord(provider.Record{
+		Hostname: "_dnsweaver.orphan.example.com",
+		Type:     provider.RecordTypeTXT,
+		Target:   "heritage=dnsweaver",
+	})
+
+	logger := quietLogger()
+	providers := provider.NewRegistry(logger)
+	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+		return mock, nil
+	})
+	// Create instance with additive mode
+	err := providers.CreateInstance(provider.ProviderInstanceConfig{
+		Name:       "test-dns",
+		TypeName:   "mock",
+		RecordType: provider.RecordTypeA,
+		Target:     "10.0.0.1",
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+		Mode:       provider.ModeAdditive,
+	})
+	if err != nil {
+		t.Fatalf("CreateInstance failed: %v", err)
+	}
+
+	cache := newRecordCache(context.Background(), providers, logger)
+
+	r := &Reconciler{
+		providers: providers,
+		config:    Config{CleanupOrphans: true, OwnershipTracking: true, Enabled: true},
+		logger:    logger,
+		knownHostnames: map[string]struct{}{
+			"orphan.example.com": {}, // Was known before
+		},
+	}
+
+	// No current hostnames - orphan.example.com is orphaned
+	currentHostnames := map[string]*source.Hostname{}
+
+	actions := r.cleanupOrphans(context.Background(), currentHostnames, cache)
+
+	// Should skip due to additive mode
+	if len(actions) != 1 {
+		t.Fatalf("expected 1 action (skip), got %d", len(actions))
+	}
+	if actions[0].Type != ActionSkip {
+		t.Errorf("expected ActionSkip in additive mode, got %v", actions[0].Type)
+	}
+
+	// Verify record was NOT deleted
+	deleted := mock.GetDeleted()
+	if len(deleted) > 0 {
+		t.Error("additive mode should NOT delete any records")
+	}
+}
+
+func TestCleanupOrphans_ManagedMode_DeletesOwnedOnly(t *testing.T) {
+	mock := newTestMockProvider("test-dns")
+	// Add record WITH ownership
+	mock.AddRecord(provider.Record{
+		Hostname: "owned.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.1",
+	})
+	mock.AddRecord(provider.Record{
+		Hostname: "_dnsweaver.owned.example.com",
+		Type:     provider.RecordTypeTXT,
+		Target:   "heritage=dnsweaver",
+	})
+	// Add record WITHOUT ownership
+	mock.AddRecord(provider.Record{
+		Hostname: "unowned.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.2",
+	})
+
+	logger := quietLogger()
+	providers := provider.NewRegistry(logger)
+	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+		return mock, nil
+	})
+	// Create instance with managed mode (default)
+	err := providers.CreateInstance(provider.ProviderInstanceConfig{
+		Name:       "test-dns",
+		TypeName:   "mock",
+		RecordType: provider.RecordTypeA,
+		Target:     "10.0.0.1",
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+		Mode:       provider.ModeManaged,
+	})
+	if err != nil {
+		t.Fatalf("CreateInstance failed: %v", err)
+	}
+
+	cache := newRecordCache(context.Background(), providers, logger)
+
+	r := &Reconciler{
+		providers: providers,
+		config:    Config{CleanupOrphans: true, OwnershipTracking: true, Enabled: true},
+		logger:    logger,
+		knownHostnames: map[string]struct{}{
+			"owned.example.com":   {},
+			"unowned.example.com": {},
+		},
+	}
+
+	// No current hostnames - both are orphaned
+	currentHostnames := map[string]*source.Hostname{}
+
+	actions := r.cleanupOrphans(context.Background(), currentHostnames, cache)
+
+	// Should have 2 actions: delete owned, skip unowned
+	if len(actions) != 2 {
+		t.Fatalf("expected 2 actions, got %d", len(actions))
+	}
+
+	var ownedAction, unownedAction *Action
+	for i := range actions {
+		if actions[i].Hostname == "owned.example.com" {
+			ownedAction = &actions[i]
+		}
+		if actions[i].Hostname == "unowned.example.com" {
+			unownedAction = &actions[i]
+		}
+	}
+
+	if ownedAction == nil || ownedAction.Type != ActionDelete {
+		t.Error("owned record should be deleted in managed mode")
+	}
+	if unownedAction == nil || unownedAction.Type != ActionSkip {
+		t.Error("unowned record should be skipped in managed mode")
+	}
+}
+
+func TestCleanupOrphans_AuthoritativeMode_DeletesAll(t *testing.T) {
+	mock := newTestMockProvider("test-dns")
+	// Add record WITH ownership
+	mock.AddRecord(provider.Record{
+		Hostname: "owned.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.1",
+	})
+	mock.AddRecord(provider.Record{
+		Hostname: "_dnsweaver.owned.example.com",
+		Type:     provider.RecordTypeTXT,
+		Target:   "heritage=dnsweaver",
+	})
+	// Add record WITHOUT ownership
+	mock.AddRecord(provider.Record{
+		Hostname: "unowned.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.2",
+	})
+
+	logger := quietLogger()
+	providers := provider.NewRegistry(logger)
+	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+		return mock, nil
+	})
+	// Create instance with authoritative mode
+	err := providers.CreateInstance(provider.ProviderInstanceConfig{
+		Name:       "test-dns",
+		TypeName:   "mock",
+		RecordType: provider.RecordTypeA,
+		Target:     "10.0.0.1",
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+		Mode:       provider.ModeAuthoritative,
+	})
+	if err != nil {
+		t.Fatalf("CreateInstance failed: %v", err)
+	}
+
+	cache := newRecordCache(context.Background(), providers, logger)
+
+	r := &Reconciler{
+		providers: providers,
+		config:    Config{CleanupOrphans: true, OwnershipTracking: true, Enabled: true},
+		logger:    logger,
+		knownHostnames: map[string]struct{}{
+			"owned.example.com":   {},
+			"unowned.example.com": {},
+		},
+	}
+
+	// No current hostnames - both are orphaned
+	currentHostnames := map[string]*source.Hostname{}
+
+	actions := r.cleanupOrphans(context.Background(), currentHostnames, cache)
+
+	// In authoritative mode, both should be deleted
+	var deletedOwned, deletedUnowned bool
+	for _, action := range actions {
+		if action.Hostname == "owned.example.com" && action.Type == ActionDelete {
+			deletedOwned = true
+		}
+		if action.Hostname == "unowned.example.com" && action.Type == ActionDelete {
+			deletedUnowned = true
+		}
+	}
+
+	if !deletedOwned {
+		t.Error("owned record should be deleted in authoritative mode")
+	}
+	if !deletedUnowned {
+		t.Error("unowned record should be deleted in authoritative mode (ignores ownership)")
+	}
+}

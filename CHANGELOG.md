@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **YAML Configuration File Support** (#66): Full YAML config file support
+  - Load configuration from YAML file via `DNSWEAVER_CONFIG` env var or `--config` flag
+  - Environment variable interpolation with `${VAR}` and `${VAR:-default}` syntax
+  - Configuration priority: env vars > config file > defaults
+  - Example config file at `docs/config.example.yml`
+  - Supports all existing configuration options in structured YAML format
+- **Version Flag**: Added `--version` flag to display version and build date
+
 ## [0.4.2] - 2026-01-12
 
 ### Fixed

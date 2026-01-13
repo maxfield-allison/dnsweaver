@@ -1,0 +1,122 @@
+# DNSWeaver Configuration File Example
+#
+# This file demonstrates the full YAML configuration format.
+# All settings shown with their default values unless marked otherwise.
+#
+# Configuration priority (highest to lowest):
+#   1. Environment variables (DNSWEAVER_* prefix)
+#   2. This config file
+#   3. Default values
+#
+# Environment variable interpolation: Use ${VAR} or ${VAR:-default}
+# Example: token: ${TECHNITIUM_TOKEN}
+
+# Logging configuration
+logging:
+  level: info        # debug, info, warn, error
+  format: json       # json or text
+
+# Reconciler settings
+reconciler:
+  interval: 60s           # How often to reconcile DNS records (Go duration)
+  dry_run: false          # If true, log changes but don't apply them
+  cleanup_orphans: true   # Delete records for removed containers
+  cleanup_on_stop: true   # Delete records when containers stop (not just remove)
+  ownership_tracking: true # Use TXT records to track record ownership
+  adopt_existing: false   # Adopt pre-existing DNS records by creating TXT records
+
+# Docker connection settings
+docker:
+  host: unix:///var/run/docker.sock  # Docker socket or TCP URL
+  mode: auto                          # auto, swarm, or standalone
+
+# Health and metrics server
+server:
+  port: 8080  # Port for /health, /ready, and /metrics endpoints
+
+# Hostname sources
+# Order matters: first source with matching hostname wins
+sources:
+  # Traefik source with optional file-based discovery
+  - name: traefik
+    file_discovery:
+      paths:
+        - /config/traefik/dynamic
+      pattern: "*.yml"
+      poll_interval: 60s
+      watch_method: auto  # auto, inotify, or poll
+
+  # Native dnsweaver labels (no additional config needed)
+  - name: dnsweaver
+
+# DNS providers
+# Order matters: first matching provider handles the hostname
+providers:
+  # Internal DNS using Technitium
+  - name: internal
+    type: technitium
+    domains:
+      - "*.internal.example.com"
+      - "*.home.example.com"
+    record_type: A        # A, AAAA, or CNAME
+    target: 10.1.20.210   # Where to point DNS records
+    ttl: 300              # TTL in seconds
+    mode: managed         # managed, authoritative, or additive
+    config:
+      url: http://dns.example.com:5380
+      token: ${TECHNITIUM_TOKEN}        # env var interpolation
+      zone: internal.example.com
+
+  # Public DNS using Cloudflare
+  - name: public
+    type: cloudflare
+    domains:
+      - "*.example.com"
+    exclude_domains:
+      - "*.internal.example.com"    # Don't manage internal subdomains
+      - "*.home.example.com"
+    record_type: CNAME
+    target: lb.example.com          # CNAME target
+    ttl: 300
+    config:
+      api_token: ${CLOUDFLARE_TOKEN}
+      zone_id: ${CLOUDFLARE_ZONE_ID}
+      proxied: "false"              # Cloudflare proxy status
+
+  # Pi-hole example
+  - name: pihole
+    type: pihole
+    domains:
+      - "*.local.example.com"
+    record_type: A
+    target: 192.168.1.100
+    config:
+      url: http://pihole.example.com
+      token: ${PIHOLE_TOKEN}
+
+  # Webhook provider for custom integrations
+  - name: custom
+    type: webhook
+    domains:
+      - "*.custom.example.com"
+    record_type: A
+    target: 10.0.0.50
+    config:
+      url: https://webhook.example.com/dns
+      auth_header: X-API-Key
+      auth_token: ${WEBHOOK_TOKEN}
+      timeout: 30s
+      retries: "3"
+      retry_delay: 5s
+
+# Advanced: Using regex for domain matching
+# - name: regex-example
+#   type: technitium
+#   domains_regex:
+#     - "^app-[0-9]+\\.example\\.com$"
+#   record_type: A
+#   target: 10.1.20.210
+#   config:
+#     url: http://dns:5380
+#     token: ${TECHNITIUM_TOKEN}
+#     zone: example.com

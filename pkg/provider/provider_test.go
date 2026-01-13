@@ -265,3 +265,88 @@ func TestRecordTypeConstants(t *testing.T) {
 		t.Errorf("RecordTypeSRV = %q, expected %q", RecordTypeSRV, "SRV")
 	}
 }
+
+func TestCapabilities_SupportsRecordType(t *testing.T) {
+	tests := []struct {
+		name     string
+		caps     Capabilities
+		rt       RecordType
+		expected bool
+	}{
+		{
+			name: "full capabilities - A record",
+			caps: Capabilities{
+				SupportedRecordTypes: []RecordType{RecordTypeA, RecordTypeAAAA, RecordTypeCNAME, RecordTypeSRV, RecordTypeTXT},
+			},
+			rt:       RecordTypeA,
+			expected: true,
+		},
+		{
+			name: "full capabilities - SRV record",
+			caps: Capabilities{
+				SupportedRecordTypes: []RecordType{RecordTypeA, RecordTypeAAAA, RecordTypeCNAME, RecordTypeSRV, RecordTypeTXT},
+			},
+			rt:       RecordTypeSRV,
+			expected: true,
+		},
+		{
+			name: "limited capabilities - A only",
+			caps: Capabilities{
+				SupportedRecordTypes: []RecordType{RecordTypeA},
+			},
+			rt:       RecordTypeA,
+			expected: true,
+		},
+		{
+			name: "limited capabilities - missing AAAA",
+			caps: Capabilities{
+				SupportedRecordTypes: []RecordType{RecordTypeA, RecordTypeCNAME},
+			},
+			rt:       RecordTypeAAAA,
+			expected: false,
+		},
+		{
+			name: "empty capabilities",
+			caps: Capabilities{
+				SupportedRecordTypes: []RecordType{},
+			},
+			rt:       RecordTypeA,
+			expected: false,
+		},
+		{
+			name: "nil capabilities",
+			caps: Capabilities{
+				SupportedRecordTypes: nil,
+			},
+			rt:       RecordTypeA,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.caps.SupportsRecordType(tt.rt)
+			if result != tt.expected {
+				t.Errorf("SupportsRecordType(%s) = %v, expected %v", tt.rt, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCapabilities_Defaults(t *testing.T) {
+	// Test that zero-value Capabilities are restrictive (safe defaults)
+	var caps Capabilities
+
+	if caps.SupportsOwnershipTXT {
+		t.Error("zero-value SupportsOwnershipTXT should be false")
+	}
+	if caps.SupportsNativeUpdate {
+		t.Error("zero-value SupportsNativeUpdate should be false")
+	}
+	if len(caps.SupportedRecordTypes) != 0 {
+		t.Error("zero-value SupportedRecordTypes should be empty")
+	}
+	if caps.SupportsRecordType(RecordTypeA) {
+		t.Error("zero-value caps should not support any record type")
+	}
+}

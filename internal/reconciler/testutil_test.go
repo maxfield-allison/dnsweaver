@@ -83,6 +83,20 @@ func newTestMockProvider(name string) *testMockProvider {
 func (m *testMockProvider) Name() string { return m.name }
 func (m *testMockProvider) Type() string { return m.typeName }
 
+func (m *testMockProvider) Capabilities() provider.Capabilities {
+	return provider.Capabilities{
+		SupportsOwnershipTXT: true,
+		SupportsNativeUpdate: true,
+		SupportedRecordTypes: []provider.RecordType{
+			provider.RecordTypeA,
+			provider.RecordTypeAAAA,
+			provider.RecordTypeCNAME,
+			provider.RecordTypeSRV,
+			provider.RecordTypeTXT,
+		},
+	}
+}
+
 func (m *testMockProvider) Ping(_ context.Context) error {
 	return m.pingErr
 }

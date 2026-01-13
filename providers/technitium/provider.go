@@ -78,6 +78,22 @@ func (p *Provider) Type() string {
 	return "technitium"
 }
 
+// Capabilities returns the provider's feature support.
+// Technitium supports all features: TXT ownership, native update, and all record types.
+func (p *Provider) Capabilities() provider.Capabilities {
+	return provider.Capabilities{
+		SupportsOwnershipTXT: true,
+		SupportsNativeUpdate: true,
+		SupportedRecordTypes: []provider.RecordType{
+			provider.RecordTypeA,
+			provider.RecordTypeAAAA,
+			provider.RecordTypeCNAME,
+			provider.RecordTypeSRV,
+			provider.RecordTypeTXT,
+		},
+	}
+}
+
 // Zone returns the configured DNS zone.
 func (p *Provider) Zone() string {
 	return p.zone

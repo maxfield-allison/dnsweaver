@@ -38,6 +38,33 @@ type Record struct {
 	SRV        *SRVData // SRV-specific data (only set when Type is SRV)
 }
 
+// Capabilities describes a provider's feature support.
+// Used by the reconciler to adapt behavior based on provider limitations.
+type Capabilities struct {
+	// SupportsOwnershipTXT indicates if the provider can create TXT records
+	// for ownership tracking. File-based providers (dnsmasq) typically cannot.
+	SupportsOwnershipTXT bool
+
+	// SupportsNativeUpdate indicates if the provider has a native update operation.
+	// If false, updates require delete+create. Providers with native update should
+	// also implement the Updater interface.
+	SupportsNativeUpdate bool
+
+	// SupportedRecordTypes lists the DNS record types this provider can manage.
+	// Used to filter operations in authoritative mode and validate requested records.
+	SupportedRecordTypes []RecordType
+}
+
+// SupportsRecordType returns true if the provider supports the given record type.
+func (c Capabilities) SupportsRecordType(rt RecordType) bool {
+	for _, t := range c.SupportedRecordTypes {
+		if t == rt {
+			return true
+		}
+	}
+	return false
+}
+
 // Provider defines the interface for DNS providers.
 // Each provider implementation (Technitium, Cloudflare, etc.) must satisfy this interface.
 type Provider interface {
@@ -49,6 +76,10 @@ type Provider interface {
 
 	// Ping checks connectivity to the provider.
 	Ping(ctx context.Context) error
+
+	// Capabilities returns the provider's feature support.
+	// Used by the reconciler to adapt behavior based on provider limitations.
+	Capabilities() Capabilities
 
 	// List returns all managed records in the configured zone.
 	List(ctx context.Context) ([]Record, error)

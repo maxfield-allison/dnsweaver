@@ -125,6 +125,24 @@ func (p *Provider) Type() string {
 	return "webhook"
 }
 
+// Capabilities returns the provider's feature support.
+// Webhook providers are assumed to have full capabilities since
+// the actual DNS backend is abstracted. The remote webhook endpoint
+// is responsible for handling all record types and operations.
+func (p *Provider) Capabilities() provider.Capabilities {
+	return provider.Capabilities{
+		SupportsOwnershipTXT: true,
+		SupportsNativeUpdate: true,
+		SupportedRecordTypes: []provider.RecordType{
+			provider.RecordTypeA,
+			provider.RecordTypeAAAA,
+			provider.RecordTypeCNAME,
+			provider.RecordTypeSRV,
+			provider.RecordTypeTXT,
+		},
+	}
+}
+
 // Ping checks connectivity to the webhook endpoint.
 func (p *Provider) Ping(ctx context.Context) error {
 	return p.client.Ping(ctx)

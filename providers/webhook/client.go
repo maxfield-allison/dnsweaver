@@ -386,3 +386,112 @@ func (c *Client) Delete(ctx context.Context, hostname, recordType string) error 
 
 	return nil
 }
+
+// UpdateRequest is the request body for update operations.
+type UpdateRequest struct {
+	Hostname string   `json:"hostname"`
+	Type     string   `json:"type"`
+	OldValue string   `json:"old_value"`
+	NewValue string   `json:"new_value"`
+	TTL      int      `json:"ttl"`
+	SRV      *SRVData `json:"srv,omitempty"`     // SRV-specific data for new value (only for SRV records)
+	OldSRV   *SRVData `json:"old_srv,omitempty"` // SRV-specific data for old value (only for SRV records)
+}
+
+// Update sends a request to update an existing DNS record.
+// Sends PUT /update with UpdateRequest body.
+// Webhook endpoints that don't support update will return 404 or 405,
+// and the caller should fall back to delete+create.
+func (c *Client) Update(ctx context.Context, hostname, recordType, oldValue, newValue string, ttl int) error {
+	reqBody := UpdateRequest{
+		Hostname: hostname,
+		Type:     recordType,
+		OldValue: oldValue,
+		NewValue: newValue,
+		TTL:      ttl,
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshaling request: %w", err)
+	}
+
+	resp, body, err := c.doRequest(ctx, http.MethodPut, "/update", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("update failed: %w", err)
+	}
+
+	// Accept 200 OK, 204 No Content
+	if resp.StatusCode != http.StatusOK &&
+		resp.StatusCode != http.StatusNoContent {
+		// Try to parse error response
+		var errResp ErrorResponse
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			return fmt.Errorf("update failed: %s", errResp.Error)
+		}
+		return fmt.Errorf("update failed: unexpected status %d", resp.StatusCode)
+	}
+
+	c.logger.Info("updated record via webhook",
+		slog.String("hostname", hostname),
+		slog.String("type", recordType),
+		slog.String("old_value", oldValue),
+		slog.String("new_value", newValue),
+		slog.Int("ttl", ttl),
+	)
+
+	return nil
+}
+
+// UpdateSRV sends a request to update an existing SRV record.
+// Sends PUT /update with UpdateRequest body including SRV data.
+func (c *Client) UpdateSRV(ctx context.Context, hostname string, oldPriority, oldWeight, oldPort uint16, oldTarget string,
+	newPriority, newWeight, newPort uint16, newTarget string, ttl int) error {
+	reqBody := UpdateRequest{
+		Hostname: hostname,
+		Type:     "SRV",
+		OldValue: oldTarget,
+		NewValue: newTarget,
+		TTL:      ttl,
+		OldSRV: &SRVData{
+			Priority: oldPriority,
+			Weight:   oldWeight,
+			Port:     oldPort,
+		},
+		SRV: &SRVData{
+			Priority: newPriority,
+			Weight:   newWeight,
+			Port:     newPort,
+		},
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshaling request: %w", err)
+	}
+
+	resp, body, err := c.doRequest(ctx, http.MethodPut, "/update", bytes.NewReader(bodyBytes))
+	if err != nil {
+		return fmt.Errorf("update SRV failed: %w", err)
+	}
+
+	// Accept 200 OK, 204 No Content
+	if resp.StatusCode != http.StatusOK &&
+		resp.StatusCode != http.StatusNoContent {
+		// Try to parse error response
+		var errResp ErrorResponse
+		if json.Unmarshal(body, &errResp) == nil && errResp.Error != "" {
+			return fmt.Errorf("update SRV failed: %s", errResp.Error)
+		}
+		return fmt.Errorf("update SRV failed: unexpected status %d", resp.StatusCode)
+	}
+
+	c.logger.Info("updated SRV record via webhook",
+		slog.String("hostname", hostname),
+		slog.String("old_target", oldTarget),
+		slog.String("new_target", newTarget),
+		slog.Int("ttl", ttl),
+	)
+
+	return nil
+}

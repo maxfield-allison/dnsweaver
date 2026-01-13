@@ -91,6 +91,26 @@ type Provider interface {
 	Delete(ctx context.Context, record Record) error
 }
 
+// Updater is an optional interface that providers can implement to support
+// native in-place record updates. This is more efficient than delete+create
+// and avoids brief DNS gaps when changing record values.
+//
+// The reconciler will check if a provider implements Updater and use it when
+// available. If not, the reconciler falls back to delete+create.
+//
+// Providers that implement Updater should also set Capabilities().SupportsNativeUpdate = true.
+type Updater interface {
+	// Update modifies an existing DNS record in place.
+	// The existing record is identified by its current values (hostname, type, target).
+	// The desired record contains the new values to apply.
+	//
+	// Implementations should:
+	// - Only modify fields that differ between existing and desired
+	// - Return ErrRecordNotFound if the existing record doesn't exist
+	// - Be idempotent (calling with identical records is a no-op)
+	Update(ctx context.Context, existing, desired Record) error
+}
+
 // RecordEquals returns true if two records are logically equal.
 // Provider-specific IDs are not compared.
 func RecordEquals(a, b Record) bool {

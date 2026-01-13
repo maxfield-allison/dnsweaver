@@ -362,6 +362,41 @@ func (c *Client) DeleteRecord(ctx context.Context, zoneID, recordID string) erro
 	return nil
 }
 
+// UpdateRecord updates a DNS record by ID.
+// The recordType, content, ttl, and proxied parameters specify the new values.
+func (c *Client) UpdateRecord(ctx context.Context, zoneID, recordID, recordType, name, content string, ttl int, proxied bool) error {
+	reqBody := createRecordRequest{
+		Type:    recordType,
+		Name:    name,
+		Content: content,
+		TTL:     ttl,
+		Proxied: proxied,
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshaling request: %w", err)
+	}
+
+	path := fmt.Sprintf("/zones/%s/dns_records/%s", zoneID, recordID)
+	_, err = c.doRequest(ctx, http.MethodPatch, path, strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		return fmt.Errorf("updating record: %w", err)
+	}
+
+	c.logger.Info("updated DNS record",
+		slog.String("zone_id", zoneID),
+		slog.String("record_id", recordID),
+		slog.String("type", recordType),
+		slog.String("name", name),
+		slog.String("content", content),
+		slog.Int("ttl", ttl),
+		slog.Bool("proxied", proxied),
+	)
+
+	return nil
+}
+
 // FindRecord finds a DNS record by name and type in the given zone.
 // Returns the record if found, nil otherwise.
 func (c *Client) FindRecord(ctx context.Context, zoneID, recordType, name string) (*dnsRecord, error) {

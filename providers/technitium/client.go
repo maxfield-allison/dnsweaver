@@ -416,6 +416,85 @@ func (c *Client) DeleteSRVRecord(ctx context.Context, zone, hostname string, pri
 	return nil
 }
 
+// UpdateARecord updates an A record's target IP address in the specified zone.
+// The Technitium API requires the old IP to identify the record.
+func (c *Client) UpdateARecord(ctx context.Context, zone, hostname, oldIP, newIP string, ttl int) error {
+	params := url.Values{}
+	params.Set("zone", zone)
+	params.Set("domain", hostname)
+	params.Set("type", "A")
+	params.Set("ipAddress", oldIP)
+	params.Set("newIpAddress", newIP)
+	params.Set("ttl", strconv.Itoa(ttl))
+
+	_, err := c.doRequest(ctx, "/api/zones/records/update", params)
+	if err != nil {
+		return fmt.Errorf("updating A record for %s: %w", hostname, err)
+	}
+
+	c.logger.Info("updated A record",
+		slog.String("hostname", hostname),
+		slog.String("old_ip", oldIP),
+		slog.String("new_ip", newIP),
+		slog.String("zone", zone),
+		slog.Int("ttl", ttl),
+	)
+
+	return nil
+}
+
+// UpdateAAAARecord updates an AAAA (IPv6) record's target IP address in the specified zone.
+func (c *Client) UpdateAAAARecord(ctx context.Context, zone, hostname, oldIP, newIP string, ttl int) error {
+	params := url.Values{}
+	params.Set("zone", zone)
+	params.Set("domain", hostname)
+	params.Set("type", "AAAA")
+	params.Set("ipAddress", oldIP)
+	params.Set("newIpAddress", newIP)
+	params.Set("ttl", strconv.Itoa(ttl))
+
+	_, err := c.doRequest(ctx, "/api/zones/records/update", params)
+	if err != nil {
+		return fmt.Errorf("updating AAAA record for %s: %w", hostname, err)
+	}
+
+	c.logger.Info("updated AAAA record",
+		slog.String("hostname", hostname),
+		slog.String("old_ip", oldIP),
+		slog.String("new_ip", newIP),
+		slog.String("zone", zone),
+		slog.Int("ttl", ttl),
+	)
+
+	return nil
+}
+
+// UpdateCNAMERecord updates a CNAME record's target in the specified zone.
+func (c *Client) UpdateCNAMERecord(ctx context.Context, zone, hostname, oldTarget, newTarget string, ttl int) error {
+	params := url.Values{}
+	params.Set("zone", zone)
+	params.Set("domain", hostname)
+	params.Set("type", "CNAME")
+	params.Set("cname", oldTarget)
+	params.Set("newCname", newTarget)
+	params.Set("ttl", strconv.Itoa(ttl))
+
+	_, err := c.doRequest(ctx, "/api/zones/records/update", params)
+	if err != nil {
+		return fmt.Errorf("updating CNAME record for %s: %w", hostname, err)
+	}
+
+	c.logger.Info("updated CNAME record",
+		slog.String("hostname", hostname),
+		slog.String("old_target", oldTarget),
+		slog.String("new_target", newTarget),
+		slog.String("zone", zone),
+		slog.Int("ttl", ttl),
+	)
+
+	return nil
+}
+
 // GetRecords retrieves all records for a given hostname in the specified zone.
 func (c *Client) GetRecords(ctx context.Context, zone, hostname string) ([]apiRecord, error) {
 	params := url.Values{}

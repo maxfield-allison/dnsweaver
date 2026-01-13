@@ -253,26 +253,53 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		return action
 	}
 
-	// Step 5: Delete records with wrong targets (IP/hostname changed)
-	for _, existing := range sameTypeRecords {
-		r.logger.Info("target changed, deleting old record",
+	// Step 5: Update or create records as needed
+	// If we have existing records with wrong targets, update the first one in place
+	// (duplicates with wrong targets should be cleaned up separately)
+	// If no existing records, create new ones
+
+	if len(sameTypeRecords) > 0 {
+		// Update the first existing record - use UpdateRecord which handles native update vs fallback
+		existing := sameTypeRecords[0]
+		r.logger.Info("target changed, updating record",
 			slog.String("hostname", hostname.Name),
 			slog.String("provider", inst.Name()),
 			slog.String("old_target", existing.Target),
 			slog.String("new_target", target),
 		)
-		if err := inst.DeleteRecordByTarget(ctx, hostname.Name, existing.Type, existing.Target); err != nil {
-			r.logger.Error("failed to delete old record before update",
+
+		desired := provider.Record{
+			Hostname: hostname.Name,
+			Type:     recordType,
+			Target:   target,
+			TTL:      ttl,
+			SRV:      srvData,
+		}
+
+		if err := inst.UpdateRecord(ctx, existing, desired); err != nil {
+			action.Status = StatusFailed
+			action.Error = err.Error()
+			r.logger.Error("failed to update record",
 				slog.String("hostname", hostname.Name),
 				slog.String("provider", inst.Name()),
-				slog.String("target", existing.Target),
 				slog.String("error", err.Error()),
 			)
-			// Continue anyway - try to create the new record
+			return action
 		}
+
+		action.Type = ActionUpdate
+		action.Status = StatusSuccess
+		r.logger.Info("updated record",
+			slog.String("hostname", hostname.Name),
+			slog.String("provider", inst.Name()),
+			slog.String("type", string(recordType)),
+			slog.String("target", target),
+		)
+		r.ensureOwnershipRecord(ctx, hostname.Name, inst)
+		return action
 	}
 
-	// Step 6: Create the record with the desired target
+	// Step 6: Create the record (no existing records)
 	// Use CreateRecordWithValues to respect RecordHints overrides
 	if err := inst.CreateRecordWithValues(ctx, hostname.Name, recordType, target, ttl, srvData); err != nil {
 		// Handle conflict error (shouldn't happen after our checks, but be safe)
@@ -304,23 +331,13 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 			)
 		}
 	} else {
-		// Determine if this was an update (we deleted old records) or new create
-		if len(sameTypeRecords) > 0 {
-			action.Type = ActionUpdate
-			r.logger.Info("updated record",
-				slog.String("hostname", hostname.Name),
-				slog.String("provider", inst.Name()),
-				slog.String("type", string(recordType)),
-				slog.String("target", target),
-			)
-		} else {
-			r.logger.Info("created record",
-				slog.String("hostname", hostname.Name),
-				slog.String("provider", inst.Name()),
-				slog.String("type", string(recordType)),
-				slog.String("target", target),
-			)
-		}
+		// This is now always a new create (updates are handled in Step 5)
+		r.logger.Info("created record",
+			slog.String("hostname", hostname.Name),
+			slog.String("provider", inst.Name()),
+			slog.String("type", string(recordType)),
+			slog.String("target", target),
+		)
 		action.Status = StatusSuccess
 		r.ensureOwnershipRecord(ctx, hostname.Name, inst)
 	}

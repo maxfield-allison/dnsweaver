@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"net"
 	"time"
 
@@ -137,6 +138,61 @@ func (pi *ProviderInstance) DeleteRecord(ctx context.Context, hostname string) e
 
 	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", status).Inc()
 	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete").Observe(duration)
+
+	return err
+}
+
+// UpdateRecord updates an existing DNS record in place if the provider supports
+// native updates. If the provider doesn't implement the Updater interface, this
+// method falls back to delete+create.
+//
+// This should be used when only the target, TTL, or SRV data has changed and
+// we want to avoid the brief DNS gap that delete+create would cause.
+func (pi *ProviderInstance) UpdateRecord(ctx context.Context, existing, desired Record) error {
+	// Check if provider implements native update
+	if updater, ok := pi.Provider.(Updater); ok {
+		start := time.Now()
+		err := updater.Update(ctx, existing, desired)
+		duration := time.Since(start).Seconds()
+
+		status := statusSuccess
+		if err != nil {
+			status = statusError
+		}
+
+		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "update", status).Inc()
+		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "update").Observe(duration)
+
+		return err
+	}
+
+	// Fallback: delete + create
+	// Delete the existing record
+	start := time.Now()
+	if err := pi.Provider.Delete(ctx, existing); err != nil {
+		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", statusError).Inc()
+		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete").Observe(time.Since(start).Seconds())
+		// If delete fails with not found, continue to create (record may have been manually deleted)
+		if !errors.Is(err, ErrNotFound) {
+			return err
+		}
+	} else {
+		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", statusSuccess).Inc()
+		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete").Observe(time.Since(start).Seconds())
+	}
+
+	// Create the new record
+	start = time.Now()
+	err := pi.Provider.Create(ctx, desired)
+	duration := time.Since(start).Seconds()
+
+	status := statusSuccess
+	if err != nil {
+		status = statusError
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "create", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "create").Observe(duration)
 
 	return err
 }

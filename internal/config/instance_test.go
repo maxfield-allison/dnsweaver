@@ -553,3 +553,210 @@ func TestLoadInstanceConfig_OperationalMode(t *testing.T) {
 		})
 	}
 }
+
+func TestMergeProviderEnvOverrides(t *testing.T) {
+	t.Run("overrides TOKEN from env var", func(t *testing.T) {
+		instanceName := "test-override"
+		prefix := envPrefix(instanceName)
+		defer os.Unsetenv(prefix + "TOKEN")
+
+		cfg := &ProviderInstanceConfig{
+			Name:     instanceName,
+			TypeName: "technitium",
+			Target:   "10.0.0.1",
+			TTL:      300,
+			ProviderConfig: map[string]string{
+				"URL":   "http://dns:5380",
+				"TOKEN": "yaml-token-value",
+				"ZONE":  "example.com",
+			},
+		}
+
+		// Set env var override
+		os.Setenv(prefix+"TOKEN", "env-token-value")
+
+		mergeProviderEnvOverrides(cfg)
+
+		if cfg.ProviderConfig["TOKEN"] != "env-token-value" {
+			t.Errorf("TOKEN = %q, want %q", cfg.ProviderConfig["TOKEN"], "env-token-value")
+		}
+		// Other values should remain unchanged
+		if cfg.ProviderConfig["URL"] != "http://dns:5380" {
+			t.Errorf("URL should not change, got %q", cfg.ProviderConfig["URL"])
+		}
+	})
+
+	t.Run("overrides TOKEN from _FILE env var", func(t *testing.T) {
+		instanceName := "test-file-override"
+		prefix := envPrefix(instanceName)
+
+		// Create temp file with secret
+		tmpDir := t.TempDir()
+		secretFile := filepath.Join(tmpDir, "token-secret")
+		if err := os.WriteFile(secretFile, []byte("file-secret-token\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Unsetenv(prefix + "TOKEN_FILE")
+
+		cfg := &ProviderInstanceConfig{
+			Name:     instanceName,
+			TypeName: "technitium",
+			Target:   "10.0.0.1",
+			TTL:      300,
+			ProviderConfig: map[string]string{
+				"URL":   "http://dns:5380",
+				"TOKEN": "yaml-token-value",
+				"ZONE":  "example.com",
+			},
+		}
+
+		// Set env var to point to file
+		os.Setenv(prefix+"TOKEN_FILE", secretFile)
+
+		mergeProviderEnvOverrides(cfg)
+
+		if cfg.ProviderConfig["TOKEN"] != "file-secret-token" {
+			t.Errorf("TOKEN = %q, want %q", cfg.ProviderConfig["TOKEN"], "file-secret-token")
+		}
+	})
+
+	t.Run("overrides TARGET from env var", func(t *testing.T) {
+		instanceName := "test-target-override"
+		prefix := envPrefix(instanceName)
+		defer os.Unsetenv(prefix + "TARGET")
+
+		cfg := &ProviderInstanceConfig{
+			Name:     instanceName,
+			TypeName: "technitium",
+			Target:   "10.0.0.1",
+			TTL:      300,
+			ProviderConfig: map[string]string{
+				"URL": "http://dns:5380",
+			},
+		}
+
+		// Set env var override
+		os.Setenv(prefix+"TARGET", "192.168.1.1")
+
+		mergeProviderEnvOverrides(cfg)
+
+		if cfg.Target != "192.168.1.1" {
+			t.Errorf("Target = %q, want %q", cfg.Target, "192.168.1.1")
+		}
+	})
+
+	t.Run("overrides TTL from env var", func(t *testing.T) {
+		instanceName := "test-ttl-override"
+		prefix := envPrefix(instanceName)
+		defer os.Unsetenv(prefix + "TTL")
+
+		cfg := &ProviderInstanceConfig{
+			Name:     instanceName,
+			TypeName: "technitium",
+			Target:   "10.0.0.1",
+			TTL:      300,
+			ProviderConfig: map[string]string{
+				"URL": "http://dns:5380",
+			},
+		}
+
+		os.Setenv(prefix+"TTL", "60")
+
+		mergeProviderEnvOverrides(cfg)
+
+		if cfg.TTL != 60 {
+			t.Errorf("TTL = %d, want %d", cfg.TTL, 60)
+		}
+	})
+
+	t.Run("overrides MODE from env var", func(t *testing.T) {
+		instanceName := "test-mode-override"
+		prefix := envPrefix(instanceName)
+		defer os.Unsetenv(prefix + "MODE")
+
+		cfg := &ProviderInstanceConfig{
+			Name:     instanceName,
+			TypeName: "technitium",
+			Target:   "10.0.0.1",
+			TTL:      300,
+			Mode:     provider.ModeManaged,
+			ProviderConfig: map[string]string{
+				"URL": "http://dns:5380",
+			},
+		}
+
+		os.Setenv(prefix+"MODE", "authoritative")
+
+		mergeProviderEnvOverrides(cfg)
+
+		if cfg.Mode != provider.ModeAuthoritative {
+			t.Errorf("Mode = %q, want %q", cfg.Mode, provider.ModeAuthoritative)
+		}
+	})
+
+	t.Run("does not override when env var not set", func(t *testing.T) {
+		instanceName := "test-no-override"
+		prefix := envPrefix(instanceName)
+
+		// Ensure no env vars are set
+		os.Unsetenv(prefix + "TOKEN")
+		os.Unsetenv(prefix + "TOKEN_FILE")
+		os.Unsetenv(prefix + "TARGET")
+		os.Unsetenv(prefix + "TTL")
+		os.Unsetenv(prefix + "MODE")
+
+		cfg := &ProviderInstanceConfig{
+			Name:     instanceName,
+			TypeName: "technitium",
+			Target:   "10.0.0.1",
+			TTL:      300,
+			Mode:     provider.ModeManaged,
+			ProviderConfig: map[string]string{
+				"URL":   "http://dns:5380",
+				"TOKEN": "yaml-token",
+				"ZONE":  "example.com",
+			},
+		}
+
+		mergeProviderEnvOverrides(cfg)
+
+		// All values should remain unchanged
+		if cfg.ProviderConfig["TOKEN"] != "yaml-token" {
+			t.Errorf("TOKEN changed unexpectedly to %q", cfg.ProviderConfig["TOKEN"])
+		}
+		if cfg.Target != "10.0.0.1" {
+			t.Errorf("Target changed unexpectedly to %q", cfg.Target)
+		}
+		if cfg.TTL != 300 {
+			t.Errorf("TTL changed unexpectedly to %d", cfg.TTL)
+		}
+		if cfg.Mode != provider.ModeManaged {
+			t.Errorf("Mode changed unexpectedly to %q", cfg.Mode)
+		}
+	})
+
+	t.Run("initializes nil ProviderConfig map", func(t *testing.T) {
+		instanceName := "test-nil-map"
+		prefix := envPrefix(instanceName)
+		defer os.Unsetenv(prefix + "TOKEN")
+
+		cfg := &ProviderInstanceConfig{
+			Name:           instanceName,
+			TypeName:       "technitium",
+			Target:         "10.0.0.1",
+			TTL:            300,
+			ProviderConfig: nil, // nil map
+		}
+
+		os.Setenv(prefix+"TOKEN", "new-token")
+
+		mergeProviderEnvOverrides(cfg)
+
+		if cfg.ProviderConfig == nil {
+			t.Error("ProviderConfig should be initialized")
+		}
+		if cfg.ProviderConfig["TOKEN"] != "new-token" {
+			t.Errorf("TOKEN = %q, want %q", cfg.ProviderConfig["TOKEN"], "new-token")
+		}
+	})
+}

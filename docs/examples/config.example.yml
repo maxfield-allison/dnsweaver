@@ -10,6 +10,36 @@
 #
 # Environment variable interpolation: Use ${VAR} or ${VAR:-default}
 # Example: token: ${TECHNITIUM_TOKEN}
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECRETS MANAGEMENT (v0.5.1+)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# For sensitive values like API tokens, you have three options:
+#
+# 1. Inline in YAML (simple, but exposes secrets in config file):
+#    config:
+#      token: my-secret-token
+#
+# 2. Environment variable interpolation (requires env var at load time):
+#    config:
+#      token: ${TECHNITIUM_TOKEN}
+#
+# 3. Provider-specific env var override (recommended for Docker/K8s secrets):
+#    Leave token out of YAML entirely. Set env var at runtime:
+#      DNSWEAVER_{PROVIDER_NAME}_TOKEN=secret-value
+#    Or use _FILE suffix to read from a file (Docker secrets pattern):
+#      DNSWEAVER_{PROVIDER_NAME}_TOKEN_FILE=/run/secrets/dns_token
+#
+#    Provider name is normalized: uppercase, hyphens become underscores.
+#    Example: provider "my-dns" → DNSWEAVER_MY_DNS_TOKEN
+#
+# Secret fields supporting _FILE suffix:
+#   TOKEN, API_KEY, AUTH_TOKEN, PASSWORD
+#
+# Non-secret fields (env var override only, no _FILE):
+#   URL, ZONE, ZONE_ID, API_EMAIL, TARGET, TTL, MODE
+# ═══════════════════════════════════════════════════════════════════════════════
 
 # Logging configuration
 logging:
@@ -120,3 +150,19 @@ providers:
 #     url: http://dns:5380
 #     token: ${TECHNITIUM_TOKEN}
 #     zone: example.com
+
+# Advanced: Provider with secret injected via environment variable
+# This provider has no token in YAML - it's injected at runtime via:
+#   DNSWEAVER_SECURE_DNS_TOKEN_FILE=/run/secrets/dns_token  (Docker/K8s)
+#   DNSWEAVER_SECURE_DNS_TOKEN=my-token                     (direct value)
+#
+# - name: secure-dns
+#   type: technitium
+#   domains:
+#     - "*.secure.example.com"
+#   record_type: A
+#   target: 10.0.0.100
+#   config:
+#     url: http://dns:5380
+#     zone: secure.example.com
+#     # TOKEN not set here - injected via DNSWEAVER_SECURE_DNS_TOKEN_FILE

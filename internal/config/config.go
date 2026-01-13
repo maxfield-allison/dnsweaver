@@ -94,9 +94,11 @@ func Load() (*Config, error) {
 			instances = append(instances, inst)
 		}
 	} else if len(fileProviders) > 0 {
-		// Use file providers
+		// Use file providers with env var overrides for secrets and other settings
 		for _, fp := range fileProviders {
 			providerNames = append(providerNames, fp.Name)
+			// Apply env var overrides to file-based provider config
+			mergeProviderEnvOverrides(fp)
 			instances = append(instances, fp)
 		}
 	} else {

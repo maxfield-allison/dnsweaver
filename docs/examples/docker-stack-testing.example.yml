@@ -1,0 +1,352 @@
+# docker-stack-testing.example.yml
+# =============================================================================
+# DNSWeaver Comprehensive Development & Integration Testing Stack
+# =============================================================================
+#
+# PURPOSE: Live integration testing environment for dnsweaver development
+# This stack demonstrates all features and serves as a reference for test cases.
+#
+# This stack tests:
+#   1. YAML configuration loading (v0.5.0+)
+#   2. Sources: Traefik labels, Traefik files, dnsweaver native labels
+#   3. Record types: A, AAAA, SRV, CNAME, TXT ownership
+#   4. Reconciler: create, update, delete, orphan cleanup
+#   5. Provider matching: wildcards, excludes, first-match-wins
+#   6. Edge cases: duplicates, no-match, invalid labels
+#
+# USAGE:
+#   1. Create secrets: echo "your-token" | docker secret create technitium_token -
+#   2. Create config: Prepare config.yml (see config.example.yml)
+#   3. Deploy: docker stack deploy -c docker-stack-testing.example.yml dnsweaver-test
+#   4. Logs: docker service logs -f dnsweaver-test_dnsweaver
+#   5. Health: curl http://<swarm-ip>:8089/health
+#
+# TESTING WORKFLOW:
+#   1. Deploy stack
+#   2. Verify all expected DNS records created
+#   3. Scale test services up/down to test lifecycle
+#   4. Check orphan cleanup behavior
+#   5. Review logs for warnings/errors
+#
+# =============================================================================
+
+version: "3.9"
+
+networks:
+  dnsweaver-test:
+    driver: overlay
+
+secrets:
+  technitium_token:
+    external: true
+
+services:
+  # ===========================================================================
+  # DNSWEAVER - Main Application Under Test
+  # ===========================================================================
+  dnsweaver:
+    image: ghcr.io/maxfield-allison/dnsweaver:latest
+    ports:
+      - target: 8080
+        published: 8089
+        protocol: tcp
+        mode: ingress
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - dnsweaver-test
+    environment:
+      # Primary config via YAML file
+      DNSWEAVER_CONFIG: "/config/config.yml"
+      # Provider secret via _FILE pattern (v0.5.1+)
+      DNSWEAVER_TEST_DNS_TOKEN_FILE: "/run/secrets/technitium_token"
+      TZ: "America/Chicago"
+    volumes:
+      # Mount your config file
+      - /path/to/config:/config:ro
+      # Mount traefik rules for file discovery testing
+      - /path/to/traefik-rules:/traefik-rules:ro
+    secrets:
+      - technitium_token
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 32M
+
+  # ===========================================================================
+  # TEST CASE 1: Simple A Record via dnsweaver.hostname label
+  # Expected: A record for simple-a.test.example.com -> <target>
+  # ===========================================================================
+  test-simple-a:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-simple-a"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        dnsweaver.hostname: "simple-a.test.example.com"
+
+  # ===========================================================================
+  # TEST CASE 2: Multiple Hostnames on Single Service
+  # Expected: A records for multi-1, multi-2, multi-3.test.example.com
+  # ===========================================================================
+  test-multi-hostname:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-multi-hostname"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        dnsweaver.hostname: "multi-1.test.example.com,multi-2.test.example.com"
+        dnsweaver.records.third.hostname: "multi-3.test.example.com"
+
+  # ===========================================================================
+  # TEST CASE 3: AAAA Record (IPv6)
+  # Expected: AAAA record for ipv6.test.example.com -> fd00::1
+  # ===========================================================================
+  test-aaaa:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-aaaa"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        dnsweaver.records.v6.hostname: "ipv6.test.example.com"
+        dnsweaver.records.v6.type: "AAAA"
+        dnsweaver.records.v6.target: "fd00::1"
+
+  # ===========================================================================
+  # TEST CASE 4: SRV Record
+  # Expected: SRV record for _http._tcp.test.example.com
+  # ===========================================================================
+  test-srv:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-srv"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        dnsweaver.records.http.hostname: "_http._tcp.test.example.com"
+        dnsweaver.records.http.type: "SRV"
+        dnsweaver.records.http.target: "web.test.example.com"
+        dnsweaver.records.http.port: "80"
+        dnsweaver.records.http.priority: "10"
+        dnsweaver.records.http.weight: "100"
+
+  # ===========================================================================
+  # TEST CASE 5: CNAME Record
+  # Expected: CNAME for alias.test.example.com -> target.test.example.com
+  # ===========================================================================
+  test-cname:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-cname"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        dnsweaver.records.alias.hostname: "alias.test.example.com"
+        dnsweaver.records.alias.type: "CNAME"
+        dnsweaver.records.alias.target: "target.test.example.com"
+
+  # ===========================================================================
+  # TEST CASE 6: Traefik Labels (traefik source)
+  # Expected: A record for traefik-app.test.example.com
+  # ===========================================================================
+  test-traefik-labels:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-traefik-labels"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        traefik.enable: "true"
+        traefik.http.routers.test-traefik.rule: "Host(`traefik-app.test.example.com`)"
+        traefik.http.routers.test-traefik.entrypoints: "websecure"
+
+  # ===========================================================================
+  # TEST CASE 7: Multiple Traefik Routers (complex rules)
+  # Expected: A records for both hostnames
+  # ===========================================================================
+  test-traefik-multi:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-traefik-multi"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        traefik.enable: "true"
+        traefik.http.routers.multi-1.rule: "Host(`traefik-multi-1.test.example.com`)"
+        traefik.http.routers.multi-2.rule: "Host(`traefik-multi-2.test.example.com`) && PathPrefix(`/api`)"
+
+  # ===========================================================================
+  # TEST CASE 8: Traefik OR Rule (multiple hosts in one rule)
+  # Expected: A records for both hostnames
+  # ===========================================================================
+  test-traefik-or:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-traefik-or"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        traefik.enable: "true"
+        traefik.http.routers.or-rule.rule: "Host(`traefik-or-1.test.example.com`) || Host(`traefik-or-2.test.example.com`)"
+
+  # ===========================================================================
+  # TEST CASE 9: Custom TTL
+  # Expected: A record with TTL 60 (not default 300)
+  # ===========================================================================
+  test-custom-ttl:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-custom-ttl"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        dnsweaver.hostname: "custom-ttl.test.example.com"
+        dnsweaver.ttl: "60"
+
+  # ===========================================================================
+  # TEST CASE 10: No Matching Provider (edge case)
+  # Expected: No record created, warning logged "no matching providers"
+  # ===========================================================================
+  test-no-match:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-no-match"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        # This hostname doesn't match *.test.example.com
+        dnsweaver.hostname: "nomatch.other.domain.com"
+
+  # ===========================================================================
+  # TEST CASE 11: Mixed Sources (both traefik and dnsweaver labels)
+  # Expected: Records from both sources
+  # ===========================================================================
+  test-mixed-sources:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-mixed-sources"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        traefik.enable: "true"
+        traefik.http.routers.mixed.rule: "Host(`mixed-traefik.test.example.com`)"
+        dnsweaver.hostname: "mixed-dnsweaver.test.example.com"
+
+  # ===========================================================================
+  # TEST CASE 12: Provider Targeting (explicit provider hint)
+  # Expected: Record created only on specified provider
+  # ===========================================================================
+  test-provider-hint:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-provider-hint"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        dnsweaver.records.targeted.hostname: "targeted.test.example.com"
+        dnsweaver.records.targeted.provider: "test-dns"
+
+  # ===========================================================================
+  # TEST CASE 13: Complex SRV (Minecraft-style)
+  # Expected: SRV record with all fields
+  # ===========================================================================
+  test-srv-minecraft:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-srv-minecraft"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        dnsweaver.records.mc.hostname: "_minecraft._tcp.test.example.com"
+        dnsweaver.records.mc.type: "SRV"
+        dnsweaver.records.mc.target: "mc.test.example.com"
+        dnsweaver.records.mc.port: "25565"
+        dnsweaver.records.mc.priority: "10"
+        dnsweaver.records.mc.weight: "100"
+
+  # ===========================================================================
+  # TEST CASE 14: Orphan Test Service (scale to 0 to test cleanup)
+  # Deploy with replicas=1, then scale to 0 to test orphan deletion:
+  #   docker service scale dnsweaver-test_test-orphan=0
+  # ===========================================================================
+  test-orphan:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-orphan"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        dnsweaver.hostname: "orphan-test.test.example.com"
+
+  # ===========================================================================
+  # TEST CASE 15: Disabled Service (dnsweaver.enabled=false)
+  # Expected: No record created even though hostname is set
+  # ===========================================================================
+  test-disabled:
+    image: traefik/whoami:latest
+    environment:
+      WHOAMI_NAME: "test-disabled"
+    networks:
+      - dnsweaver-test
+    deploy:
+      mode: replicated
+      replicas: 1
+      labels:
+        dnsweaver.enabled: "false"
+        dnsweaver.hostname: "disabled.test.example.com"

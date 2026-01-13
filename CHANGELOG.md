@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-01-13
+
+### Added
+- **Environment Variable Override for YAML Configs** (#67): Inject secrets into YAML-based provider configs
+  - Provider-specific env vars override YAML config values: `DNSWEAVER_{PROVIDER}_{FIELD}`
+  - Secret fields support `_FILE` suffix for Docker/Kubernetes secrets: `DNSWEAVER_{PROVIDER}_TOKEN_FILE`
+  - Secret fields: TOKEN, API_KEY, AUTH_TOKEN, PASSWORD
+  - Non-secret fields: URL, ZONE, ZONE_ID, API_EMAIL, TARGET, TTL, MODE
+  - Allows YAML configs to be version-controlled safely without secrets
+  - See `docs/examples/` for configuration and deployment examples
+- **Reorganized Example Documentation**: Moved examples to `docs/examples/` folder
+  - `config.example.yml` - Complete YAML configuration reference
+  - `docker-compose.dev.example.yml` - Local development setup
+  - `docker-stack.example.yml` - Production Swarm deployment
+  - `docker-stack-testing.example.yml` - Testing stack with Docker secrets
+  - `docker-entrypoint.sh` - Entrypoint wrapper for config templating
+
+### Changed
+- Refactored `loadInstanceConfig` to use shared `providerConfigFields` for consistency
+
 ## [0.5.0] - 2026-01-13
 
 ### Added

@@ -203,18 +203,19 @@ var providerConfigFields = []struct {
 	{"ZONE_ID", false},
 	{"API_KEY", true},
 	{"API_EMAIL", false},
-	{"PROXIED", false},        // Cloudflare-specific
-	{"AUTH_HEADER", false},    // Webhook-specific
-	{"AUTH_TOKEN", true},      // Webhook-specific
-	{"TIMEOUT", false},        // Webhook-specific
-	{"RETRIES", false},        // Webhook-specific
-	{"RETRY_DELAY", false},    // Webhook-specific
-	{"HOST_FILE", false},      // dnsmasq-specific
-	{"BACKUP", false},         // dnsmasq-specific
-	{"INCLUDE_MARKER", false}, // dnsmasq-specific
-	{"RELOAD_COMMAND", false}, // dnsmasq-specific
-	{"MODE", false},           // Pi-hole specific (api/file)
-	{"PASSWORD", true},        // Pi-hole specific
+	{"PROXIED", false},              // Cloudflare-specific
+	{"AUTH_HEADER", false},          // Webhook-specific
+	{"AUTH_TOKEN", true},            // Webhook-specific
+	{"TIMEOUT", false},              // Webhook-specific
+	{"RETRIES", false},              // Webhook-specific
+	{"RETRY_DELAY", false},          // Webhook-specific
+	{"HOST_FILE", false},            // dnsmasq-specific
+	{"BACKUP", false},               // dnsmasq-specific
+	{"INCLUDE_MARKER", false},       // dnsmasq-specific
+	{"RELOAD_COMMAND", false},       // dnsmasq-specific
+	{"MODE", false},                 // Pi-hole specific (api/file)
+	{"PASSWORD", true},              // Pi-hole specific
+	{"INSECURE_SKIP_VERIFY", false}, // TLS certificate verification skip
 }
 
 // mergeProviderEnvOverrides applies environment variable overrides to a

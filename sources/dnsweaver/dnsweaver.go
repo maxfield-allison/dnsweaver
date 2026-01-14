@@ -11,7 +11,7 @@
 //
 //	dnsweaver.records.myapp.hostname=app.example.com
 //	dnsweaver.records.myapp.type=A
-//	dnsweaver.records.myapp.target=10.1.20.100
+//	dnsweaver.records.myapp.target=192.0.2.100
 //	dnsweaver.records.myapp.provider=internal-dns
 //	dnsweaver.records.myapp.ttl=300
 //

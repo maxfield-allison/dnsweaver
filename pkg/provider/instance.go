@@ -59,8 +59,8 @@ type ProviderInstance struct {
 	RecordType RecordType
 
 	// Target is the value for DNS records:
-	// - For A records: an IP address (e.g., "10.1.20.210")
-	// - For CNAME records: a target hostname (e.g., "bluewillows.net")
+	// - For A records: an IP address (e.g., "192.0.2.10")
+	// - For CNAME records: a target hostname (e.g., "example.com")
 	Target string
 
 	// TTL is the time-to-live for DNS records in seconds.

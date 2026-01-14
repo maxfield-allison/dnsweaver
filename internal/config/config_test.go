@@ -366,3 +366,44 @@ func TestProviderInstanceConfig_ToProviderConfig(t *testing.T) {
 		t.Errorf("TTL = %d, want %d", provCfg.TTL, cfg.TTL)
 	}
 }
+
+func TestLoadInstanceConfig_InsecureSkipVerify(t *testing.T) {
+	// Set up minimal valid provider config
+	os.Setenv("DNSWEAVER_INSTANCES", "skip-test")
+	os.Setenv("DNSWEAVER_SKIP_TEST_TYPE", "technitium")
+	os.Setenv("DNSWEAVER_SKIP_TEST_TARGET", "10.0.0.1")
+	os.Setenv("DNSWEAVER_SKIP_TEST_DOMAINS", "*.example.com")
+	os.Setenv("DNSWEAVER_SKIP_TEST_URL", "https://dns.example.com:5380")
+	os.Setenv("DNSWEAVER_SKIP_TEST_TOKEN", "secret-token")
+	os.Setenv("DNSWEAVER_SKIP_TEST_ZONE", "example.com")
+	os.Setenv("DNSWEAVER_SKIP_TEST_INSECURE_SKIP_VERIFY", "true")
+	defer func() {
+		os.Unsetenv("DNSWEAVER_INSTANCES")
+		os.Unsetenv("DNSWEAVER_SKIP_TEST_TYPE")
+		os.Unsetenv("DNSWEAVER_SKIP_TEST_TARGET")
+		os.Unsetenv("DNSWEAVER_SKIP_TEST_DOMAINS")
+		os.Unsetenv("DNSWEAVER_SKIP_TEST_URL")
+		os.Unsetenv("DNSWEAVER_SKIP_TEST_TOKEN")
+		os.Unsetenv("DNSWEAVER_SKIP_TEST_ZONE")
+		os.Unsetenv("DNSWEAVER_SKIP_TEST_INSECURE_SKIP_VERIFY")
+	}()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+
+	inst, ok := cfg.GetProviderInstance("skip-test")
+	if !ok {
+		t.Fatal("expected provider instance 'skip-test' to exist")
+	}
+
+	// Verify INSECURE_SKIP_VERIFY is in ProviderConfig
+	skipVerify, ok := inst.ProviderConfig["INSECURE_SKIP_VERIFY"]
+	if !ok {
+		t.Error("INSECURE_SKIP_VERIFY not found in ProviderConfig")
+	}
+	if skipVerify != "true" {
+		t.Errorf("INSECURE_SKIP_VERIFY = %q, want %q", skipVerify, "true")
+	}
+}

@@ -1,9 +1,12 @@
 # GitHub-to-GitLab Sync Configuration
 #
-# Sync Direction: GitHub → GitLab (one-way for content)
-#   - GitHub issues → GitLab issues
+# Sync Direction: GitHub → GitLab ONLY (one-way)
+#   - GitHub issues → GitLab issues (for internal tracking)
 #   - GitHub PRs → GitLab issues (for tracking)
-#   - GitLab → GitHub: Only state changes (close/reopen)
+#   - GitLab → GitHub: DISABLED (we don't want internal issues exposed)
+#
+# ⚠️ CRITICAL: gitlab.sync.issues.enabled must be FALSE to prevent
+#    internal GitLab issues from being pushed to public GitHub!
 
 gitlab:
   enabled: true
@@ -14,12 +17,12 @@ gitlab:
     tags: { enabled: false }
     releases: { enabled: false }
     issues:
-      enabled: true
-      comments: { enabled: true }
+      enabled: false  # DO NOT enable - prevents GitLab→GitHub sync
+      comments: { enabled: false }
     pullRequests:
-      enabled: true
+      enabled: false  # DO NOT enable - prevents GitLab→GitHub sync
       autoMerge: false
-      comments: { enabled: true }
+      comments: { enabled: false }
 
 github:
   enabled: true

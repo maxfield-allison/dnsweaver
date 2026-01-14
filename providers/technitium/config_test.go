@@ -210,3 +210,81 @@ func TestEnvPrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfig_InsecureSkipVerify(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		expected bool
+	}{
+		{"true lowercase", "true", true},
+		{"TRUE uppercase", "TRUE", true},
+		{"True mixed", "True", true},
+		{"1", "1", true},
+		{"false", "false", false},
+		{"0", "0", false},
+		{"empty", "", false},
+		{"random string", "whatever", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up minimal valid config
+			os.Setenv("DNSWEAVER_SKIP_TEST_URL", "http://localhost:5380")
+			os.Setenv("DNSWEAVER_SKIP_TEST_TOKEN", "token")
+			os.Setenv("DNSWEAVER_SKIP_TEST_ZONE", "example.com")
+			if tt.envValue != "" {
+				os.Setenv("DNSWEAVER_SKIP_TEST_INSECURE_SKIP_VERIFY", tt.envValue)
+			}
+			defer func() {
+				os.Unsetenv("DNSWEAVER_SKIP_TEST_URL")
+				os.Unsetenv("DNSWEAVER_SKIP_TEST_TOKEN")
+				os.Unsetenv("DNSWEAVER_SKIP_TEST_ZONE")
+				os.Unsetenv("DNSWEAVER_SKIP_TEST_INSECURE_SKIP_VERIFY")
+			}()
+
+			config, err := LoadConfig("skip-test")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if config.InsecureSkipVerify != tt.expected {
+				t.Errorf("InsecureSkipVerify = %v, want %v", config.InsecureSkipVerify, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLoadConfigFromMap_InsecureSkipVerify(t *testing.T) {
+	tests := []struct {
+		name     string
+		mapValue string
+		expected bool
+	}{
+		{"true lowercase", "true", true},
+		{"TRUE uppercase", "TRUE", true},
+		{"1", "1", true},
+		{"false", "false", false},
+		{"empty", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configMap := map[string]string{
+				"URL":                  "http://localhost:5380",
+				"TOKEN":                "token",
+				"ZONE":                 "example.com",
+				"INSECURE_SKIP_VERIFY": tt.mapValue,
+			}
+
+			config, err := LoadConfigFromMap("test", configMap)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if config.InsecureSkipVerify != tt.expected {
+				t.Errorf("InsecureSkipVerify = %v, want %v", config.InsecureSkipVerify, tt.expected)
+			}
+		})
+	}
+}

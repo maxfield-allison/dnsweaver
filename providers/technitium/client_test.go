@@ -34,6 +34,24 @@ func TestNewClient(t *testing.T) {
 	}
 }
 
+func TestWithInsecureSkipVerify(t *testing.T) {
+	t.Run("false does not modify client", func(t *testing.T) {
+		client := NewClient("https://localhost:5380", "test-token", WithInsecureSkipVerify(false))
+		// Transport should be nil (default http.Client behavior)
+		if client.httpClient.Transport != nil {
+			t.Error("expected nil Transport when InsecureSkipVerify is false")
+		}
+	})
+
+	t.Run("true configures custom transport", func(t *testing.T) {
+		client := NewClient("https://localhost:5380", "test-token", WithInsecureSkipVerify(true))
+		// Transport should be set when InsecureSkipVerify is true
+		if client.httpClient.Transport == nil {
+			t.Error("expected Transport to be configured when InsecureSkipVerify is true")
+		}
+	})
+}
+
 func TestClient_Ping_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/user/session/get" {

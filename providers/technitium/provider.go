@@ -51,8 +51,20 @@ func New(name string, config *Config, opts ...ProviderOption) (*Provider, error)
 		opt(p)
 	}
 
+	// Build client options
+	clientOpts := []ClientOption{WithLogger(p.logger)}
+
+	// Add insecure skip verify if configured
+	if config.InsecureSkipVerify {
+		clientOpts = append(clientOpts, WithInsecureSkipVerify(true))
+		p.logger.Warn("TLS certificate verification disabled for Technitium provider",
+			slog.String("provider", name),
+			slog.String("url", config.URL),
+		)
+	}
+
 	// Create the API client with the same logger
-	p.client = NewClient(config.URL, config.Token, WithLogger(p.logger))
+	p.client = NewClient(config.URL, config.Token, clientOpts...)
 
 	return p, nil
 }

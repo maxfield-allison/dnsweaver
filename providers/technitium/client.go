@@ -3,6 +3,7 @@ package technitium
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -81,6 +82,25 @@ func WithLogger(logger *slog.Logger) ClientOption {
 	return func(c *Client) {
 		if logger != nil {
 			c.logger = logger
+		}
+	}
+}
+
+// WithInsecureSkipVerify configures the client to skip TLS certificate verification.
+// WARNING: This should only be used for testing or when connecting to servers with
+// self-signed certificates. It is insecure and should not be used in production.
+func WithInsecureSkipVerify(skip bool) ClientOption {
+	return func(c *Client) {
+		if skip {
+			transport := &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true, //nolint:gosec // Intentional: user explicitly requested skip
+				},
+			}
+			c.httpClient = &http.Client{
+				Timeout:   30 * time.Second,
+				Transport: transport,
+			}
 		}
 	}
 }

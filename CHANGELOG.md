@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-01-14
+
+### Added
+- **INSECURE_SKIP_VERIFY for Technitium** (#86): Skip TLS certificate verification for self-signed certs
+  - Configure via `DNSWEAVER_{INSTANCE}_INSECURE_SKIP_VERIFY=true`
+  - Enables connections to HTTPS endpoints using IP addresses or self-signed certificates
+  - Logs security warning when enabled
+  - HTTP client consolidation planned in #92
+
 ### Fixed
 - **dnsweaver.enabled=false label ignored** (#89): Services with `dnsweaver.enabled=false` now correctly skip record creation
   - Global `dnsweaver.enabled=false` prevents all record creation for the workload

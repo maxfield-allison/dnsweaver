@@ -541,6 +541,9 @@ Replace `{NAME}` with your instance name (e.g., `INTERNAL_DNS` for instance `int
 | `DNSWEAVER_{NAME}_URL` | Yes | Technitium API URL |
 | `DNSWEAVER_{NAME}_TOKEN` | Yes | API token (supports `_FILE`) |
 | `DNSWEAVER_{NAME}_ZONE` | Yes | DNS zone to manage |
+| `DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY` | No | Skip TLS cert verification (default: `false`) |
+
+> ⚠️ **Security Warning:** Only use `INSECURE_SKIP_VERIFY=true` for development or when connecting to servers with self-signed certificates. This disables TLS certificate validation.
 
 #### Cloudflare Provider
 

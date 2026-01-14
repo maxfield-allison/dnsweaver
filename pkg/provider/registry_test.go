@@ -21,6 +21,13 @@ func (m *mockProvider) Ping(ctx context.Context) error             { return m.pi
 func (m *mockProvider) List(ctx context.Context) ([]Record, error) { return m.records, nil }
 func (m *mockProvider) Create(ctx context.Context, r Record) error { return nil }
 func (m *mockProvider) Delete(ctx context.Context, r Record) error { return nil }
+func (m *mockProvider) Capabilities() Capabilities {
+	return Capabilities{
+		SupportsOwnershipTXT: true,
+		SupportsNativeUpdate: true,
+		SupportedRecordTypes: []RecordType{RecordTypeA, RecordTypeAAAA, RecordTypeCNAME, RecordTypeSRV, RecordTypeTXT},
+	}
+}
 
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))

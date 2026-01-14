@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-01-14
+
+### Added
+- **INSECURE_SKIP_VERIFY for Technitium** (#86): Skip TLS certificate verification for self-signed certs
+  - Configure via `DNSWEAVER_{INSTANCE}_INSECURE_SKIP_VERIFY=true`
+  - Enables connections to HTTPS endpoints using IP addresses or self-signed certificates
+  - Logs security warning when enabled
+  - HTTP client consolidation planned in #92
+
+### Fixed
+- **dnsweaver.enabled=false label ignored** (#89): Services with `dnsweaver.enabled=false` now correctly skip record creation
+  - Global `dnsweaver.enabled=false` prevents all record creation for the workload
+  - Per-record `dnsweaver.records.<name>.enabled=false` disables specific named records
+- **dnsweaver.ttl label ignored for simple hostname** (#90): TTL override now works in simple hostname mode
+  - `dnsweaver.ttl=60` now correctly sets TTL when using `dnsweaver.hostname`
+  - Previously only worked with named records (`dnsweaver.records.<name>.ttl`)
+
+## [0.5.1] - 2026-01-13
+
+### Added
+- **Environment Variable Override for YAML Configs** (#67): Inject secrets into YAML-based provider configs
+  - Provider-specific env vars override YAML config values: `DNSWEAVER_{PROVIDER}_{FIELD}`
+  - Secret fields support `_FILE` suffix for Docker/Kubernetes secrets: `DNSWEAVER_{PROVIDER}_TOKEN_FILE`
+  - Secret fields: TOKEN, API_KEY, AUTH_TOKEN, PASSWORD
+  - Non-secret fields: URL, ZONE, ZONE_ID, API_EMAIL, TARGET, TTL, MODE
+  - Allows YAML configs to be version-controlled safely without secrets
+  - See `docs/examples/` for configuration and deployment examples
+- **Reorganized Example Documentation**: Moved examples to `docs/examples/` folder
+  - `config.example.yml` - Complete YAML configuration reference
+  - `docker-compose.dev.example.yml` - Local development setup
+  - `docker-stack.example.yml` - Production Swarm deployment
+  - `docker-stack-testing.example.yml` - Testing stack with Docker secrets
+  - `docker-entrypoint.sh` - Entrypoint wrapper for config templating
+
+### Changed
+- Refactored `loadInstanceConfig` to use shared `providerConfigFields` for consistency
+
+## [0.5.0] - 2026-01-13
+
+### Added
+- **YAML Configuration File Support** (#66): Full YAML config file support
+  - Load configuration from YAML file via `DNSWEAVER_CONFIG` env var or `--config` flag
+  - Environment variable interpolation with `${VAR}` and `${VAR:-default}` syntax
+  - Configuration priority: env vars > config file > defaults
+  - Example config file at `docs/config.example.yml`
+  - Supports all existing configuration options in structured YAML format
+- **Version Flag**: Added `--version` flag to display version and build date
+- **Provider Capabilities Interface** (#79): Providers report their capabilities
+  - `SupportsOwnershipTXT` — whether provider can create TXT records for ownership
+  - `SupportsNativeUpdate` — whether provider implements `Updater` interface
+  - `SupportedRecordTypes` — list of record types the provider handles (A, AAAA, CNAME, SRV)
+- **Updater Interface** (#70): Optional provider interface for native record updates
+  - Providers implementing `Updater` can update records in-place without delete+create
+  - Reconciler automatically falls back to delete+create for providers without native update
+  - Technitium provider implements native update support
+- **Per-Instance Operational Modes** (#80): Control how dnsweaver manages records per provider
+  - `managed` (default) — only touch records dnsweaver created (with ownership TXT)
+  - `authoritative` — full control over configured scope; deletes unmatched in-scope records
+  - `additive` — write-only mode; never deletes any records
+  - Configure via `DNSWEAVER_{INSTANCE}_MODE` environment variable
+- **Comprehensive Test Coverage** (#68): Core reconciler coverage increased from 26% to 83%+
+  - Added tests for reconciler, watcher, provider registry, and error handling
+  - Edge case coverage for debouncing, lifecycle, and event filtering
+
+### Changed
+- **Reconciler Refactored** (#78): Split monolithic reconciler into focused modules
+  - `reconciler.go` — main loop and orchestration (~300 lines)
+  - `actions.go` — create/update/delete operations
+  - `comparison.go` — record diffing with `CompareRecordSets()` helper
+  - `orphan.go` — orphan detection and cleanup
+  - `ownership.go` — TXT record ownership tracking
+  - `cache.go` — provider state caching
+  - Each module under 400 lines for maintainability
+
 ## [0.4.2] - 2026-01-12
 
 ### Fixed

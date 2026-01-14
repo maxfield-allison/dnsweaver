@@ -442,3 +442,80 @@ func TestHostnames_FromSource(t *testing.T) {
 		t.Errorf("FromSource(unknown) returned %d items, want 0", len(unknown))
 	}
 }
+
+func TestNormalizeHostname(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"example.com", "example.com"},
+		{"EXAMPLE.COM", "example.com"},
+		{"App.Example.Com", "app.example.com"},
+		{"app.EXAMPLE.com", "app.example.com"},
+		{"example.com.", "example.com"}, // trailing dot stripped
+		{"EXAMPLE.COM.", "example.com"}, // uppercase + trailing dot
+		{"App.Example.Com.", "app.example.com"},
+		{"", ""},
+		{"A", "a"},
+		{"_SRV._TCP.example.com", "_srv._tcp.example.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := NormalizeHostname(tt.input)
+			if got != tt.want {
+				t.Errorf("NormalizeHostname(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHostname_NormalizedName(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"example.com", "example.com"},
+		{"APP.EXAMPLE.COM", "app.example.com"},
+		{"Mixed.Case.Name", "mixed.case.name"},
+		{"app.example.com.", "app.example.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := Hostname{Name: tt.name, Source: "test"}
+			got := h.NormalizedName()
+			if got != tt.want {
+				t.Errorf("Hostname{Name: %q}.NormalizedName() = %q, want %q", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHostnames_Deduplicate_CaseInsensitive(t *testing.T) {
+	hostnames := Hostnames{
+		{Name: "app.example.com", Source: "traefik", Router: "first"},
+		{Name: "APP.EXAMPLE.COM", Source: "traefik", Router: "second"},
+		{Name: "App.Example.Com", Source: "other", Router: "third"},
+		{Name: "different.example.com", Source: "traefik", Router: "fourth"},
+	}
+
+	deduped := hostnames.Deduplicate()
+
+	// Should have 2 unique hostnames (case-insensitive comparison)
+	if len(deduped) != 2 {
+		t.Fatalf("Deduplicate() returned %d items, want 2", len(deduped))
+	}
+
+	// First occurrence wins - check it's the lowercase one
+	if deduped[0].Name != "app.example.com" {
+		t.Errorf("deduped[0].Name = %q, want %q (first occurrence)", deduped[0].Name, "app.example.com")
+	}
+	if deduped[0].Router != "first" {
+		t.Errorf("deduped[0].Router = %q, want %q (first occurrence)", deduped[0].Router, "first")
+	}
+
+	if deduped[1].Name != "different.example.com" {
+		t.Errorf("deduped[1].Name = %q, want %q", deduped[1].Name, "different.example.com")
+	}
+}

@@ -125,6 +125,24 @@ func (p *Provider) Type() string {
 	return "webhook"
 }
 
+// Capabilities returns the provider's feature support.
+// Webhook providers are assumed to have full capabilities since
+// the actual DNS backend is abstracted. The remote webhook endpoint
+// is responsible for handling all record types and operations.
+func (p *Provider) Capabilities() provider.Capabilities {
+	return provider.Capabilities{
+		SupportsOwnershipTXT: true,
+		SupportsNativeUpdate: true,
+		SupportedRecordTypes: []provider.RecordType{
+			provider.RecordTypeA,
+			provider.RecordTypeAAAA,
+			provider.RecordTypeCNAME,
+			provider.RecordTypeSRV,
+			provider.RecordTypeTXT,
+		},
+	}
+}
+
 // Ping checks connectivity to the webhook endpoint.
 func (p *Provider) Ping(ctx context.Context) error {
 	return p.client.Ping(ctx)
@@ -229,6 +247,48 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 	return nil
 }
 
+// Update modifies an existing DNS record via the webhook.
+// Implements provider.Updater for native update support.
+func (p *Provider) Update(ctx context.Context, existing, desired provider.Record) error {
+	var err error
+
+	// SRV records require special handling
+	if desired.Type == provider.RecordTypeSRV {
+		if desired.SRV == nil || existing.SRV == nil {
+			return fmt.Errorf("updating SRV record: SRV data is required for both existing and desired records")
+		}
+		err = p.client.UpdateSRV(ctx,
+			desired.Hostname,
+			existing.SRV.Priority, existing.SRV.Weight, existing.SRV.Port, existing.Target,
+			desired.SRV.Priority, desired.SRV.Weight, desired.SRV.Port, desired.Target,
+			desired.TTL,
+		)
+	} else {
+		err = p.client.Update(ctx,
+			desired.Hostname,
+			string(desired.Type),
+			existing.Target,
+			desired.Target,
+			desired.TTL,
+		)
+	}
+
+	if err != nil {
+		return fmt.Errorf("updating %s record: %w", desired.Type, err)
+	}
+
+	p.logger.Info("updated record",
+		slog.String("provider", p.name),
+		slog.String("hostname", desired.Hostname),
+		slog.String("type", string(desired.Type)),
+		slog.String("old_target", existing.Target),
+		slog.String("new_target", desired.Target),
+		slog.Int("ttl", desired.TTL),
+	)
+
+	return nil
+}
+
 // Factory returns a provider.Factory function for use with the provider registry.
 func Factory() provider.Factory {
 	return func(name string, config map[string]string) (provider.Provider, error) {
@@ -238,3 +298,6 @@ func Factory() provider.Factory {
 
 // Ensure Provider implements provider.Provider at compile time.
 var _ provider.Provider = (*Provider)(nil)
+
+// Ensure Provider implements provider.Updater at compile time.
+var _ provider.Updater = (*Provider)(nil)

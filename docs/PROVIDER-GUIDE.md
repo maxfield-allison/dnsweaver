@@ -389,7 +389,7 @@ Your provider should support these record types as applicable:
 
 | Record Type | Purpose | Target Validation |
 |------------|---------|-------------------|
-| `A` | IPv4 address record | Valid IPv4 address (e.g., `10.1.20.210`) |
+| `A` | IPv4 address record | Valid IPv4 address (e.g., `10.0.0.100`) |
 | `AAAA` | IPv6 address record | Valid IPv6 address (e.g., `2001:db8::1` or `fd00::1`) |
 | `CNAME` | Canonical name (alias) | Valid hostname (e.g., `target.example.com`) |
 | `TXT` | Text record (used for ownership) | String value |

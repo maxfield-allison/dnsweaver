@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"net"
 	"time"
 
@@ -46,6 +47,7 @@ func isIPv6Address(s string) bool {
 //   - Record type (A or CNAME)
 //   - Target (IP for A, hostname for CNAME)
 //   - TTL
+//   - Operational mode (managed, authoritative, additive)
 type ProviderInstance struct {
 	// Provider is the underlying DNS provider implementation.
 	Provider Provider
@@ -57,12 +59,16 @@ type ProviderInstance struct {
 	RecordType RecordType
 
 	// Target is the value for DNS records:
-	// - For A records: an IP address (e.g., "10.1.20.210")
-	// - For CNAME records: a target hostname (e.g., "bluewillows.net")
+	// - For A records: an IP address (e.g., "192.0.2.10")
+	// - For CNAME records: a target hostname (e.g., "example.com")
 	Target string
 
 	// TTL is the time-to-live for DNS records in seconds.
 	TTL int
+
+	// Mode is the operational mode for this instance.
+	// Defaults to ModeManaged if not set.
+	Mode OperationalMode
 }
 
 // Name returns the provider instance name (delegates to Provider).
@@ -136,6 +142,61 @@ func (pi *ProviderInstance) DeleteRecord(ctx context.Context, hostname string) e
 	return err
 }
 
+// UpdateRecord updates an existing DNS record in place if the provider supports
+// native updates. If the provider doesn't implement the Updater interface, this
+// method falls back to delete+create.
+//
+// This should be used when only the target, TTL, or SRV data has changed and
+// we want to avoid the brief DNS gap that delete+create would cause.
+func (pi *ProviderInstance) UpdateRecord(ctx context.Context, existing, desired Record) error {
+	// Check if provider implements native update
+	if updater, ok := pi.Provider.(Updater); ok {
+		start := time.Now()
+		err := updater.Update(ctx, existing, desired)
+		duration := time.Since(start).Seconds()
+
+		status := statusSuccess
+		if err != nil {
+			status = statusError
+		}
+
+		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "update", status).Inc()
+		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "update").Observe(duration)
+
+		return err
+	}
+
+	// Fallback: delete + create
+	// Delete the existing record
+	start := time.Now()
+	if err := pi.Provider.Delete(ctx, existing); err != nil {
+		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", statusError).Inc()
+		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete").Observe(time.Since(start).Seconds())
+		// If delete fails with not found, continue to create (record may have been manually deleted)
+		if !errors.Is(err, ErrNotFound) {
+			return err
+		}
+	} else {
+		metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", statusSuccess).Inc()
+		metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete").Observe(time.Since(start).Seconds())
+	}
+
+	// Create the new record
+	start = time.Now()
+	err := pi.Provider.Create(ctx, desired)
+	duration := time.Since(start).Seconds()
+
+	status := statusSuccess
+	if err != nil {
+		status = statusError
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "create", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "create").Observe(duration)
+
+	return err
+}
+
 // GetExistingRecords returns all A/CNAME records that exist for a given hostname.
 // This is used by the reconciler to detect if the target has changed or if there's
 // a type conflict before creating a new record.
@@ -157,9 +218,14 @@ func (pi *ProviderInstance) GetExistingRecords(ctx context.Context, hostname str
 
 	var matching []Record
 	for _, r := range allRecords {
-		// Only return A, AAAA, and CNAME records for the hostname (skip TXT, etc.)
-		if r.Hostname == hostname && (r.Type == RecordTypeA || r.Type == RecordTypeAAAA || r.Type == RecordTypeCNAME) {
-			matching = append(matching, r)
+		// Only return DNS data records for the hostname (skip TXT ownership markers)
+		if r.Hostname == hostname {
+			switch r.Type {
+			case RecordTypeA, RecordTypeAAAA, RecordTypeCNAME, RecordTypeSRV:
+				matching = append(matching, r)
+			case RecordTypeTXT:
+				// Skip TXT records (ownership markers)
+			}
 		}
 	}
 
@@ -357,6 +423,10 @@ type ProviderInstanceConfig struct {
 
 	// TTL is the record TTL in seconds.
 	TTL int
+
+	// Mode is the operational mode (managed, authoritative, additive).
+	// Defaults to "managed" if not set.
+	Mode OperationalMode
 
 	// Domains is a list of glob patterns for matching hostnames.
 	// At least one is required.

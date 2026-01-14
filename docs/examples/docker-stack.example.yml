@@ -1,0 +1,76 @@
+# Docker Swarm Stack Example
+#
+# Demonstrates using Docker secrets with dnsweaver's YAML configuration.
+#
+# Two approaches are shown:
+#
+# 1. YAML with env var interpolation + entrypoint wrapper
+#    - config.yml uses ${TECHNITIUM_TOKEN}
+#    - docker-entrypoint.sh loads secrets into env vars
+#    - Requires custom image with entrypoint wrapper
+#
+# 2. Provider-specific env var override (simpler, recommended)
+#    - config.yml defines non-sensitive config only
+#    - DNSWEAVER_{PROVIDER}_TOKEN_FILE points to secret file
+#    - Works with standard dnsweaver image
+#
+# Prerequisites:
+#   echo "your-api-token" | docker secret create technitium_token -
+#
+# Deploy:
+#   docker stack deploy -c docker-stack.example.yml dnsweaver
+
+version: "3.8"
+
+services:
+  dnsweaver:
+    image: ghcr.io/maxfield-allison/dnsweaver:latest
+    environment:
+      # Point to the config file
+      DNSWEAVER_CONFIG: "/config/config.yml"
+
+      # Option 2: Provider-specific env var override (recommended)
+      # These override values in config.yml for the named providers
+      # Provider name is normalized: "my-dns" -> MY_DNS
+      DNSWEAVER_INTERNAL_TOKEN_FILE: "/run/secrets/technitium_token"
+
+      # You can also override non-secret values if needed
+      # DNSWEAVER_INTERNAL_TARGET: "10.0.0.100"
+      # DNSWEAVER_INTERNAL_TTL: "120"
+
+    configs:
+      - source: dnsweaver_config
+        target: /config/config.yml
+
+    secrets:
+      - technitium_token
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    networks:
+      - traefik-public
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+configs:
+  dnsweaver_config:
+    file: ./config.yml  # Your local config file
+
+secrets:
+  technitium_token:
+    external: true
+
+networks:
+  traefik-public:
+    external: true

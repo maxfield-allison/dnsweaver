@@ -114,6 +114,22 @@ func (p *Provider) Type() string {
 	return "cloudflare"
 }
 
+// Capabilities returns the provider's feature support.
+// Cloudflare supports all features: TXT ownership, native update, and all record types.
+func (p *Provider) Capabilities() provider.Capabilities {
+	return provider.Capabilities{
+		SupportsOwnershipTXT: true,
+		SupportsNativeUpdate: true,
+		SupportedRecordTypes: []provider.RecordType{
+			provider.RecordTypeA,
+			provider.RecordTypeAAAA,
+			provider.RecordTypeCNAME,
+			provider.RecordTypeSRV,
+			provider.RecordTypeTXT,
+		},
+	}
+}
+
 // Zone returns the configured DNS zone name.
 func (p *Provider) Zone() string {
 	return p.zone
@@ -337,6 +353,65 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 	return nil
 }
 
+// Update modifies an existing DNS record in place.
+// This implements the provider.Updater interface for native update support.
+func (p *Provider) Update(ctx context.Context, existing, desired provider.Record) error {
+	zoneID, err := p.ZoneID(ctx)
+	if err != nil {
+		return fmt.Errorf("getting zone ID: %w", err)
+	}
+
+	// Find the existing record to get its ID
+	apiRecord, err := p.client.FindRecord(ctx, zoneID, string(existing.Type), existing.Hostname)
+	if err != nil {
+		return fmt.Errorf("finding record: %w", err)
+	}
+	if apiRecord == nil {
+		return provider.ErrNotFound
+	}
+
+	ttl := desired.TTL
+	if ttl <= 0 {
+		ttl = p.ttl
+	}
+
+	// Cloudflare's update API takes the new values
+	switch desired.Type {
+	case provider.RecordTypeA, provider.RecordTypeAAAA, provider.RecordTypeCNAME, provider.RecordTypeTXT:
+		err = p.client.UpdateRecord(ctx, zoneID, apiRecord.ID, string(desired.Type), desired.Hostname, desired.Target, ttl, p.proxied)
+		if err != nil {
+			return fmt.Errorf("updating %s record: %w", desired.Type, err)
+		}
+	case provider.RecordTypeSRV:
+		// SRV records need special handling - for now, fall back to delete+create
+		// Cloudflare SRV updates require different API structure
+		if existing.SRV == nil || desired.SRV == nil {
+			return fmt.Errorf("updating SRV record: SRV data is required")
+		}
+		// Delete old record
+		if err := p.client.DeleteRecord(ctx, zoneID, apiRecord.ID); err != nil {
+			return fmt.Errorf("deleting old SRV record for update: %w", err)
+		}
+		// Create new record
+		if err := p.client.CreateSRVRecord(ctx, zoneID, desired.Hostname, desired.SRV.Priority, desired.SRV.Weight, desired.SRV.Port, desired.Target, ttl); err != nil {
+			return fmt.Errorf("creating new SRV record for update: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported record type: %s", desired.Type)
+	}
+
+	p.logger.Info("updated record",
+		slog.String("provider", p.name),
+		slog.String("hostname", desired.Hostname),
+		slog.String("type", string(desired.Type)),
+		slog.String("old_target", existing.Target),
+		slog.String("new_target", desired.Target),
+		slog.Int("ttl", ttl),
+	)
+
+	return nil
+}
+
 // Factory returns a provider.Factory function for use with the provider registry.
 func Factory() provider.Factory {
 	return func(name string, config map[string]string) (provider.Provider, error) {
@@ -346,3 +421,6 @@ func Factory() provider.Factory {
 
 // Ensure Provider implements provider.Provider at compile time.
 var _ provider.Provider = (*Provider)(nil)
+
+// Ensure Provider implements provider.Updater at compile time.
+var _ provider.Updater = (*Provider)(nil)

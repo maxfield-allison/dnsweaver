@@ -51,8 +51,20 @@ func New(name string, config *Config, opts ...ProviderOption) (*Provider, error)
 		opt(p)
 	}
 
+	// Build client options
+	clientOpts := []ClientOption{WithLogger(p.logger)}
+
+	// Add insecure skip verify if configured
+	if config.InsecureSkipVerify {
+		clientOpts = append(clientOpts, WithInsecureSkipVerify(true))
+		p.logger.Warn("TLS certificate verification disabled for Technitium provider",
+			slog.String("provider", name),
+			slog.String("url", config.URL),
+		)
+	}
+
 	// Create the API client with the same logger
-	p.client = NewClient(config.URL, config.Token, WithLogger(p.logger))
+	p.client = NewClient(config.URL, config.Token, clientOpts...)
 
 	return p, nil
 }
@@ -76,6 +88,22 @@ func (p *Provider) Name() string {
 // Type returns "technitium".
 func (p *Provider) Type() string {
 	return "technitium"
+}
+
+// Capabilities returns the provider's feature support.
+// Technitium supports all features: TXT ownership, native update, and all record types.
+func (p *Provider) Capabilities() provider.Capabilities {
+	return provider.Capabilities{
+		SupportsOwnershipTXT: true,
+		SupportsNativeUpdate: true,
+		SupportedRecordTypes: []provider.RecordType{
+			provider.RecordTypeA,
+			provider.RecordTypeAAAA,
+			provider.RecordTypeCNAME,
+			provider.RecordTypeSRV,
+			provider.RecordTypeTXT,
+		},
+	}
 }
 
 // Zone returns the configured DNS zone.
@@ -244,5 +272,69 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 	return nil
 }
 
+// Update modifies an existing DNS record in place.
+// This implements the provider.Updater interface for native update support.
+func (p *Provider) Update(ctx context.Context, existing, desired provider.Record) error {
+	ttl := desired.TTL
+	if ttl <= 0 {
+		ttl = p.ttl
+	}
+
+	// Technitium's update API requires identifying the old record and specifying new values
+	switch desired.Type {
+	case provider.RecordTypeA:
+		if err := p.client.UpdateARecord(ctx, p.zone, existing.Hostname, existing.Target, desired.Target, ttl); err != nil {
+			return fmt.Errorf("updating A record: %w", err)
+		}
+	case provider.RecordTypeAAAA:
+		if err := p.client.UpdateAAAARecord(ctx, p.zone, existing.Hostname, existing.Target, desired.Target, ttl); err != nil {
+			return fmt.Errorf("updating AAAA record: %w", err)
+		}
+	case provider.RecordTypeCNAME:
+		if err := p.client.UpdateCNAMERecord(ctx, p.zone, existing.Hostname, existing.Target, desired.Target, ttl); err != nil {
+			return fmt.Errorf("updating CNAME record: %w", err)
+		}
+	case provider.RecordTypeSRV:
+		// SRV records need special handling - for now, fall back to delete+create
+		// Technitium doesn't have a straightforward SRV update API
+		if existing.SRV == nil || desired.SRV == nil {
+			return fmt.Errorf("updating SRV record: SRV data is required")
+		}
+		// Delete old record
+		if err := p.client.DeleteSRVRecord(ctx, p.zone, existing.Hostname, int(existing.SRV.Priority), int(existing.SRV.Weight), int(existing.SRV.Port), existing.Target); err != nil {
+			return fmt.Errorf("deleting old SRV record for update: %w", err)
+		}
+		// Create new record
+		if err := p.client.AddSRVRecord(ctx, p.zone, desired.Hostname, int(desired.SRV.Priority), int(desired.SRV.Weight), int(desired.SRV.Port), desired.Target, ttl); err != nil {
+			return fmt.Errorf("creating new SRV record for update: %w", err)
+		}
+	case provider.RecordTypeTXT:
+		// TXT records (ownership markers) don't typically need updates
+		// If value changes, delete and recreate
+		if err := p.client.DeleteTXTRecord(ctx, p.zone, existing.Hostname, existing.Target); err != nil {
+			return fmt.Errorf("deleting old TXT record for update: %w", err)
+		}
+		if err := p.client.AddTXTRecord(ctx, p.zone, desired.Hostname, desired.Target, ttl); err != nil {
+			return fmt.Errorf("creating new TXT record for update: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported record type: %s", desired.Type)
+	}
+
+	p.logger.Info("updated record",
+		slog.String("provider", p.name),
+		slog.String("hostname", desired.Hostname),
+		slog.String("type", string(desired.Type)),
+		slog.String("old_target", existing.Target),
+		slog.String("new_target", desired.Target),
+		slog.Int("ttl", ttl),
+	)
+
+	return nil
+}
+
 // Ensure Provider implements provider.Provider at compile time.
 var _ provider.Provider = (*Provider)(nil)
+
+// Ensure Provider implements provider.Updater at compile time.
+var _ provider.Updater = (*Provider)(nil)

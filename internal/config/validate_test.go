@@ -17,7 +17,7 @@ func TestValidateTargetRecordType(t *testing.T) {
 		{
 			name:       "A record with IP is valid",
 			recordType: provider.RecordTypeA,
-			target:     "10.1.20.210",
+			target:     "10.0.0.100",
 			wantErr:    false,
 		},
 		{
@@ -48,7 +48,7 @@ func TestValidateTargetRecordType(t *testing.T) {
 		{
 			name:       "CNAME record with IP is invalid",
 			recordType: provider.RecordTypeCNAME,
-			target:     "10.1.20.210",
+			target:     "10.0.0.100",
 			wantErr:    true,
 			errMatch:   "CNAME records cannot point to IP",
 		},

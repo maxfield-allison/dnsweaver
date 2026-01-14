@@ -119,7 +119,13 @@ security:gitleaks:
     name: zricethezav/gitleaks:latest
     entrypoint: [""]
   script:
-    - gitleaks detect --source . --verbose --no-git
+    # Fetch centralized config from homelab-iac (private repo)
+    - |
+      apk add --no-cache curl
+      curl -sSf --header "PRIVATE-TOKEN: ${IAC_READ_TOKEN}" \
+        "${CI_SERVER_URL}/api/v4/projects/3/repository/files/security%2Fgitleaks.toml/raw?ref=main" \
+        -o .gitleaks.toml
+    - gitleaks detect --source . --config .gitleaks.toml --verbose --no-git
   rules: *rules-code-changes
   allow_failure: false  # Block on secrets detection
 

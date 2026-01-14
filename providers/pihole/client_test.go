@@ -151,7 +151,7 @@ func TestAPIClient_List(t *testing.T) {
 			name: "list A records",
 			customDNS: customDNSResponse{
 				Data: [][]string{
-					{"10.1.20.210", "app.example.com"},
+					{"10.0.0.100", "app.example.com"},
 					{"10.1.20.211", "db.example.com"},
 				},
 			},
@@ -185,7 +185,7 @@ func TestAPIClient_List(t *testing.T) {
 			name: "filter by zone",
 			customDNS: customDNSResponse{
 				Data: [][]string{
-					{"10.1.20.210", "app.example.com"},
+					{"10.0.0.100", "app.example.com"},
 					{"10.1.20.211", "other.different.com"},
 				},
 			},
@@ -240,7 +240,7 @@ func TestAPIClient_Create(t *testing.T) {
 			record: piholeRecord{
 				Hostname: "app.example.com",
 				Type:     provider.RecordTypeA,
-				Target:   "10.1.20.210",
+				Target:   "10.0.0.100",
 			},
 			response: `{"success": true}`,
 			wantErr:  false,
@@ -270,7 +270,7 @@ func TestAPIClient_Create(t *testing.T) {
 			record: piholeRecord{
 				Hostname: "app.example.com",
 				Type:     provider.RecordTypeA,
-				Target:   "10.1.20.210",
+				Target:   "10.0.0.100",
 			},
 			response: `{"success": false, "message": "Record already exists"}`,
 			wantErr:  false,
@@ -280,7 +280,7 @@ func TestAPIClient_Create(t *testing.T) {
 			record: piholeRecord{
 				Hostname: "app.example.com",
 				Type:     provider.RecordTypeA,
-				Target:   "10.1.20.210",
+				Target:   "10.0.0.100",
 			},
 			response: `{"success": false, "message": "Invalid request"}`,
 			wantErr:  true,
@@ -316,7 +316,7 @@ func TestAPIClient_Delete(t *testing.T) {
 			record: piholeRecord{
 				Hostname: "app.example.com",
 				Type:     provider.RecordTypeA,
-				Target:   "10.1.20.210",
+				Target:   "10.0.0.100",
 			},
 			response: `{"success": true}`,
 			wantErr:  false,
@@ -336,7 +336,7 @@ func TestAPIClient_Delete(t *testing.T) {
 			record: piholeRecord{
 				Hostname: "app.example.com",
 				Type:     provider.RecordTypeA,
-				Target:   "10.1.20.210",
+				Target:   "10.0.0.100",
 			},
 			response: `{"success": false, "message": "Record not found"}`,
 			wantErr:  false,

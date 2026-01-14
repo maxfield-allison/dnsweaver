@@ -88,6 +88,12 @@ func (r *Registry) CreateInstance(cfg ProviderInstanceConfig) error {
 		RecordType: cfg.RecordType,
 		Target:     cfg.Target,
 		TTL:        cfg.TTL,
+		Mode:       cfg.Mode,
+	}
+
+	// Default to managed mode if not set
+	if instance.Mode == "" {
+		instance.Mode = ModeManaged
 	}
 
 	r.instances = append(r.instances, instance)
@@ -98,6 +104,7 @@ func (r *Registry) CreateInstance(cfg ProviderInstanceConfig) error {
 		slog.String("type", cfg.TypeName),
 		slog.String("record_type", string(cfg.RecordType)),
 		slog.String("target", cfg.Target),
+		slog.String("mode", string(instance.Mode)),
 	)
 
 	return nil

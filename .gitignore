@@ -28,6 +28,13 @@ vendor/
 
 # Environment files (may contain secrets)
 .env
+.env.*
+!.env.example
+
+# Local development files (use .example versions as templates)
+docker-compose.dev.yml
+docker-compose.local.yml
+secrets/
 .env.local
 *.env
 

@@ -460,7 +460,7 @@ labels:
   # Internal A record
   dnsweaver.records.internal.hostname: "myapp.internal.example.com"
   dnsweaver.records.internal.type: "A"
-  dnsweaver.records.internal.target: "10.1.20.100"
+  dnsweaver.records.internal.target: "10.0.0.100"
   dnsweaver.records.internal.provider: "internal-dns"
   dnsweaver.records.internal.ttl: "300"
   
@@ -541,6 +541,9 @@ Replace `{NAME}` with your instance name (e.g., `INTERNAL_DNS` for instance `int
 | `DNSWEAVER_{NAME}_URL` | Yes | Technitium API URL |
 | `DNSWEAVER_{NAME}_TOKEN` | Yes | API token (supports `_FILE`) |
 | `DNSWEAVER_{NAME}_ZONE` | Yes | DNS zone to manage |
+| `DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY` | No | Skip TLS cert verification (default: `false`) |
+
+> ⚠️ **Security Warning:** Only use `INSECURE_SKIP_VERIFY=true` for development or when connecting to servers with self-signed certificates. This disables TLS certificate validation.
 
 #### Cloudflare Provider
 
@@ -575,7 +578,7 @@ File-based provider for dnsmasq DNS server. Manages records by writing to dnsmas
 
 **dnsmasq record format:**
 ```bash
-address=/myapp.example.com/10.1.20.210      # A record
+address=/myapp.example.com/10.0.0.100       # A record
 address=/myapp.example.com/fd00::1          # AAAA record
 cname=alias.example.com,target.example.com  # CNAME
 ```

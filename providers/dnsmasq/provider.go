@@ -114,6 +114,20 @@ func (p *Provider) Type() string {
 	return "dnsmasq"
 }
 
+// Capabilities returns the provider's feature support.
+// dnsmasq is file-based: no TXT ownership (files can't store arbitrary TXT records),
+// no native update (file rewrite), only A and CNAME records.
+func (p *Provider) Capabilities() provider.Capabilities {
+	return provider.Capabilities{
+		SupportsOwnershipTXT: false, // File-based, can't store ownership TXT
+		SupportsNativeUpdate: false, // Requires file rewrite (delete+create)
+		SupportedRecordTypes: []provider.RecordType{
+			provider.RecordTypeA,
+			provider.RecordTypeCNAME,
+		},
+	}
+}
+
 // Zone returns the configured DNS zone.
 func (p *Provider) Zone() string {
 	return p.zone

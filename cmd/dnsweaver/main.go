@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log/slog"
 	"os"
@@ -38,6 +39,25 @@ var (
 )
 
 func main() {
+	// Parse command-line flags
+	configPath := flag.String("config", "", "Path to YAML configuration file")
+	showVersion := flag.Bool("version", false, "Show version and exit")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("dnsweaver %s (built %s)\n", Version, BuildDate)
+		os.Exit(0)
+	}
+
+	// If --config flag is set, set it as env var so config.Load() picks it up
+	// This maintains the priority: env var (DNSWEAVER_CONFIG) > --config flag
+	if *configPath != "" && os.Getenv("DNSWEAVER_CONFIG") == "" {
+		if err := os.Setenv("DNSWEAVER_CONFIG", *configPath); err != nil {
+			slog.Error("failed to set DNSWEAVER_CONFIG", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+	}
+
 	if err := run(); err != nil {
 		slog.Error("fatal error", slog.String("error", err.Error()))
 		os.Exit(1)

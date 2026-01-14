@@ -27,6 +27,10 @@ type ProviderInstanceConfig struct {
 	// TTL for DNS records.
 	TTL int
 
+	// Mode is the operational mode (managed, authoritative, additive).
+	// Defaults to "managed" if not set.
+	Mode provider.OperationalMode
+
 	// Domain matching patterns
 	Domains             []string // Glob patterns (default)
 	DomainsRegex        []string // Regex patterns (opt-in)
@@ -46,6 +50,7 @@ func (c *ProviderInstanceConfig) ToProviderConfig() provider.ProviderInstanceCon
 		RecordType:          c.RecordType,
 		Target:              c.Target,
 		TTL:                 c.TTL,
+		Mode:                c.Mode,
 		Domains:             c.Domains,
 		DomainsRegex:        c.DomainsRegex,
 		ExcludeDomains:      c.ExcludeDomains,
@@ -130,6 +135,18 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 		cfg.TTL = defaultTTL
 	}
 
+	// MODE (optional, defaults to "managed")
+	if modeStr := getEnv(prefix + "MODE"); modeStr != "" {
+		mode, err := provider.ParseOperationalMode(modeStr)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%sMODE: %s", prefix, err.Error()))
+		} else {
+			cfg.Mode = mode
+		}
+	} else {
+		cfg.Mode = provider.ModeManaged
+	}
+
 	// Domain patterns - either DOMAINS or DOMAINS_REGEX, not both
 	domainsStr := getEnv(prefix + "DOMAINS")
 	domainsRegexStr := getEnv(prefix + "DOMAINS_REGEX")
@@ -156,28 +173,9 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 		cfg.ExcludeDomainsRegex = splitPatterns(excludeDomainsRegexStr)
 	}
 
-	// Load provider-specific config
-	// Common fields that most providers need (with _FILE support for secrets)
-	providerFields := []struct {
-		name     string
-		isSecret bool
-		required bool // Note: providers validate their own required fields
-	}{
-		{"URL", false, false},
-		{"TOKEN", true, false},
-		{"ZONE", false, false},
-		{"ZONE_ID", false, false},
-		{"API_KEY", true, false},
-		{"API_EMAIL", false, false},
-		{"PROXIED", false, false},     // Cloudflare-specific
-		{"AUTH_HEADER", false, false}, // Webhook-specific
-		{"AUTH_TOKEN", true, false},   // Webhook-specific
-		{"TIMEOUT", false, false},     // Webhook-specific
-		{"RETRIES", false, false},     // Webhook-specific
-		{"RETRY_DELAY", false, false}, // Webhook-specific
-	}
-
-	for _, field := range providerFields {
+	// Load provider-specific config using shared field definitions
+	// Secrets support the _FILE suffix for Docker secrets
+	for _, field := range providerConfigFields {
 		var value string
 		if field.isSecret {
 			value = getEnvWithFileFallback(prefix, field.name)
@@ -190,6 +188,102 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 	}
 
 	return cfg, errs
+}
+
+// providerConfigFields defines all provider-specific configuration fields.
+// This is shared between env var loading and file config merging.
+// Fields marked as secrets support the _FILE suffix pattern for Docker secrets.
+var providerConfigFields = []struct {
+	name     string
+	isSecret bool
+}{
+	{"URL", false},
+	{"TOKEN", true},
+	{"ZONE", false},
+	{"ZONE_ID", false},
+	{"API_KEY", true},
+	{"API_EMAIL", false},
+	{"PROXIED", false},        // Cloudflare-specific
+	{"AUTH_HEADER", false},    // Webhook-specific
+	{"AUTH_TOKEN", true},      // Webhook-specific
+	{"TIMEOUT", false},        // Webhook-specific
+	{"RETRIES", false},        // Webhook-specific
+	{"RETRY_DELAY", false},    // Webhook-specific
+	{"HOST_FILE", false},      // dnsmasq-specific
+	{"BACKUP", false},         // dnsmasq-specific
+	{"INCLUDE_MARKER", false}, // dnsmasq-specific
+	{"RELOAD_COMMAND", false}, // dnsmasq-specific
+	{"MODE", false},           // Pi-hole specific (api/file)
+	{"PASSWORD", true},        // Pi-hole specific
+}
+
+// mergeProviderEnvOverrides applies environment variable overrides to a
+// file-based provider configuration. This allows users to:
+//  1. Define most config in YAML for readability
+//  2. Override specific values (especially secrets) via env vars
+//  3. Use Docker secrets with the _FILE suffix pattern
+//
+// Environment variables use the pattern: DNSWEAVER_{PROVIDER_NAME}_{FIELD}
+// For secrets, DNSWEAVER_{PROVIDER_NAME}_{FIELD}_FILE is also checked.
+//
+// Any env var that is set will override the corresponding YAML value.
+func mergeProviderEnvOverrides(cfg *ProviderInstanceConfig) {
+	prefix := envPrefix(cfg.Name)
+
+	// Ensure ProviderConfig map exists
+	if cfg.ProviderConfig == nil {
+		cfg.ProviderConfig = make(map[string]string)
+	}
+
+	// Check for provider-specific config field overrides
+	for _, field := range providerConfigFields {
+		var value string
+		if field.isSecret {
+			value = getEnvWithFileFallback(prefix, field.name)
+		} else {
+			value = getEnv(prefix + field.name)
+		}
+		// Only override if env var is explicitly set
+		if value != "" {
+			slog.Debug("env override applied to provider config",
+				slog.String("provider", cfg.Name),
+				slog.String("field", field.name),
+			)
+			cfg.ProviderConfig[field.name] = value
+		}
+	}
+
+	// Also check for top-level provider settings that might be overridden
+	// TARGET override
+	if target := getEnv(prefix + "TARGET"); target != "" {
+		slog.Debug("env override applied to provider target",
+			slog.String("provider", cfg.Name),
+			slog.String("target", target),
+		)
+		cfg.Target = target
+	}
+
+	// TTL override
+	if ttlStr := getEnv(prefix + "TTL"); ttlStr != "" {
+		if ttl, err := strconv.Atoi(ttlStr); err == nil && ttl >= 1 {
+			slog.Debug("env override applied to provider TTL",
+				slog.String("provider", cfg.Name),
+				slog.Int("ttl", ttl),
+			)
+			cfg.TTL = ttl
+		}
+	}
+
+	// MODE override
+	if modeStr := getEnv(prefix + "MODE"); modeStr != "" {
+		if mode, err := provider.ParseOperationalMode(modeStr); err == nil {
+			slog.Debug("env override applied to provider mode",
+				slog.String("provider", cfg.Name),
+				slog.String("mode", modeStr),
+			)
+			cfg.Mode = mode
+		}
+	}
 }
 
 // splitPatterns splits a comma-separated pattern string into individual patterns.

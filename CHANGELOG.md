@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **dnsweaver.enabled=false label ignored** (#89): Services with `dnsweaver.enabled=false` now correctly skip record creation
+  - Global `dnsweaver.enabled=false` prevents all record creation for the workload
+  - Per-record `dnsweaver.records.<name>.enabled=false` disables specific named records
+- **dnsweaver.ttl label ignored for simple hostname** (#90): TTL override now works in simple hostname mode
+  - `dnsweaver.ttl=60` now correctly sets TTL when using `dnsweaver.hostname`
+  - Previously only worked with named records (`dnsweaver.records.<name>.ttl`)
+
 ## [0.5.1] - 2026-01-13
 
 ### Added

@@ -348,3 +348,160 @@ func TestParser_ProviderTargeting(t *testing.T) {
 		t.Errorf("public provider = %q, want cloudflare", providers["app.example.com"])
 	}
 }
+
+func TestParser_EnabledFalse_SkipsWorkload(t *testing.T) {
+	parser := NewParser(WithParserLogger(testLogger()))
+
+	labels := map[string]string{
+		"dnsweaver.hostname": "app.example.com",
+		"dnsweaver.enabled":  "false",
+	}
+
+	extractions := parser.ExtractHostnames(labels)
+
+	if len(extractions) != 0 {
+		t.Errorf("expected 0 extractions when enabled=false, got %d", len(extractions))
+	}
+}
+
+func TestParser_EnabledFalse_CaseInsensitive(t *testing.T) {
+	parser := NewParser(WithParserLogger(testLogger()))
+
+	testCases := []string{"false", "FALSE", "False", "  false  "}
+
+	for _, value := range testCases {
+		labels := map[string]string{
+			"dnsweaver.hostname": "app.example.com",
+			"dnsweaver.enabled":  value,
+		}
+
+		extractions := parser.ExtractHostnames(labels)
+
+		if len(extractions) != 0 {
+			t.Errorf("expected 0 extractions for enabled=%q, got %d", value, len(extractions))
+		}
+	}
+}
+
+func TestParser_EnabledTrue_ProcessesWorkload(t *testing.T) {
+	parser := NewParser(WithParserLogger(testLogger()))
+
+	labels := map[string]string{
+		"dnsweaver.hostname": "app.example.com",
+		"dnsweaver.enabled":  "true",
+	}
+
+	extractions := parser.ExtractHostnames(labels)
+
+	if len(extractions) != 1 {
+		t.Fatalf("expected 1 extraction when enabled=true, got %d", len(extractions))
+	}
+}
+
+func TestParser_EnabledNotSet_ProcessesWorkload(t *testing.T) {
+	parser := NewParser(WithParserLogger(testLogger()))
+
+	labels := map[string]string{
+		"dnsweaver.hostname": "app.example.com",
+		// enabled not set - should default to processing
+	}
+
+	extractions := parser.ExtractHostnames(labels)
+
+	if len(extractions) != 1 {
+		t.Fatalf("expected 1 extraction when enabled not set, got %d", len(extractions))
+	}
+}
+
+func TestParser_SimpleHostname_WithTTL(t *testing.T) {
+	parser := NewParser(WithParserLogger(testLogger()))
+
+	labels := map[string]string{
+		"dnsweaver.hostname": "app.example.com",
+		"dnsweaver.ttl":      "60",
+	}
+
+	extractions := parser.ExtractHostnames(labels)
+
+	if len(extractions) != 1 {
+		t.Fatalf("expected 1 extraction, got %d", len(extractions))
+	}
+
+	if extractions[0].TTL != 60 {
+		t.Errorf("ttl = %d, want 60", extractions[0].TTL)
+	}
+}
+
+func TestParser_SimpleHostname_WithTTL_Trimmed(t *testing.T) {
+	parser := NewParser(WithParserLogger(testLogger()))
+
+	labels := map[string]string{
+		"dnsweaver.hostname": "app.example.com",
+		"dnsweaver.ttl":      "  120  ",
+	}
+
+	extractions := parser.ExtractHostnames(labels)
+
+	if len(extractions) != 1 {
+		t.Fatalf("expected 1 extraction, got %d", len(extractions))
+	}
+
+	if extractions[0].TTL != 120 {
+		t.Errorf("ttl = %d, want 120", extractions[0].TTL)
+	}
+}
+
+func TestParser_SimpleHostname_InvalidTTL(t *testing.T) {
+	parser := NewParser(WithParserLogger(testLogger()))
+
+	labels := map[string]string{
+		"dnsweaver.hostname": "app.example.com",
+		"dnsweaver.ttl":      "invalid",
+	}
+
+	extractions := parser.ExtractHostnames(labels)
+
+	if len(extractions) != 1 {
+		t.Fatalf("expected 1 extraction, got %d", len(extractions))
+	}
+
+	// Invalid TTL should result in 0 (use default)
+	if extractions[0].TTL != 0 {
+		t.Errorf("ttl = %d, want 0 for invalid value", extractions[0].TTL)
+	}
+}
+
+func TestParser_NamedRecord_EnabledFalse(t *testing.T) {
+	parser := NewParser(WithParserLogger(testLogger()))
+
+	labels := map[string]string{
+		"dnsweaver.records.myapp.hostname": "app.example.com",
+		"dnsweaver.records.myapp.enabled":  "false",
+	}
+
+	extractions := parser.ExtractHostnames(labels)
+
+	if len(extractions) != 0 {
+		t.Errorf("expected 0 extractions for named record with enabled=false, got %d", len(extractions))
+	}
+}
+
+func TestParser_NamedRecord_MixedEnabled(t *testing.T) {
+	parser := NewParser(WithParserLogger(testLogger()))
+
+	labels := map[string]string{
+		"dnsweaver.records.enabled.hostname":  "enabled.example.com",
+		"dnsweaver.records.disabled.hostname": "disabled.example.com",
+		"dnsweaver.records.disabled.enabled":  "false",
+	}
+
+	extractions := parser.ExtractHostnames(labels)
+
+	if len(extractions) != 1 {
+		t.Fatalf("expected 1 extraction, got %d", len(extractions))
+	}
+
+	if extractions[0].Hostname != "enabled.example.com" {
+		t.Errorf("hostname = %q, expected enabled.example.com", extractions[0].Hostname)
+	}
+}

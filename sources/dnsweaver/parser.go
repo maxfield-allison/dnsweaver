@@ -12,6 +12,13 @@ const (
 	// SimpleHostnameLabel is the label for simple hostname definition.
 	SimpleHostnameLabel = "dnsweaver.hostname"
 
+	// EnabledLabel controls whether dnsweaver should create records for this workload.
+	// Set to "false" to disable record creation.
+	EnabledLabel = "dnsweaver.enabled"
+
+	// TTLLabel sets the TTL for simple hostname mode.
+	TTLLabel = "dnsweaver.ttl"
+
 	// RecordsPrefix is the prefix for named record definitions.
 	// Format: dnsweaver.records.<name>.<field>
 	RecordsPrefix = "dnsweaver.records."
@@ -27,6 +34,7 @@ const (
 	FieldPort     = "port"
 	FieldPriority = "priority"
 	FieldWeight   = "weight"
+	FieldEnabled  = "enabled"
 )
 
 // namedRecordRegex matches dnsweaver.records.<name>.<field> labels.
@@ -105,15 +113,38 @@ func NewParser(opts ...ParserOption) *Parser {
 func (p *Parser) ExtractHostnames(labels map[string]string) []Extraction {
 	var extractions []Extraction
 
+	// Check global enabled flag - if explicitly set to false, skip all processing
+	if enabled, ok := labels[EnabledLabel]; ok {
+		if strings.EqualFold(strings.TrimSpace(enabled), "false") {
+			p.logger.Debug("dnsweaver.enabled is false, skipping workload")
+			return extractions
+		}
+	}
+
 	// Handle simple hostname label
 	if hostname, ok := labels[SimpleHostnameLabel]; ok {
 		hostname = strings.TrimSpace(hostname)
 		if hostname != "" {
-			extractions = append(extractions, Extraction{
+			extraction := Extraction{
 				Hostname: hostname,
-			})
+			}
+
+			// Parse TTL for simple hostname
+			if ttlStr, ok := labels[TTLLabel]; ok && ttlStr != "" {
+				if ttl, err := strconv.Atoi(strings.TrimSpace(ttlStr)); err == nil && ttl > 0 {
+					extraction.TTL = ttl
+				} else {
+					p.logger.Warn("invalid TTL value for simple hostname",
+						slog.String("hostname", hostname),
+						slog.String("ttl", ttlStr),
+					)
+				}
+			}
+
+			extractions = append(extractions, extraction)
 			p.logger.Debug("found simple dnsweaver hostname",
 				slog.String("hostname", hostname),
+				slog.Int("ttl", extraction.TTL),
 			)
 		}
 	}
@@ -139,6 +170,16 @@ func (p *Parser) ExtractHostnames(labels map[string]string) []Extraction {
 
 	// Process named records
 	for name, fields := range namedRecords {
+		// Check if this named record is explicitly disabled
+		if enabled, ok := fields[FieldEnabled]; ok {
+			if strings.EqualFold(strings.TrimSpace(enabled), "false") {
+				p.logger.Debug("named record disabled",
+					slog.String("record", name),
+				)
+				continue
+			}
+		}
+
 		hostname, ok := fields[FieldHostname]
 		if !ok || hostname == "" {
 			p.logger.Warn("named record missing hostname",

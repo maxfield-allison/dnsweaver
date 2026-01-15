@@ -9,37 +9,41 @@
 
 dnsweaver watches Docker events and automatically creates and deletes DNS records for services with reverse proxy labels (Traefik, etc.). Unlike single-provider tools, dnsweaver supports **split-horizon DNS** and **multiple DNS providers** simultaneously.
 
+📚 **[Full Documentation](https://maxfield-allison.github.io/dnsweaver/)**
+
 ## Features
 
-- **Multi-Provider Support**: Route different domains to different DNS providers
-- **Split-Horizon DNS**: Internal and external records from the same container labels
-- **Docker and Swarm Support**: Works with standalone Docker and Docker Swarm clusters
-- **Socket Proxy Compatible**: Connect via TCP to a Docker socket proxy for improved security
-- **Traefik Integration**: Parses `traefik.http.routers.*.rule` labels to extract hostnames
-- **Static File Discovery**: Parse Traefik dynamic configuration files (YAML and TOML) for hostnames not defined in container labels
-- **A, AAAA, and CNAME Records**: Full record type support including IPv6
-- **Real-time Sync**: Watches Docker events and updates records instantly
-- **Startup Reconciliation**: Full sync on startup ensures consistency
-- **Prometheus Metrics**: Full observability with `dnsweaver_*` metrics
-- **Secrets Support**: Docker secrets compatible via `_FILE` suffix variables
-- **Health Endpoints**: `/health`, `/ready`, and `/metrics` for monitoring
-- **Multi-arch Images**: Supports linux/amd64 and linux/arm64
+- 🔀 **Multi-Provider Support** — Route different domains to different DNS providers
+- 🌐 **Split-Horizon DNS** — Internal and external records from the same container labels
+- 🐳 **Docker & Swarm Native** — Works with standalone Docker and Docker Swarm clusters
+- 🔒 **Socket Proxy Compatible** — Connect via TCP to a Docker socket proxy for improved security
+- 🏷️ **Traefik Integration** — Parses `traefik.http.routers.*.rule` labels to extract hostnames
+- 📊 **Observable** — Prometheus metrics, health endpoints, structured logging
+- 🔑 **Secrets Support** — Docker secrets compatible via `_FILE` suffix variables
+
+## Supported Providers
+
+| Provider | Record Types | Notes |
+|----------|--------------|-------|
+| [Technitium](https://maxfield-allison.github.io/dnsweaver/providers/technitium/) | A, AAAA, CNAME, SRV, TXT | Full-featured self-hosted DNS |
+| [Cloudflare](https://maxfield-allison.github.io/dnsweaver/providers/cloudflare/) | A, AAAA, CNAME, TXT | With optional proxy support |
+| [Pi-hole](https://maxfield-allison.github.io/dnsweaver/providers/pihole/) | A, AAAA, CNAME | API or file mode |
+| [dnsmasq](https://maxfield-allison.github.io/dnsweaver/providers/dnsmasq/) | A, AAAA, CNAME | File-based configuration |
+| [Webhook](https://maxfield-allison.github.io/dnsweaver/providers/webhook/) | Any | Custom integrations |
 
 ## Quick Start
 
-### Docker Hub
+### Installation
 
 ```bash
+# Docker Hub
 docker pull maxamill/dnsweaver:latest
-```
 
-### GitHub Container Registry
-
-```bash
+# GitHub Container Registry
 docker pull ghcr.io/maxfield-allison/dnsweaver:latest
 ```
 
-### Docker Compose Example
+### Basic Example
 
 ```yaml
 services:
@@ -47,10 +51,7 @@ services:
     image: maxamill/dnsweaver:latest
     restart: unless-stopped
     environment:
-      # Define instance names (you choose these, they're arbitrary identifiers)
-      - DNSWEAVER_INSTANCES=internal-dns,public-dns
-
-      # Internal DNS (Technitium) - instance name "internal-dns" → prefix "INTERNAL_DNS"
+      - DNSWEAVER_INSTANCES=internal-dns
       - DNSWEAVER_INTERNAL_DNS_TYPE=technitium
       - DNSWEAVER_INTERNAL_DNS_URL=http://dns.internal:5380
       - DNSWEAVER_INTERNAL_DNS_TOKEN_FILE=/run/secrets/technitium_token
@@ -58,31 +59,24 @@ services:
       - DNSWEAVER_INTERNAL_DNS_RECORD_TYPE=A
       - DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
       - DNSWEAVER_INTERNAL_DNS_DOMAINS=*.home.example.com
-
-      # Public DNS (Cloudflare)
-      - DNSWEAVER_PUBLIC_DNS_TYPE=cloudflare
-      - DNSWEAVER_PUBLIC_DNS_TOKEN_FILE=/run/secrets/cloudflare_token
-      - DNSWEAVER_PUBLIC_DNS_ZONE=example.com
-      - DNSWEAVER_PUBLIC_DNS_RECORD_TYPE=CNAME
-      - DNSWEAVER_PUBLIC_DNS_TARGET=proxy.example.com
-      - DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
-      - DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.home.example.com
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     secrets:
       - technitium_token
-      - cloudflare_token
-    ports:
-      - "8080:8080"
 
 secrets:
   technitium_token:
     external: true
-  cloudflare_token:
-    external: true
 ```
 
 ### How It Works
+
+```
+┌─────────────────┐     ┌──────────────┐     ┌─────────────────┐
+│  Docker Events  │────▶│  dnsweaver   │────▶│  DNS Providers  │
+│  (start/stop)   │     │  (matching)  │     │  (A/CNAME/SRV)  │
+└─────────────────┘     └──────────────┘     └─────────────────┘
+```
 
 1. A container starts with a Traefik label:
    ```yaml
@@ -90,598 +84,55 @@ secrets:
      - "traefik.http.routers.myapp.rule=Host(`myapp.home.example.com`)"
    ```
 
-2. dnsweaver matches `myapp.home.example.com` against provider domain patterns
+2. dnsweaver extracts the hostname and matches it against configured provider domain patterns
 
-3. The matching provider creates the appropriate DNS record:
-   - **A record**: `myapp.home.example.com → 10.0.0.100` (direct IP)
-   - **CNAME record**: `myapp.example.com → docker-host.example.com` (alias to target hostname)
+3. The matching provider creates the DNS record:
+   - **A record**: `myapp.home.example.com → 10.0.0.100`
+   - **CNAME**: `myapp.example.com → proxy.example.com`
 
-4. When the container stops, the DNS record is automatically deleted (see [Record Lifecycle](#record-lifecycle) for details)
+4. When the container stops, the DNS record is automatically cleaned up
 
-### Record Lifecycle
+## Documentation
 
-Understanding when dnsweaver creates and deletes DNS records helps you configure it safely for your environment.
-
-#### When Records Are Created
-
-Records are created during reconciliation when:
-1. A container/service has matching reverse proxy labels (e.g., Traefik `Host()` rules)
-2. The extracted hostname matches a configured provider's domain patterns
-3. The record doesn't already exist (or exists with a different target, triggering an update)
-
-#### When Records Are Deleted
-
-Records are **only** deleted during **orphan cleanup**, which requires ALL of these conditions:
-
-1. `DNSWEAVER_CLEANUP_ORPHANS=true` (the default)
-2. The hostname has an ownership TXT record (meaning dnsweaver created or adopted it)
-3. The hostname is **no longer found in any running container/service**
-
-If any of these conditions is false, the record stays. This means:
-
-- **Stopped containers still protect their records** — A container that's stopped but not removed still appears in Docker and its hostnames are still extracted
-- **Manually-created records are safe** — Without an ownership TXT record, dnsweaver won't touch them
-- **Dry-run lets you preview** — Set `DNSWEAVER_DRY_RUN=true` to see what would be deleted
-
-#### Reconciliation Triggers
-
-Reconciliation (the process of comparing desired vs actual DNS state) runs when:
-
-| Trigger | Timing | Description |
-|---------|--------|-------------|
-| **Docker events** | Real-time (2s debounce) | Container/service start, stop, update, remove |
-| **Periodic timer** | Every `RECONCILE_INTERVAL` (default: 60s) | Safety net for any missed events |
-| **File changes** | When detected | If Traefik file discovery is enabled |
-| **Startup** | Once on start | Full sync ensures consistency |
-
-#### Tuning for Safety
-
-For extra safety during slow container restarts or deployments:
-
-- **Increase interval**: `DNSWEAVER_RECONCILE_INTERVAL=300` (5 minutes) — more time for containers to restart
-- **Disable cleanup**: `DNSWEAVER_CLEANUP_ORPHANS=false` — never auto-delete, manually remove old records
-- **Preview first**: `DNSWEAVER_DRY_RUN=true` — see what would happen without making changes
-
-See [Environment Variables Reference](#environment-variables-reference) for the complete list of settings.
-
-#### Domain Migration and Phased Rollouts
-
-dnsweaver's domain matching makes it safe to migrate between domains gradually. If your provider is configured with `DOMAINS=*.newdomain.local`, containers using labels like `Host(`app.olddomain.lan`)` will simply be **ignored** — dnsweaver only acts on hostnames that match at least one of the configured domain patterns.
-
-**Migration example:** Moving from `.lan` to `.local`
-
-```bash
-# Provider configured for new domain only
-DNSWEAVER_DNS_TYPE=technitium
-DNSWEAVER_DNS_DOMAINS=*.home.local
-DNSWEAVER_DNS_TARGET=10.0.0.100
-
-# Container labels:
-# - app.home.local     → ✅ Record created (matches *.home.local)
-# - app.home.lan       → ⏭️ Skipped (no matching provider)
-# - legacy.oldzone.lan → ⏭️ Skipped (no matching provider)
-```
-
-This allows you to:
-1. Deploy dnsweaver with your new domain patterns
-2. Migrate containers one at a time by updating their Traefik labels
-3. Old-domain containers continue working (manually managed DNS) until you're ready
-
-> **Tip:** Run with `LOG_LEVEL=debug` to see "no matching providers for hostname" messages for containers that don't match any configured domain pattern.
-
-> **Note:** dnsweaver only manages records it creates. Your existing DNS records (like the A record for your docker host) are never modified or deleted — ownership is tracked via TXT records. By default, dnsweaver will **not** adopt existing DNS records; if a record already exists with the correct target but no ownership TXT, dnsweaver skips it. Set `DNSWEAVER_ADOPT_EXISTING=true` to have dnsweaver take ownership of matching records. You can also run with `DNSWEAVER_DRY_RUN=true` to see what changes would be made without actually modifying DNS.
-
-### Record Types and Targets
-
-The `RECORD_TYPE` and `TARGET` settings control what DNS records are created:
-
-| Record Type | TARGET Value | Result | Use Case |
-|-------------|--------------|--------|----------|
-| `A` | IPv4 address (e.g., `10.0.0.100`) | Direct IPv4 resolution | Internal DNS, split-horizon |
-| `AAAA` | IPv6 address (e.g., `2001:db8::1`) | Direct IPv6 resolution | IPv6-enabled environments |
-| `CNAME` | Hostname (e.g., `ingress.example.com`) | Alias to another name | Public DNS via reverse proxy |
-| `SRV` | Target hostname + priority/weight/port | Service discovery | Minecraft, SIP, LDAP |
-
-**Example scenarios:**
-
-- **Single Docker host:** All service subdomains CNAME to your docker host
-  ```bash
-  DNSWEAVER_INTERNAL_DNS_RECORD_TYPE=CNAME
-  DNSWEAVER_INTERNAL_DNS_TARGET=docker-host.example.com
-  DNSWEAVER_INTERNAL_DNS_DOMAINS=*.example.com
-  # app1.example.com → CNAME → docker-host.example.com
-  # app2.example.com → CNAME → docker-host.example.com
-  ```
-
-- **Dedicated ingress/reverse proxy:** All services CNAME to a shared ingress hostname
-  ```bash
-  DNSWEAVER_PUBLIC_DNS_TARGET=ingress.example.com
-  ```
-
-- **Multiple Docker hosts:** Each dnsweaver instance points to its own host
-  ```bash
-  # On docker-host-1
-  DNSWEAVER_PUBLIC_DNS_TARGET=docker1.example.com
-  DNSWEAVER_PUBLIC_DNS_DOMAINS=*.docker1.example.com
-
-  # On docker-host-2
-  DNSWEAVER_PUBLIC_DNS_TARGET=docker2.example.com
-  DNSWEAVER_PUBLIC_DNS_DOMAINS=*.docker2.example.com
-  ```
-
-- **Internal A records:** Point directly to a load balancer VIP
-  ```bash
-  DNSWEAVER_INTERNAL_DNS_RECORD_TYPE=A
-  DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
-  ```
-
-- **IPv6 AAAA records:** Point to an IPv6 address
-  ```bash
-  DNSWEAVER_IPV6_DNS_RECORD_TYPE=AAAA
-  DNSWEAVER_IPV6_DNS_TARGET=2001:db8::1
-  ```
-
-## Configuration
-
-All configuration is via environment variables with the `DNSWEAVER_` prefix. Variables support the `_FILE` suffix for Docker secrets.
-
-### Global Settings
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DNSWEAVER_LOG_LEVEL` | `info` | Logging level: debug, info, warn, error |
-| `DNSWEAVER_LOG_FORMAT` | `json` | Log format: json, text |
-| `DNSWEAVER_DRY_RUN` | `false` | Log changes without applying |
-| `DNSWEAVER_CLEANUP_ORPHANS` | `true` | Delete DNS records when workloads are removed |
-| `DNSWEAVER_OWNERSHIP_TRACKING` | `true` | Use TXT records to track record ownership (prevents deletion of manually-created records) |
-| `DNSWEAVER_ADOPT_EXISTING` | `false` | Adopt existing DNS records by creating ownership TXT records |
-| `DNSWEAVER_DEFAULT_TTL` | `300` | Default TTL for DNS records (seconds) |
-| `DNSWEAVER_RECONCILE_INTERVAL` | `60s` | Full reconciliation interval |
-| `DNSWEAVER_HEALTH_PORT` | `8080` | Port for health/metrics endpoints |
-
-**TTL Handling:**
-
-- TTL (Time To Live) controls how long DNS resolvers cache records
-- Default is 300 seconds (5 minutes) — a balance between responsiveness and cache efficiency
-- Per-instance TTL can be set with `DNSWEAVER_{NAME}_TTL` to override the global default
-- TTL is set at record creation time; changing TTL doesn't update existing records (delete and recreate to change)
-- **Cloudflare special case:** Proxied records ignore TTL and use "Automatic" (API shows TTL=1)
-
-### Docker Settings
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DNSWEAVER_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker host (socket path or TCP URL) |
-| `DNSWEAVER_DOCKER_MODE` | `auto` | Mode: auto, swarm, standalone |
-
-**Socket Proxy Support**
-
-For improved security, dnsweaver can connect to a Docker socket proxy instead of mounting the Docker socket directly:
-
-```yaml
-environment:
-  - DNSWEAVER_DOCKER_HOST=tcp://socket-proxy:2375
-```
-
-This is the recommended approach for production deployments. The socket proxy only needs to expose read-only access to containers, services, and events.
-
-### Instance Configuration
-
-Define named **instances** that each connect to a DNS provider. Instance names are arbitrary identifiers you choose:
-
-```bash
-# List of instance names you define (order = priority for domain matching)
-DNSWEAVER_INSTANCES=internal-dns,public-dns
-
-# Each instance needs TYPE to specify which provider it uses
-# Note: Dashes in names become underscores in env vars
-# Example: "internal-dns" → DNSWEAVER_INTERNAL_DNS_*
-DNSWEAVER_INTERNAL_DNS_TYPE=technitium    # ← This sets the provider type
-DNSWEAVER_INTERNAL_DNS_RECORD_TYPE=A
-DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
-DNSWEAVER_INTERNAL_DNS_DOMAINS=*.home.example.com
-DNSWEAVER_INTERNAL_DNS_TTL=300
-
-DNSWEAVER_PUBLIC_DNS_TYPE=cloudflare
-DNSWEAVER_PUBLIC_DNS_RECORD_TYPE=CNAME
-DNSWEAVER_PUBLIC_DNS_TARGET=proxy.example.com
-DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
-DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.home.example.com
-```
-
-> **Note:** `DNSWEAVER_PROVIDERS` is deprecated but still works as an alias for `DNSWEAVER_INSTANCES`.
-
-### Domain Matching
-
-dnsweaver supports both **glob patterns** (default) and **regex** (opt-in):
-
-**Glob patterns:**
-```bash
-DNSWEAVER_INTERNAL_DNS_DOMAINS=*.home.example.com
-DNSWEAVER_INTERNAL_DNS_EXCLUDE_DOMAINS=admin.home.example.com
-```
-
-**Regex patterns:**
-```bash
-DNSWEAVER_INTERNAL_DNS_DOMAINS_REGEX=^[a-z0-9-]+\.home\.example\.com$
-```
-
-#### Multi-Provider Matching (Split-Horizon DNS)
-
-When a hostname matches multiple providers, dnsweaver creates records in **all matching providers**. This is intentional for split-horizon DNS:
-
-```bash
-DNSWEAVER_INSTANCES=internal-dns,public-dns
-
-# Internal DNS: *.example.com → 10.0.0.100 (private IP)
-DNSWEAVER_INTERNAL_DNS_DOMAINS=*.example.com
-DNSWEAVER_INTERNAL_DNS_TARGET=10.0.0.100
-
-# Public DNS: *.example.com → public.example.com (public CNAME)
-DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
-DNSWEAVER_PUBLIC_DNS_TARGET=public.example.com
-```
-
-With this configuration, `app.example.com` creates records in **both** providers:
-
-- Internal DNS: `app.example.com → A → 10.0.0.100`
-- Public DNS: `app.example.com → CNAME → public.example.com`
-
-**To route different subdomains to different providers**, use non-overlapping patterns or `EXCLUDE_DOMAINS`:
-
-```bash
-# Internal only: *.internal.example.com
-DNSWEAVER_INTERNAL_DNS_DOMAINS=*.internal.example.com
-
-# Public only: *.example.com but NOT internal subdomains
-DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
-DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.internal.example.com
-```
-
-#### Instance Order (Priority)
-
-The order of instances in `DNSWEAVER_INSTANCES` does **not** affect which providers receive records — all matching providers get records. However, instance order matters for:
-
-1. **Logging**: Actions are logged in instance order
-2. **Startup validation**: Providers are initialized in order
-
-### Provider-Specific Settings
-
-#### Technitium
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DNSWEAVER_{NAME}_URL` | Yes | Technitium API URL |
-| `DNSWEAVER_{NAME}_TOKEN` | Yes* | API token (*or use `_FILE`) |
-| `DNSWEAVER_{NAME}_ZONE` | Yes | DNS zone to manage |
-
-#### Cloudflare
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DNSWEAVER_{NAME}_TOKEN` | Yes* | Cloudflare API token (*or use `_FILE`) |
-| `DNSWEAVER_{NAME}_ZONE_ID` | Yes** | Zone ID (**or use `ZONE`) |
-| `DNSWEAVER_{NAME}_ZONE` | Yes** | Zone name for lookup (**or use `ZONE_ID`) |
-| `DNSWEAVER_{NAME}_TTL` | No | Record TTL, default 300 (1 = automatic when proxied) |
-| `DNSWEAVER_{NAME}_PROXIED` | No | Enable Cloudflare proxy (default: false) |
-
-**TTL Note:** When `PROXIED=true`, Cloudflare ignores the TTL and uses "Automatic" (displayed as TTL=1 in the API). For unproxied records, Cloudflare requires TTL >= 60 seconds.
-
-**Example:**
-```bash
-DNSWEAVER_PUBLIC_DNS_TYPE=cloudflare
-DNSWEAVER_PUBLIC_DNS_TOKEN_FILE=/run/secrets/cloudflare_token
-DNSWEAVER_PUBLIC_DNS_ZONE=example.com
-DNSWEAVER_PUBLIC_DNS_PROXIED=false
-DNSWEAVER_PUBLIC_DNS_RECORD_TYPE=CNAME
-DNSWEAVER_PUBLIC_DNS_TARGET=proxy.example.com
-DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
-DNSWEAVER_PUBLIC_DNS_EXCLUDE_DOMAINS=*.home.example.com
-```
-
-#### Webhook
-
-Generic webhook provider for custom DNS integrations.
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DNSWEAVER_{NAME}_URL` | Yes | Base URL for webhook endpoint |
-| `DNSWEAVER_{NAME}_AUTH_HEADER` | No | Custom auth header name (e.g., `Authorization`) |
-| `DNSWEAVER_{NAME}_AUTH_TOKEN` | No* | Auth token value (*or use `_FILE`) |
-| `DNSWEAVER_{NAME}_TIMEOUT` | No | HTTP timeout (default: 30s) |
-| `DNSWEAVER_{NAME}_RETRIES` | No | Retry attempts (default: 3) |
-| `DNSWEAVER_{NAME}_RETRY_DELAY` | No | Base delay between retries (default: 1s) |
-
-**Webhook API Contract:**
-
-dnsweaver sends the following HTTP requests to your webhook:
-
-| Operation | Method | Path | Body |
-|-----------|--------|------|------|
-| Ping | GET | `/ping` | — |
-| List | GET | `/records` | — |
-| Create | POST | `/records` | `{"hostname": "...", "type": "A", "value": "...", "ttl": 300}` |
-| Delete | DELETE | `/records/{hostname}/{type}` | — |
-
-### Source Configuration
-
-dnsweaver discovers hostnames from Docker container labels by default. Additionally, you can configure **static file discovery** to parse Traefik configuration files for Host rules.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DNSWEAVER_SOURCES` | `traefik` | Comma-separated list of source types: `traefik`, `dnsweaver` |
-| `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS` | *(none)* | Comma-separated paths to Traefik config directories or files |
-| `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATTERN` | `*.yml,*.yaml,*.toml` | Glob pattern for config files |
-| `DNSWEAVER_SOURCE_TRAEFIK_POLL_INTERVAL` | `60s` | How often to re-scan files for changes |
-| `DNSWEAVER_SOURCE_TRAEFIK_WATCH_METHOD` | `auto` | File watching method: `auto`, `inotify`, `poll` |
-
-**Example: Static File Discovery**
-
-```yaml
-environment:
-  # Enable file discovery by specifying paths
-  - DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS=/traefik/rules,/traefik/dynamic
-  # Default pattern includes: *.yml, *.yaml, *.toml
-  # Or specify custom pattern:
-  # - DNSWEAVER_SOURCE_TRAEFIK_FILE_PATTERN=*.yml,*.toml
-volumes:
-  # Mount Traefik config directory
-  - /path/to/traefik/rules:/traefik/rules:ro
-```
-
-With file discovery enabled, dnsweaver parses Traefik dynamic configuration files for `Host()` rules and creates DNS records for discovered hostnames. This is useful for:
-- Hostnames defined in static Traefik files (not container labels)
-- External services routed through Traefik
-- Pre-provisioning DNS before container deployment
-
-### Native dnsweaver Labels
-
-The `dnsweaver` source allows containers to define DNS records directly, without needing Traefik or other reverse proxy labels. This is useful for:
-- Services that don't use a reverse proxy
-- Explicit control over record type, target, and TTL
-- Routing different records to different DNS providers
-- SRV records for service discovery
-
-**Enable the dnsweaver source:**
-```yaml
-environment:
-  - DNSWEAVER_SOURCES=traefik,dnsweaver
-```
-
-**Simple hostname** (uses provider defaults):
-```yaml
-labels:
-  dnsweaver.hostname: "myapp.example.com"
-```
-
-**Named records with explicit settings:**
-```yaml
-labels:
-  # Internal A record
-  dnsweaver.records.internal.hostname: "myapp.internal.example.com"
-  dnsweaver.records.internal.type: "A"
-  dnsweaver.records.internal.target: "10.0.0.100"
-  dnsweaver.records.internal.provider: "internal-dns"
-  dnsweaver.records.internal.ttl: "300"
-  
-  # Public CNAME record
-  dnsweaver.records.public.hostname: "myapp.example.com"
-  dnsweaver.records.public.type: "CNAME"
-  dnsweaver.records.public.target: "lb.example.com"
-  dnsweaver.records.public.provider: "cloudflare"
-```
-
-**SRV record example:**
-```yaml
-labels:
-  dnsweaver.records.minecraft.hostname: "_minecraft._tcp.mc.example.com"
-  dnsweaver.records.minecraft.type: "SRV"
-  dnsweaver.records.minecraft.target: "mc-server.example.com"
-  dnsweaver.records.minecraft.port: "25565"
-  dnsweaver.records.minecraft.priority: "10"
-  dnsweaver.records.minecraft.weight: "5"
-```
-
-| Label | Description |
+| Topic | Description |
 |-------|-------------|
-| `dnsweaver.hostname` | Simple hostname (uses provider defaults) |
-| `dnsweaver.records.<name>.hostname` | Hostname for named record |
-| `dnsweaver.records.<name>.type` | Record type: `A`, `AAAA`, `CNAME`, `SRV`, `PTR`, `TXT` |
-| `dnsweaver.records.<name>.target` | IP address or target hostname |
-| `dnsweaver.records.<name>.provider` | Route to specific provider by name |
-| `dnsweaver.records.<name>.ttl` | TTL in seconds (overrides provider default) |
-| `dnsweaver.records.<name>.port` | SRV port |
-| `dnsweaver.records.<name>.priority` | SRV priority |
-| `dnsweaver.records.<name>.weight` | SRV weight |
+| [Getting Started](https://maxfield-allison.github.io/dnsweaver/getting-started/) | Installation and first configuration |
+| [Configuration](https://maxfield-allison.github.io/dnsweaver/configuration/environment/) | Environment variables reference |
+| [Providers](https://maxfield-allison.github.io/dnsweaver/providers/) | Provider-specific setup guides |
+| [Split-Horizon DNS](https://maxfield-allison.github.io/dnsweaver/deployment/split-horizon/) | Internal + external records |
+| [Docker Swarm](https://maxfield-allison.github.io/dnsweaver/deployment/swarm/) | Swarm deployment guide |
+| [Observability](https://maxfield-allison.github.io/dnsweaver/observability/) | Metrics, logging, and health checks |
+| [FAQ](https://maxfield-allison.github.io/dnsweaver/faq/) | Common questions and troubleshooting |
 
-### Environment Variables Reference
+## Split-Horizon DNS Example
 
-Complete reference of all environment variables. All variables use the `DNSWEAVER_` prefix and support Docker secrets via `_FILE` suffix.
-
-#### Global Settings
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DNSWEAVER_INSTANCES` | *(required)* | Comma-separated list of provider instance names |
-| `DNSWEAVER_LOG_LEVEL` | `info` | Logging level: `debug`, `info`, `warn`, `error` |
-| `DNSWEAVER_LOG_FORMAT` | `json` | Log format: `json`, `text` |
-| `DNSWEAVER_DRY_RUN` | `false` | Preview changes without modifying DNS |
-| `DNSWEAVER_CLEANUP_ORPHANS` | `true` | Delete DNS records when workloads are removed |
-| `DNSWEAVER_OWNERSHIP_TRACKING` | `true` | Use TXT records to track record ownership |
-| `DNSWEAVER_ADOPT_EXISTING` | `false` | Adopt existing DNS records by creating ownership TXT |
-| `DNSWEAVER_DEFAULT_TTL` | `300` | Default TTL for DNS records (seconds) |
-| `DNSWEAVER_RECONCILE_INTERVAL` | `60s` | Periodic reconciliation interval |
-| `DNSWEAVER_HEALTH_PORT` | `8080` | Port for health/metrics endpoints |
-
-#### Docker Settings
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DNSWEAVER_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker host (socket path or TCP URL) |
-| `DNSWEAVER_DOCKER_MODE` | `auto` | Docker mode: `auto`, `swarm`, `standalone` |
-
-#### Per-Instance Settings
-
-Replace `{NAME}` with your instance name (e.g., `INTERNAL_DNS` for instance `internal-dns`).
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DNSWEAVER_{NAME}_TYPE` | Yes | Provider type: `technitium`, `cloudflare`, `dnsmasq`, `webhook` |
-| `DNSWEAVER_{NAME}_RECORD_TYPE` | Yes | Record type: `A`, `AAAA`, `CNAME` |
-| `DNSWEAVER_{NAME}_TARGET` | Yes | Record target (IPv4 for A, IPv6 for AAAA, hostname for CNAME) |
-| `DNSWEAVER_{NAME}_DOMAINS` | Yes | Glob patterns for matching hostnames |
-| `DNSWEAVER_{NAME}_DOMAINS_REGEX` | No | Regex patterns (alternative to glob) |
-| `DNSWEAVER_{NAME}_EXCLUDE_DOMAINS` | No | Glob patterns to exclude |
-| `DNSWEAVER_{NAME}_TTL` | No | Per-instance TTL override |
-
-#### Technitium Provider
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DNSWEAVER_{NAME}_URL` | Yes | Technitium API URL |
-| `DNSWEAVER_{NAME}_TOKEN` | Yes | API token (supports `_FILE`) |
-| `DNSWEAVER_{NAME}_ZONE` | Yes | DNS zone to manage |
-| `DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY` | No | Skip TLS cert verification (default: `false`) |
-
-> ⚠️ **Security Warning:** Only use `INSECURE_SKIP_VERIFY=true` for development or when connecting to servers with self-signed certificates. This disables TLS certificate validation.
-
-#### Cloudflare Provider
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DNSWEAVER_{NAME}_TOKEN` | Yes | Cloudflare API token (supports `_FILE`) |
-| `DNSWEAVER_{NAME}_ZONE` | Yes* | Zone name (*or use `ZONE_ID`) |
-| `DNSWEAVER_{NAME}_ZONE_ID` | Yes* | Zone ID (*or use `ZONE`) |
-| `DNSWEAVER_{NAME}_PROXIED` | No | Enable Cloudflare proxy (default: `false`) |
-
-#### Webhook Provider
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DNSWEAVER_{NAME}_URL` | Yes | Webhook base URL |
-| `DNSWEAVER_{NAME}_AUTH_HEADER` | No | Auth header name (e.g., `Authorization`) |
-| `DNSWEAVER_{NAME}_AUTH_TOKEN` | No | Auth token value (supports `_FILE`) |
-| `DNSWEAVER_{NAME}_TIMEOUT` | No | HTTP timeout (default: `30s`) |
-| `DNSWEAVER_{NAME}_RETRIES` | No | Retry attempts (default: `3`) |
-| `DNSWEAVER_{NAME}_RETRY_DELAY` | No | Retry delay (default: `1s`) |
-
-#### dnsmasq Provider
-
-File-based provider for dnsmasq DNS server. Manages records by writing to dnsmasq configuration files. Also serves as the backend for Pi-hole.
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DNSWEAVER_{NAME}_CONFIG_DIR` | No | Config directory (default: `/etc/dnsmasq.d`) |
-| `DNSWEAVER_{NAME}_CONFIG_FILE` | No | Config filename (default: `dnsweaver.conf`) |
-| `DNSWEAVER_{NAME}_RELOAD_COMMAND` | No | Reload command (default: `systemctl reload dnsmasq`) |
-| `DNSWEAVER_{NAME}_ZONE` | No | Zone filter (optional) |
-
-**dnsmasq record format:**
-```bash
-address=/myapp.example.com/10.0.0.100       # A record
-address=/myapp.example.com/fd00::1          # AAAA record
-cname=alias.example.com,target.example.com  # CNAME
-```
-
-**Example:**
-```yaml
-environment:
-  - DNSWEAVER_PIHOLE_TYPE=dnsmasq
-  - DNSWEAVER_PIHOLE_CONFIG_DIR=/etc/dnsmasq.d
-  - DNSWEAVER_PIHOLE_CONFIG_FILE=10-dnsweaver.conf
-  - DNSWEAVER_PIHOLE_RELOAD_COMMAND=pihole restartdns
-  - DNSWEAVER_PIHOLE_RECORD_TYPE=A
-  - DNSWEAVER_PIHOLE_TARGET=10.0.0.100
-  - DNSWEAVER_PIHOLE_DOMAINS=*.home.example.com
-volumes:
-  - /etc/dnsmasq.d:/etc/dnsmasq.d
-```
-
-> **Note:** The dnsmasq provider requires write access to the config directory and the ability to execute the reload command. For Pi-hole, mount the `/etc/dnsmasq.d` directory and use `pihole restartdns` as the reload command.
-
-#### Pi-hole Provider
-
-Native Pi-hole integration with two operation modes: API mode (recommended) and file mode (for containerized setups).
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DNSWEAVER_{NAME}_MODE` | No | Operation mode: `api` (default) or `file` |
-| `DNSWEAVER_{NAME}_URL` | API mode | Pi-hole admin URL (e.g., `http://pihole.local`) |
-| `DNSWEAVER_{NAME}_PASSWORD` | API mode | Admin password (supports `_FILE`) |
-| `DNSWEAVER_{NAME}_CONFIG_DIR` | File mode | Config directory (default: `/etc/pihole`) |
-| `DNSWEAVER_{NAME}_CONFIG_FILE` | File mode | Config filename (default: `custom.list`) |
-| `DNSWEAVER_{NAME}_RELOAD_COMMAND` | File mode | Reload command (default: `pihole restartdns reload-lists`) |
-| `DNSWEAVER_{NAME}_ZONE` | No | Zone filter (optional) |
-
-**API Mode (Recommended for Pi-hole v5+):**
-
-Uses Pi-hole's built-in Admin API for managing Local DNS Records and Local CNAME Records.
+Manage internal and external DNS from the same container labels:
 
 ```yaml
 environment:
-  - DNSWEAVER_PIHOLE_TYPE=pihole
-  - DNSWEAVER_PIHOLE_MODE=api
-  - DNSWEAVER_PIHOLE_URL=http://pihole.local
-  - DNSWEAVER_PIHOLE_PASSWORD_FILE=/run/secrets/pihole_password
-  - DNSWEAVER_PIHOLE_RECORD_TYPE=A
-  - DNSWEAVER_PIHOLE_TARGET=10.0.0.100
-  - DNSWEAVER_PIHOLE_DOMAINS=*.home.example.com
+  - DNSWEAVER_INSTANCES=internal,external
+
+  # Internal: Technitium → private IP
+  - DNSWEAVER_INTERNAL_TYPE=technitium
+  - DNSWEAVER_INTERNAL_RECORD_TYPE=A
+  - DNSWEAVER_INTERNAL_TARGET=10.0.0.100
+  - DNSWEAVER_INTERNAL_DOMAINS=*.example.com
+
+  # External: Cloudflare → tunnel CNAME
+  - DNSWEAVER_EXTERNAL_TYPE=cloudflare
+  - DNSWEAVER_EXTERNAL_RECORD_TYPE=CNAME
+  - DNSWEAVER_EXTERNAL_TARGET=tunnel.example.com
+  - DNSWEAVER_EXTERNAL_DOMAINS=*.example.com
 ```
 
-**File Mode (For Containerized Pi-hole):**
+With this configuration, when `app.example.com` starts:
+- Internal DNS → `A` record → `10.0.0.100`
+- External DNS → `CNAME` record → `tunnel.example.com`
 
-When running Pi-hole in Docker alongside dnsweaver, file mode allows direct file manipulation. Uses dnsmasq config format internally.
+## Contributing
 
-```yaml
-environment:
-  - DNSWEAVER_PIHOLE_TYPE=pihole
-  - DNSWEAVER_PIHOLE_MODE=file
-  - DNSWEAVER_PIHOLE_CONFIG_DIR=/etc/pihole
-  - DNSWEAVER_PIHOLE_CONFIG_FILE=custom.list
-  - DNSWEAVER_PIHOLE_RELOAD_COMMAND=pihole restartdns reload-lists
-  - DNSWEAVER_PIHOLE_RECORD_TYPE=A
-  - DNSWEAVER_PIHOLE_TARGET=10.0.0.100
-  - DNSWEAVER_PIHOLE_DOMAINS=*.home.example.com
-volumes:
-  - pihole-etc:/etc/pihole
-```
-
-> **Note:** Pi-hole supports A, AAAA, and CNAME records. TXT records (used for ownership tracking) are silently skipped since Pi-hole's custom DNS doesn't support them. SRV records are not supported.
-
-#### Source Settings
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DNSWEAVER_SOURCES` | `traefik` | Comma-separated list of source types |
-| `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS` | *(none)* | Paths to Traefik config directories/files |
-| `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATTERN` | `*.yml,*.yaml,*.toml` | Glob pattern for config files |
-| `DNSWEAVER_SOURCE_TRAEFIK_POLL_INTERVAL` | `60s` | File re-scan interval |
-| `DNSWEAVER_SOURCE_TRAEFIK_WATCH_METHOD` | `auto` | Watch method: `auto`, `inotify`, `poll` |
-
-## Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `/health` | Always 200 if process is running |
-| `/ready` | 503 if any provider is unreachable, 200 if healthy |
-| `/metrics` | Prometheus metrics |
-
-## Related Projects
-
-- [technitium-companion](https://github.com/maxfield-allison/technitium-companion) - **Superseded by dnsweaver.** Single-provider predecessor for Technitium-only setups. dnsweaver provides the same functionality plus multi-provider support, static file discovery, and improved observability.
-
-## Uninstalling
-
-To stop using dnsweaver:
-
-1. **Stop the container** — No more DNS changes will be made
-
-2. **Choose what to keep:**
-   - **Keep DNS records, stop automation:** Delete only the `_dnsweaver.*` TXT ownership records. Your A/CNAME records remain and become manually managed.
-   - **Remove everything:** Delete both the TXT ownership records and the A/CNAME records dnsweaver created.
-
-That's it — dnsweaver has no external state beyond the DNS records themselves.
+Contributions are welcome! See [CONTRIBUTING](https://maxfield-allison.github.io/dnsweaver/contributing/) for guidelines.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details
+[MIT](LICENSE)

@@ -1,20 +1,55 @@
+---
+title: Contributing
+description: How to contribute to dnsweaver development
+icon: material/heart
+---
+
 # Contributing to dnsweaver
 
 Thank you for your interest in contributing to dnsweaver! This section provides everything you need to get started.
 
 ## Ways to Contribute
 
-- 🐛 **Report bugs** — File issues with clear reproduction steps
-- 💡 **Suggest features** — Open discussions for new ideas
-- 📝 **Improve documentation** — Fix typos, add examples, clarify explanations
-- 🔧 **Submit code** — Fix bugs, add features, improve performance
-- 🔌 **Add providers** — Integrate new DNS services
-- 📡 **Add sources** — Support new hostname discovery methods
+<div class="grid cards" markdown>
+
+-   :material-bug:{ .lg .middle } **Report Bugs**
+
+    ---
+
+    File issues with clear reproduction steps on GitHub.
+
+    [:octicons-arrow-right-24: Open an Issue](https://github.com/maxfield-allison/dnsweaver/issues)
+
+-   :material-lightbulb:{ .lg .middle } **Suggest Features**
+
+    ---
+
+    Open discussions for new ideas and enhancements.
+
+    [:octicons-arrow-right-24: Discussions](https://github.com/maxfield-allison/dnsweaver/discussions)
+
+-   :material-code-tags:{ .lg .middle } **Submit Code**
+
+    ---
+
+    Fix bugs, add features, improve performance.
+
+    [:octicons-arrow-right-24: Development Setup](development.md)
+
+-   :material-dns:{ .lg .middle } **Add Providers**
+
+    ---
+
+    Integrate new DNS services.
+
+    [:octicons-arrow-right-24: Provider Guide](adding-provider.md)
+
+</div>
 
 ## Quick Links
 
 | Guide | Description |
-|-------|-------------|
+| :---- | :---------- |
 | [Development Setup](development.md) | Set up your local environment |
 | [Adding a Provider](adding-provider.md) | Implement a new DNS provider |
 | [Adding a Source](adding-source.md) | Implement a new hostname source |
@@ -41,7 +76,7 @@ git checkout -b feature/your-feature-name
 
 ### Commit Message Format
 
-```
+```text
 type(scope): description
 
 [optional body]

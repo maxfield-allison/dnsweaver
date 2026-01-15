@@ -7,7 +7,9 @@ repo_name: maxfield-allison/dnsweaver
 repo_url: https://github.com/maxfield-allison/dnsweaver
 edit_uri: edit/main/docs/
 
-copyright: Copyright &copy; 2024-2026 Maxfield Allison
+copyright: |
+  Copyright &copy; 2024-2026 Maxfield Allison –
+  <a href="#__consent">Cookie settings</a>
 
 theme:
   name: material
@@ -29,16 +31,26 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
   features:
+    - announce.dismiss
+    - content.action.edit
+    - content.action.view
     - content.code.copy
     - content.code.annotate
+    - content.tooltips
+    - navigation.footer
+    - navigation.indexes
     - navigation.instant
-    - navigation.tracking
-    - navigation.tabs
+    - navigation.instant.progress
+    - navigation.path
+    - navigation.prune
     - navigation.sections
-    - navigation.expand
+    - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.top
+    - navigation.tracking
     - search.highlight
     - search.share
+    - search.suggest
     - toc.follow
   icon:
     repo: fontawesome/brands/github
@@ -46,11 +58,20 @@ theme:
   # favicon uses Material theme default
 
 extra:
+  generator: false
+  status:
+    new: Recently added
+    deprecated: Deprecated
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/maxfield-allison/dnsweaver
+      name: dnsweaver on GitHub
     - icon: fontawesome/brands/docker
       link: https://hub.docker.com/r/maxamill/dnsweaver
+      name: dnsweaver on Docker Hub
+    - icon: simple/gitlab
+      link: https://gitlab.example.com/root/dnsweaver
+      name: Source on GitLab
 
 markdown_extensions:
   - abbr
@@ -84,35 +105,40 @@ markdown_extensions:
   - pymdownx.tilde
 
 plugins:
-  - search
+  - search:
+      separator: '[\s\-\.\_]+'
+  - social
 
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Configuration:
+      - configuration/index.md
       - Environment Variables: configuration/environment.md
       - Domain Matching: configuration/domains.md
       - Docker Secrets: configuration/secrets.md
   - Providers:
-      - Overview: providers/index.md
+      - providers/index.md
       - Technitium: providers/technitium.md
       - Cloudflare: providers/cloudflare.md
       - Pi-hole: providers/pihole.md
       - dnsmasq: providers/dnsmasq.md
       - Webhook: providers/webhook.md
   - Sources:
+      - sources/index.md
       - Docker Labels: sources/docker.md
       - Docker Swarm: sources/swarm.md
       - Traefik Files: sources/traefik-files.md
       - Native Labels: sources/native-labels.md
   - Deployment:
+      - deployment/index.md
       - Docker Compose: deployment/docker-compose.md
       - Docker Swarm: deployment/swarm.md
       - Split-Horizon DNS: deployment/split-horizon.md
   - Observability: observability.md
   - FAQ: faq.md
   - Contributing:
-      - Overview: contributing/index.md
+      - contributing/index.md
       - Development Setup: contributing/development.md
       - Adding a Provider: contributing/adding-provider.md
       - Adding a Source: contributing/adding-source.md

@@ -16,11 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Includes examples, quickstart guides, and architecture overview
 
 ### Changed
-- **License Change: MIT → BSL 1.1**: Updated license to Business Source License 1.1
-  - Free for personal/homelab use, education, and small businesses
-  - Commercial license required for SaaS, embedded products, or larger organizations
-  - Converts to Apache 2.0 four years after each release
-  - See LICENSE file for full terms
 - **HTTP Client Consolidation** (#92): Refactored HTTP client logic into shared `pkg/httputil` package
   - All providers now use consistent HTTP client configuration
   - Centralized TLS settings, timeouts, and error handling

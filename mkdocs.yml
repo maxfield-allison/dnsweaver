@@ -43,7 +43,7 @@ theme:
   icon:
     repo: fontawesome/brands/github
   logo: assets/logo.svg
-  favicon: assets/favicon.ico
+  # favicon uses Material theme default
 
 extra:
   social:
@@ -66,6 +66,9 @@ markdown_extensions:
   - pymdownx.betterem
   - pymdownx.caret
   - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
       use_pygments: true

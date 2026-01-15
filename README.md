@@ -135,4 +135,4 @@ Contributions are welcome! See [CONTRIBUTING](https://maxfield-allison.github.io
 
 ## License
 
-[MIT](LICENSE)
+[Business Source License 1.1](LICENSE) — Free for personal use, homelabs, and small businesses (under $1M revenue). Commercial licensing available for SaaS, embedded products, and larger organizations. Converts to Apache 2.0 four years after each release.

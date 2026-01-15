@@ -1,0 +1,115 @@
+site_name: dnsweaver
+site_url: https://maxfield-allison.github.io/dnsweaver/
+site_description: Automatic DNS record management for Docker containers with multi-provider support
+site_author: Maxfield Allison
+
+repo_name: maxfield-allison/dnsweaver
+repo_url: https://github.com/maxfield-allison/dnsweaver
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; 2024-2026 Maxfield Allison
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - content.code.copy
+    - content.code.annotate
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - search.share
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+  logo: assets/logo.svg
+  favicon: assets/favicon.ico
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/maxfield-allison/dnsweaver
+    - icon: fontawesome/brands/docker
+      link: https://hub.docker.com/r/maxamill/dnsweaver
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Configuration:
+      - Environment Variables: configuration/environment.md
+      - Domain Matching: configuration/domains.md
+      - Docker Secrets: configuration/secrets.md
+  - Providers:
+      - Overview: providers/index.md
+      - Technitium: providers/technitium.md
+      - Cloudflare: providers/cloudflare.md
+      - Pi-hole: providers/pihole.md
+      - dnsmasq: providers/dnsmasq.md
+      - Webhook: providers/webhook.md
+  - Sources:
+      - Docker Labels: sources/docker.md
+      - Docker Swarm: sources/swarm.md
+      - Traefik Files: sources/traefik-files.md
+      - Native Labels: sources/native-labels.md
+  - Deployment:
+      - Docker Compose: deployment/docker-compose.md
+      - Docker Swarm: deployment/swarm.md
+      - Split-Horizon DNS: deployment/split-horizon.md
+  - Observability: observability.md
+  - FAQ: faq.md
+  - Contributing:
+      - Overview: contributing/index.md
+      - Development Setup: contributing/development.md
+      - Adding a Provider: contributing/adding-provider.md
+      - Adding a Source: contributing/adding-source.md

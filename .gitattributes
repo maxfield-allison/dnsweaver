@@ -2,14 +2,14 @@
 # Note: With native git push mirroring, export-ignore is not used.
 # Internal documentation lives in homelab-docs/, not in this repo.
 
-# LF line endings for all text files
-* text=auto
+# LF line endings for all text files (force LF on checkout to prevent CRLF drift)
+* text=auto eol=lf
 
 # Explicit text files
-*.go text
-*.md text
-*.yaml text
-*.yml text
+*.go text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
 *.json text
 *.toml text
 *.mod text

@@ -82,7 +82,7 @@ func TestReconcileHostname_CreatesRecord(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -135,7 +135,7 @@ func TestReconcileHostname_SkipsNoMatch(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -178,7 +178,7 @@ func TestRemoveHostname_DeletesRecord(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -223,7 +223,7 @@ func TestRemoveHostname_NoMatchingProvider(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -279,7 +279,7 @@ func TestDeleteRecordFromCache_DeletesAllTypes(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -335,7 +335,7 @@ func TestDeleteRecordFromCache_DryRun(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -391,7 +391,7 @@ func TestDeleteRecordWithOwnershipCheck_DeletesOwnedRecords(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -437,7 +437,7 @@ func TestDeleteRecordWithOwnershipCheck_SkipsUnownedRecords(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -489,7 +489,7 @@ func TestDeleteRecordWithOwnershipCheck_DryRun(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -532,7 +532,7 @@ func TestEnsureRecord_SRVRecord(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -619,7 +619,7 @@ func TestEnsureRecord_SRVRecordSkipsMatchingExisting(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -696,7 +696,7 @@ func TestEnsureRecord_SRVRecordCreatesWhenDifferentData(t *testing.T) {
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mock, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{

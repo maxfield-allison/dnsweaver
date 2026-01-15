@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
@@ -12,13 +13,14 @@ import (
 
 // Provider implements provider.Provider for Cloudflare DNS.
 type Provider struct {
-	name    string
-	zone    string // Zone name (for display/logging)
-	zoneID  string // Resolved zone ID
-	ttl     int
-	proxied bool
-	client  *Client
-	logger  *slog.Logger
+	name       string
+	zone       string // Zone name (for display/logging)
+	zoneID     string // Resolved zone ID
+	ttl        int
+	proxied    bool
+	client     *Client
+	httpClient *http.Client // Custom HTTP client (optional)
+	logger     *slog.Logger
 
 	// zoneIDOnce ensures zone ID lookup happens only once
 	zoneIDOnce sync.Once
@@ -33,6 +35,17 @@ func WithProviderLogger(logger *slog.Logger) ProviderOption {
 	return func(p *Provider) {
 		if logger != nil {
 			p.logger = logger
+		}
+	}
+}
+
+// WithProviderHTTPClient sets a custom HTTP client for the provider.
+// This allows the factory to pass in a pre-configured HTTP client with
+// timeout, TLS settings, and user-agent already applied.
+func WithProviderHTTPClient(client *http.Client) ProviderOption {
+	return func(p *Provider) {
+		if client != nil {
+			p.httpClient = client
 		}
 	}
 }
@@ -60,8 +73,12 @@ func New(name string, config *Config, opts ...ProviderOption) (*Provider, error)
 		opt(p)
 	}
 
-	// Create the API client with the same logger
-	p.client = NewClient(config.Token, WithLogger(p.logger))
+	// Create the API client - use custom HTTP client if provided via options
+	clientOpts := []ClientOption{WithLogger(p.logger)}
+	if p.httpClient != nil {
+		clientOpts = append(clientOpts, WithHTTPClient(p.httpClient))
+	}
+	p.client = NewClient(config.Token, clientOpts...)
 
 	return p, nil
 }
@@ -410,13 +427,6 @@ func (p *Provider) Update(ctx context.Context, existing, desired provider.Record
 	)
 
 	return nil
-}
-
-// Factory returns a provider.Factory function for use with the provider registry.
-func Factory() provider.Factory {
-	return func(name string, config map[string]string) (provider.Provider, error) {
-		return NewFromMap(name, config)
-	}
 }
 
 // Ensure Provider implements provider.Provider at compile time.

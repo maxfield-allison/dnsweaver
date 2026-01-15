@@ -250,12 +250,5 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 	return nil
 }
 
-// Factory returns a provider.Factory function for use with the provider registry.
-func Factory() provider.Factory {
-	return func(name string, config map[string]string) (provider.Provider, error) {
-		return NewFromMap(name, config)
-	}
-}
-
 // Ensure Provider implements provider.Provider at compile time.
 var _ provider.Provider = (*Provider)(nil)

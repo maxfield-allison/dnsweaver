@@ -306,7 +306,10 @@ func TestFactory(t *testing.T) {
 		"RELOAD_COMMAND": "echo reload",
 	}
 
-	p, err := factory("factory-test", configMap)
+	p, err := factory(provider.FactoryConfig{
+		Name:           "factory-test",
+		ProviderConfig: configMap,
+	})
 	if err != nil {
 		t.Fatalf("Factory() error = %v", err)
 	}

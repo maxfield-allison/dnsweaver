@@ -6,12 +6,44 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"gitlab.bluewillows.net/root/dnsweaver/internal/matcher"
 )
 
+// HTTPConfig contains HTTP client configuration passed from the framework to providers.
+// This allows centralized HTTP settings (timeouts, TLS, user-agent) to be applied
+// consistently across all HTTP-based providers.
+type HTTPConfig struct {
+	// Timeout is the HTTP client timeout.
+	Timeout time.Duration
+
+	// TLSSkipVerify controls whether to skip TLS certificate verification.
+	TLSSkipVerify bool
+
+	// UserAgent is the User-Agent header to use for requests.
+	UserAgent string
+
+	// Logger is the logger to use for HTTP debug logging.
+	Logger *slog.Logger
+}
+
+// FactoryConfig contains all configuration needed to create a provider instance.
+// This is passed to Factory functions and includes both provider-specific config
+// and shared HTTP configuration.
+type FactoryConfig struct {
+	// Name is the unique instance name for this provider.
+	Name string
+
+	// ProviderConfig contains provider-specific key-value configuration.
+	ProviderConfig map[string]string
+
+	// HTTP contains shared HTTP client configuration.
+	HTTP HTTPConfig
+}
+
 // Factory is a function that creates a new provider instance from configuration.
-type Factory func(name string, config map[string]string) (Provider, error)
+type Factory func(cfg FactoryConfig) (Provider, error)
 
 // Registry manages provider type factories and active provider instances.
 type Registry struct {
@@ -64,8 +96,18 @@ func (r *Registry) CreateInstance(cfg ProviderInstanceConfig) error {
 		return fmt.Errorf("unknown provider type: %s", cfg.TypeName)
 	}
 
+	// Build FactoryConfig with HTTP settings from GlobalConfig
+	factoryCfg := FactoryConfig{
+		Name:           cfg.Name,
+		ProviderConfig: cfg.ProviderConfig,
+		HTTP: HTTPConfig{
+			// TODO: These will be populated from GlobalConfig in a future phase
+			Logger: r.logger,
+		},
+	}
+
 	// Create the underlying provider
-	provider, err := factory(cfg.Name, cfg.ProviderConfig)
+	provider, err := factory(factoryCfg)
 	if err != nil {
 		return fmt.Errorf("creating provider %s: %w", cfg.Name, err)
 	}

@@ -132,3 +132,42 @@ func parseBool(s string) bool {
 		return false
 	}
 }
+
+// LoadConfigFromMap creates a Config from a configuration map.
+// This is used by the Factory to parse provider-specific configuration.
+//
+// Supported keys:
+//   - TOKEN: API token (required)
+//   - ZONE_ID: Zone ID (optional if ZONE is set)
+//   - ZONE: Zone name for lookup (optional if ZONE_ID is set)
+//   - TTL: Record TTL (optional, defaults to 300)
+//   - PROXIED: Enable Cloudflare proxy (optional, defaults to false)
+func LoadConfigFromMap(instanceName string, config map[string]string) (*Config, error) {
+	cfg := &Config{
+		Token:   config["TOKEN"],
+		ZoneID:  config["ZONE_ID"],
+		Zone:    config["ZONE"],
+		TTL:     DefaultTTL,
+		Proxied: false,
+	}
+
+	// Parse optional TTL
+	if ttlStr := config["TTL"]; ttlStr != "" {
+		ttl, err := strconv.Atoi(ttlStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid TTL value %q: %w", ttlStr, err)
+		}
+		cfg.TTL = ttl
+	}
+
+	// Parse optional PROXIED flag
+	if proxiedStr := config["PROXIED"]; proxiedStr != "" {
+		cfg.Proxied = parseBool(proxiedStr)
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("configuration for %s: %w", instanceName, err)
+	}
+
+	return cfg, nil
+}

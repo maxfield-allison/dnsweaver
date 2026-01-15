@@ -1,11 +1,63 @@
+---
+title: DNS Providers
+description: Configure dnsweaver to manage records across multiple DNS providers
+icon: material/dns
+---
+
 # DNS Providers
 
 dnsweaver supports multiple DNS providers, each with different capabilities and configuration options.
 
 ## Supported Providers
 
+<div class="grid cards" markdown>
+
+-   :simple-cloudflare:{ .lg .middle } **Cloudflare**
+
+    ---
+
+    Public DNS with CDN and proxy capabilities. REST API.
+
+    [:octicons-arrow-right-24: Configuration](cloudflare.md)
+
+-   :material-dns:{ .lg .middle } **Technitium**
+
+    ---
+
+    Self-hosted, full-featured DNS server. REST API.
+
+    [:octicons-arrow-right-24: Configuration](technitium.md)
+
+-   :material-raspberry-pi:{ .lg .middle } **Pi-hole**
+
+    ---
+
+    Integrate with existing Pi-hole setups. API or file mode.
+
+    [:octicons-arrow-right-24: Configuration](pihole.md)
+
+-   :material-file-cog:{ .lg .middle } **dnsmasq**
+
+    ---
+
+    Simple file-based DNS configuration.
+
+    [:octicons-arrow-right-24: Configuration](dnsmasq.md)
+
+-   :material-webhook:{ .lg .middle } **Webhook**
+
+    ---
+
+    Custom integrations via HTTP callbacks.
+
+    [:octicons-arrow-right-24: Configuration](webhook.md)
+
+</div>
+
+## Provider Comparison
+
 | Provider | API Type | Record Types | Best For |
-|----------|----------|--------------|----------|
+| :------- | :------- | :----------- | :------- |
 | [Technitium](technitium.md) | REST API | A, AAAA, CNAME, SRV, TXT | Self-hosted, full-featured DNS |
 | [Cloudflare](cloudflare.md) | REST API | A, AAAA, CNAME, TXT | Public DNS with CDN/proxy |
 | [Pi-hole](pihole.md) | REST API or File | A, AAAA, CNAME | Existing Pi-hole setups |

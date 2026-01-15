@@ -356,13 +356,7 @@ func createTraefikSource(cfg *config.Config, logger *slog.Logger) *traefik.Traef
 
 func registerProviderFactories(registry *provider.Registry) {
 	// Register Technitium provider factory (private DNS)
-	registry.RegisterFactory("technitium", func(name string, config map[string]string) (provider.Provider, error) {
-		cfg, err := technitium.LoadConfigFromMap(name, config)
-		if err != nil {
-			return nil, err
-		}
-		return technitium.New(name, cfg)
-	})
+	registry.RegisterFactory("technitium", technitium.Factory())
 
 	// Register Cloudflare provider factory (public DNS)
 	registry.RegisterFactory("cloudflare", cloudflare.Factory())

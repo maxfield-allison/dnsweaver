@@ -255,15 +255,15 @@ func testProviderRegistry(logger *slog.Logger, mocks ...*testMockProvider) *prov
 	reg := provider.NewRegistry(logger)
 
 	// Register a factory for the mock type
-	reg.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	reg.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		// Find the mock with this name
 		for _, m := range mocks {
-			if m.name == name {
+			if m.name == cfg.Name {
 				return m, nil
 			}
 		}
 		// Return a new mock if not found
-		return newTestMockProvider(name), nil
+		return newTestMockProvider(cfg.Name), nil
 	})
 
 	return reg

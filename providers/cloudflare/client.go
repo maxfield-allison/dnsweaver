@@ -10,17 +10,14 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
+	"gitlab.bluewillows.net/root/dnsweaver/pkg/httputil"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
 )
 
 const (
 	// DefaultAPIEndpoint is the base URL for Cloudflare API v4.
 	DefaultAPIEndpoint = "https://api.cloudflare.com/client/v4"
-
-	// DefaultTimeout is the HTTP client timeout.
-	DefaultTimeout = 30 * time.Second
 )
 
 // apiError represents an error from the Cloudflare API.
@@ -126,10 +123,8 @@ func NewClient(token string, opts ...ClientOption) *Client {
 	c := &Client{
 		apiEndpoint: DefaultAPIEndpoint,
 		token:       token,
-		httpClient: &http.Client{
-			Timeout: DefaultTimeout,
-		},
-		logger: slog.Default(),
+		httpClient:  httputil.DefaultClient(),
+		logger:      slog.Default(),
 	}
 
 	for _, opt := range opts {

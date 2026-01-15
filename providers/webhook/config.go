@@ -3,6 +3,7 @@ package webhook
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -151,4 +152,44 @@ func getEnvOrFile(directKey, fileKey string) string {
 	}
 
 	return os.Getenv(directKey)
+}
+
+// LoadConfigFromMap creates a Config from a configuration map.
+// This is used by the Factory to parse provider-specific configuration.
+func LoadConfigFromMap(instanceName string, config map[string]string) (*Config, error) {
+	cfg := &Config{
+		URL:        config["URL"],
+		Timeout:    DefaultTimeout,
+		AuthHeader: config["AUTH_HEADER"],
+		AuthToken:  config["AUTH_TOKEN"],
+		Retries:    DefaultRetries,
+		RetryDelay: DefaultRetryDelay,
+	}
+
+	// Parse TIMEOUT if provided
+	if timeoutStr := config["TIMEOUT"]; timeoutStr != "" {
+		if timeout, err := parseDuration(timeoutStr); err == nil {
+			cfg.Timeout = timeout
+		}
+	}
+
+	// Parse RETRIES if provided
+	if retriesStr := config["RETRIES"]; retriesStr != "" {
+		if retries, err := strconv.Atoi(retriesStr); err == nil {
+			cfg.Retries = retries
+		}
+	}
+
+	// Parse RETRY_DELAY if provided
+	if delayStr := config["RETRY_DELAY"]; delayStr != "" {
+		if delay, err := parseDuration(delayStr); err == nil {
+			cfg.RetryDelay = delay
+		}
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("configuration for %s: %w", instanceName, err)
+	}
+
+	return cfg, nil
 }

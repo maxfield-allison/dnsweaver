@@ -409,7 +409,10 @@ func TestProvider_Factory(t *testing.T) {
 		"PROXIED": "true",
 	}
 
-	p, err := factory("factory-test", config)
+	p, err := factory(provider.FactoryConfig{
+		Name:           "factory-test",
+		ProviderConfig: config,
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

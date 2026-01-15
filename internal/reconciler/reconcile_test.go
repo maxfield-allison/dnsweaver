@@ -64,7 +64,7 @@ func TestReconcile_CreatesRecordsForWorkloads(t *testing.T) {
 
 	mockProvider := newTestMockProvider("test-dns")
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -117,7 +117,7 @@ func TestReconcile_MultipleHostnamesFromOneWorkload(t *testing.T) {
 
 	mockProvider := newTestMockProvider("test-dns")
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -170,7 +170,7 @@ func TestReconcile_MultipleWorkloads(t *testing.T) {
 
 	mockProvider := newTestMockProvider("test-dns")
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -219,7 +219,7 @@ func TestReconcile_DryRunNoChanges(t *testing.T) {
 
 	mockProvider := newTestMockProvider("test-dns")
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -299,7 +299,7 @@ func TestReconcile_NoMatchingProvider(t *testing.T) {
 
 	mockProvider := newTestMockProvider("test-dns")
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -355,7 +355,7 @@ func TestReconcile_DuplicateHostnameAcrossWorkloads(t *testing.T) {
 
 	mockProvider := newTestMockProvider("test-dns")
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -435,7 +435,7 @@ func TestReconcile_OrphanCleanup(t *testing.T) {
 	})
 
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -528,7 +528,7 @@ func TestReconcile_KnownHostnamesUpdated(t *testing.T) {
 
 	mockProvider := newTestMockProvider("test-dns")
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -590,7 +590,7 @@ func TestReconcile_OwnershipRecordsCreated(t *testing.T) {
 
 	mockProvider := newTestMockProvider("test-dns")
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -639,7 +639,7 @@ func TestReconcile_NoOwnershipWhenDisabled(t *testing.T) {
 
 	mockProvider := newTestMockProvider("test-dns")
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -744,7 +744,7 @@ func TestRecoverOwnership_RecoversHostnamesFromProvider(t *testing.T) {
 	})
 
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -819,8 +819,8 @@ func TestRecoverOwnership_MultipleProviders(t *testing.T) {
 	})
 
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
-		if name == "provider1" {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
+		if cfg.Name == "provider1" {
 			return mockProvider1, nil
 		}
 		return mockProvider2, nil
@@ -887,7 +887,7 @@ func TestReconcile_CaseSensitivity(t *testing.T) {
 
 	mockProvider := newTestMockProvider("test-dns")
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -960,7 +960,7 @@ func TestReconcile_ProviderCreateFailsAfterDelete(t *testing.T) {
 	}
 
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -1035,7 +1035,7 @@ func TestReconcile_FirstRunAfterRestart(t *testing.T) {
 	})
 
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -1107,7 +1107,7 @@ func TestReconcile_AdoptExistingEnabled(t *testing.T) {
 	// NO ownership TXT record
 
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
@@ -1169,7 +1169,7 @@ func TestReconcile_AdoptExistingDisabled(t *testing.T) {
 	})
 
 	providers := provider.NewRegistry(logger)
-	providers.RegisterFactory("mock", func(name string, _ map[string]string) (provider.Provider, error) {
+	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{

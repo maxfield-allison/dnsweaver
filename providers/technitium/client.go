@@ -3,7 +3,6 @@ package technitium
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,8 +11,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
+	"gitlab.bluewillows.net/root/dnsweaver/pkg/httputil"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
 )
 
@@ -92,15 +91,9 @@ func WithLogger(logger *slog.Logger) ClientOption {
 func WithInsecureSkipVerify(skip bool) ClientOption {
 	return func(c *Client) {
 		if skip {
-			transport := &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true, //nolint:gosec // Intentional: user explicitly requested skip
-				},
-			}
-			c.httpClient = &http.Client{
-				Timeout:   30 * time.Second,
-				Transport: transport,
-			}
+			c.httpClient = httputil.NewClient(&httputil.ClientConfig{
+				TLSSkipVerify: true,
+			})
 		}
 	}
 }
@@ -108,12 +101,10 @@ func WithInsecureSkipVerify(skip bool) ClientOption {
 // NewClient creates a new Technitium API client.
 func NewClient(baseURL, token string, opts ...ClientOption) *Client {
 	c := &Client{
-		baseURL: baseURL,
-		token:   token,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		logger: slog.Default(),
+		baseURL:    baseURL,
+		token:      token,
+		httpClient: httputil.DefaultClient(),
+		logger:     slog.Default(),
 	}
 
 	for _, opt := range opts {

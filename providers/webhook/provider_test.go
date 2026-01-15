@@ -331,7 +331,10 @@ func TestFactory(t *testing.T) {
 			"URL": "http://webhook.example.com",
 		}
 
-		p, err := factory("test", config)
+		p, err := factory(provider.FactoryConfig{
+			Name:           "test",
+			ProviderConfig: config,
+		})
 		if err != nil {
 			t.Fatalf("Factory() error = %v", err)
 		}
@@ -351,7 +354,10 @@ func TestFactory(t *testing.T) {
 			"URL": "", // Missing URL
 		}
 
-		_, err := factory("test", config)
+		_, err := factory(provider.FactoryConfig{
+			Name:           "test",
+			ProviderConfig: config,
+		})
 		if err == nil {
 			t.Error("Factory() expected error for invalid config")
 		}

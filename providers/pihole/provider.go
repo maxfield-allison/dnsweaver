@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/dnsmasq"
@@ -15,11 +16,12 @@ import (
 // - API mode: Uses Pi-hole's Admin API (recommended for Pi-hole v5+)
 // - File mode: Uses dnsmasq-style config files (for containerized Pi-hole)
 type Provider struct {
-	name   string
-	zone   string
-	ttl    int
-	mode   Mode
-	logger *slog.Logger
+	name       string
+	zone       string
+	ttl        int
+	mode       Mode
+	httpClient *http.Client // Custom HTTP client (optional, API mode only)
+	logger     *slog.Logger
 
 	// API mode client
 	apiClient *APIClient
@@ -36,6 +38,18 @@ func WithProviderLogger(logger *slog.Logger) ProviderOption {
 	return func(p *Provider) {
 		if logger != nil {
 			p.logger = logger
+		}
+	}
+}
+
+// WithProviderHTTPClient sets a custom HTTP client for the provider.
+// This allows the factory to pass in a pre-configured HTTP client with
+// timeout, TLS settings, and user-agent already applied.
+// Only used in API mode; file mode does not use HTTP.
+func WithProviderHTTPClient(client *http.Client) ProviderOption {
+	return func(p *Provider) {
+		if client != nil {
+			p.httpClient = client
 		}
 	}
 }
@@ -80,11 +94,16 @@ func New(name string, config *Config, opts ...ProviderOption) (*Provider, error)
 	switch config.Mode {
 	case ModeAPI:
 		if p.apiClient == nil {
+			// Build API client options
+			apiOpts := []APIClientOption{WithAPILogger(p.logger)}
+			if p.httpClient != nil {
+				apiOpts = append(apiOpts, WithHTTPClient(p.httpClient))
+			}
 			p.apiClient = NewAPIClient(
 				config.URL,
 				config.Password,
 				config.Zone,
-				WithAPILogger(p.logger),
+				apiOpts...,
 			)
 		}
 	case ModeFile:
@@ -327,13 +346,6 @@ func (p *Provider) deleteAPI(ctx context.Context, record provider.Record) error 
 	)
 
 	return nil
-}
-
-// Factory returns a provider.Factory function for use with the provider registry.
-func Factory() provider.Factory {
-	return func(name string, config map[string]string) (provider.Provider, error) {
-		return NewFromMap(name, config)
-	}
 }
 
 // Ensure Provider implements provider.Provider at compile time.

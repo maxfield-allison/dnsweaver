@@ -37,9 +37,9 @@ func TestRegistry_RegisterFactory(t *testing.T) {
 	r := NewRegistry(testLogger())
 
 	called := false
-	factory := func(name string, config map[string]string) (Provider, error) {
+	factory := func(cfg FactoryConfig) (Provider, error) {
 		called = true
-		return &mockProvider{name: name, typeName: "test"}, nil
+		return &mockProvider{name: cfg.Name, typeName: "test"}, nil
 	}
 
 	r.RegisterFactory("test", factory)
@@ -80,8 +80,8 @@ func TestRegistry_CreateInstance_UnknownType(t *testing.T) {
 
 func TestRegistry_CreateInstance_ValidationError(t *testing.T) {
 	r := NewRegistry(testLogger())
-	r.RegisterFactory("test", func(name string, config map[string]string) (Provider, error) {
-		return &mockProvider{name: name, typeName: "test"}, nil
+	r.RegisterFactory("test", func(cfg FactoryConfig) (Provider, error) {
+		return &mockProvider{name: cfg.Name, typeName: "test"}, nil
 	})
 
 	tests := []struct {
@@ -128,8 +128,8 @@ func TestRegistry_CreateInstance_ValidationError(t *testing.T) {
 
 func TestRegistry_CreateInstance_DuplicateName(t *testing.T) {
 	r := NewRegistry(testLogger())
-	r.RegisterFactory("test", func(name string, config map[string]string) (Provider, error) {
-		return &mockProvider{name: name, typeName: "test"}, nil
+	r.RegisterFactory("test", func(cfg FactoryConfig) (Provider, error) {
+		return &mockProvider{name: cfg.Name, typeName: "test"}, nil
 	})
 
 	cfg := ProviderInstanceConfig{
@@ -152,8 +152,8 @@ func TestRegistry_CreateInstance_DuplicateName(t *testing.T) {
 
 func TestRegistry_MatchingProviders(t *testing.T) {
 	r := NewRegistry(testLogger())
-	r.RegisterFactory("test", func(name string, config map[string]string) (Provider, error) {
-		return &mockProvider{name: name, typeName: "test"}, nil
+	r.RegisterFactory("test", func(cfg FactoryConfig) (Provider, error) {
+		return &mockProvider{name: cfg.Name, typeName: "test"}, nil
 	})
 
 	// Create two providers with different domain patterns
@@ -207,8 +207,8 @@ func TestRegistry_MatchingProviders(t *testing.T) {
 
 func TestRegistry_FirstMatchingProvider(t *testing.T) {
 	r := NewRegistry(testLogger())
-	r.RegisterFactory("test", func(name string, config map[string]string) (Provider, error) {
-		return &mockProvider{name: name, typeName: "test"}, nil
+	r.RegisterFactory("test", func(cfg FactoryConfig) (Provider, error) {
+		return &mockProvider{name: cfg.Name, typeName: "test"}, nil
 	})
 
 	// Create provider
@@ -242,8 +242,8 @@ func TestRegistry_FirstMatchingProvider(t *testing.T) {
 
 func TestRegistry_All_PreservesOrder(t *testing.T) {
 	r := NewRegistry(testLogger())
-	r.RegisterFactory("test", func(name string, config map[string]string) (Provider, error) {
-		return &mockProvider{name: name, typeName: "test"}, nil
+	r.RegisterFactory("test", func(cfg FactoryConfig) (Provider, error) {
+		return &mockProvider{name: cfg.Name, typeName: "test"}, nil
 	})
 
 	names := []string{"first", "second", "third"}
@@ -275,8 +275,8 @@ func TestRegistry_All_PreservesOrder(t *testing.T) {
 
 func TestRegistry_Get(t *testing.T) {
 	r := NewRegistry(testLogger())
-	r.RegisterFactory("test", func(name string, config map[string]string) (Provider, error) {
-		return &mockProvider{name: name, typeName: "test"}, nil
+	r.RegisterFactory("test", func(cfg FactoryConfig) (Provider, error) {
+		return &mockProvider{name: cfg.Name, typeName: "test"}, nil
 	})
 
 	err := r.CreateInstance(ProviderInstanceConfig{
@@ -307,8 +307,8 @@ func TestRegistry_Get(t *testing.T) {
 
 func TestRegistry_Count(t *testing.T) {
 	r := NewRegistry(testLogger())
-	r.RegisterFactory("test", func(name string, config map[string]string) (Provider, error) {
-		return &mockProvider{name: name, typeName: "test"}, nil
+	r.RegisterFactory("test", func(cfg FactoryConfig) (Provider, error) {
+		return &mockProvider{name: cfg.Name, typeName: "test"}, nil
 	})
 
 	if r.Count() != 0 {
@@ -331,8 +331,8 @@ func TestRegistry_Count(t *testing.T) {
 
 func TestRegistry_Close(t *testing.T) {
 	r := NewRegistry(testLogger())
-	r.RegisterFactory("test", func(name string, config map[string]string) (Provider, error) {
-		return &mockProvider{name: name, typeName: "test"}, nil
+	r.RegisterFactory("test", func(cfg FactoryConfig) (Provider, error) {
+		return &mockProvider{name: cfg.Name, typeName: "test"}, nil
 	})
 
 	_ = r.CreateInstance(ProviderInstanceConfig{

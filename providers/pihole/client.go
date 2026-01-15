@@ -13,14 +13,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
+	"gitlab.bluewillows.net/root/dnsweaver/pkg/httputil"
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
-)
-
-const (
-	// DefaultTimeout is the HTTP client timeout.
-	DefaultTimeout = 30 * time.Second
 )
 
 // piholeRecord represents a DNS record from Pi-hole's API.
@@ -75,13 +70,11 @@ func WithHTTPClient(client *http.Client) APIClientOption {
 // NewAPIClient creates a new Pi-hole API client.
 func NewAPIClient(baseURL, password, zone string, opts ...APIClientOption) *APIClient {
 	c := &APIClient{
-		baseURL:  strings.TrimRight(baseURL, "/"),
-		password: password,
-		zone:     zone,
-		httpClient: &http.Client{
-			Timeout: DefaultTimeout,
-		},
-		logger: slog.Default(),
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		password:   password,
+		zone:       zone,
+		httpClient: httputil.DefaultClient(),
+		logger:     slog.Default(),
 	}
 
 	for _, opt := range opts {

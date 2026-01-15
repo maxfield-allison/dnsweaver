@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"gitlab.bluewillows.net/root/dnsweaver/pkg/httputil"
 )
 
 // Webhook API request/response types.
@@ -109,9 +111,7 @@ func NewClient(baseURL string, timeout time.Duration, authHeader, authToken stri
 		baseURL:    strings.TrimSuffix(baseURL, "/"),
 		authHeader: authHeader,
 		authToken:  authToken,
-		httpClient: &http.Client{
-			Timeout: timeout,
-		},
+		httpClient: httputil.NewClient(&httputil.ClientConfig{Timeout: timeout}),
 		logger:     slog.Default(),
 		retries:    DefaultRetries,
 		retryDelay: DefaultRetryDelay,

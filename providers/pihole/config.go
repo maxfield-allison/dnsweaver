@@ -44,6 +44,11 @@ type Config struct {
 	URL      string // Pi-hole admin URL (e.g., "http://pihole.local")
 	Password string // Admin password for authentication
 
+	// APIVersion allows forcing a specific API version (v5 or v6).
+	// If empty (default), the version is auto-detected by probing the Pi-hole instance.
+	// Valid values: "v5", "v6", "auto" (default), or empty (same as "auto")
+	APIVersion string
+
 	// File mode settings (reuses dnsmasq-style config)
 	ConfigDir     string // Directory for config files (e.g., /etc/pihole)
 	ConfigFile    string // Filename for custom DNS records (e.g., custom.list)
@@ -65,6 +70,13 @@ func (c *Config) Validate() error {
 		}
 		if c.Password == "" {
 			errs = append(errs, "PASSWORD is required for API mode")
+		}
+		// Validate API version if specified
+		if c.APIVersion != "" && c.APIVersion != "auto" {
+			v := strings.ToLower(c.APIVersion)
+			if v != "v5" && v != "v6" {
+				errs = append(errs, fmt.Sprintf("invalid API_VERSION %q: must be 'v5', 'v6', or 'auto'", c.APIVersion))
+			}
 		}
 	case ModeFile:
 		if c.ConfigDir == "" {
@@ -129,6 +141,7 @@ func LoadConfig(instanceName string) (*Config, error) {
 		Mode:          mode,
 		URL:           getEnv(prefix + "URL"),
 		Password:      getEnvOrFile(prefix+"PASSWORD", prefix+"PASSWORD_FILE"),
+		APIVersion:    getEnvWithDefault(prefix+"API_VERSION", "auto"),
 		ConfigDir:     getEnvWithDefault(prefix+"CONFIG_DIR", DefaultConfigDir),
 		ConfigFile:    getEnvWithDefault(prefix+"CONFIG_FILE", DefaultConfigFile),
 		ReloadCommand: getEnvWithDefault(prefix+"RELOAD_COMMAND", DefaultReloadCommand),
@@ -173,6 +186,7 @@ func LoadConfigFromMap(name string, m map[string]string) (*Config, error) {
 		Mode:          mode,
 		URL:           getMapValue(m, "url"),
 		Password:      getMapValue(m, "password"),
+		APIVersion:    getMapValueWithDefault(m, "api_version", "auto"),
 		ConfigDir:     getMapValueWithDefault(m, "config_dir", DefaultConfigDir),
 		ConfigFile:    getMapValueWithDefault(m, "config_file", DefaultConfigFile),
 		ReloadCommand: getMapValueWithDefault(m, "reload_command", DefaultReloadCommand),

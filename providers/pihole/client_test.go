@@ -360,15 +360,42 @@ func TestAPIClient_Delete(t *testing.T) {
 	}
 }
 
+// mockDNSClient is a simple mock implementing DNSClient for unit tests.
+type mockDNSClient struct {
+	records []piholeRecord
+}
+
+func (m *mockDNSClient) List(_ context.Context) ([]piholeRecord, error) {
+	return m.records, nil
+}
+
+func (m *mockDNSClient) Create(_ context.Context, record piholeRecord) error {
+	m.records = append(m.records, record)
+	return nil
+}
+
+func (m *mockDNSClient) Delete(_ context.Context, record piholeRecord) error {
+	for i, r := range m.records {
+		if r.Hostname == record.Hostname && r.Type == record.Type && r.Target == record.Target {
+			m.records = append(m.records[:i], m.records[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
 func TestProvider_Type(t *testing.T) {
 	config := &Config{
-		Mode:     ModeAPI,
-		URL:      "http://pihole.local",
-		Password: "test",
-		TTL:      300,
+		Mode:       ModeAPI,
+		URL:        "http://pihole.local",
+		Password:   "test",
+		APIVersion: "v5", // Skip auto-detection
+		TTL:        300,
 	}
 
-	p, err := New("test", config)
+	// Use mock client to avoid network calls
+	mockClient := &mockDNSClient{}
+	p, err := New("test", config, WithAPIClient(mockClient))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -380,13 +407,15 @@ func TestProvider_Type(t *testing.T) {
 
 func TestProvider_Name(t *testing.T) {
 	config := &Config{
-		Mode:     ModeAPI,
-		URL:      "http://pihole.local",
-		Password: "test",
-		TTL:      300,
+		Mode:       ModeAPI,
+		URL:        "http://pihole.local",
+		Password:   "test",
+		APIVersion: "v5", // Skip auto-detection
+		TTL:        300,
 	}
 
-	p, err := New("my-pihole", config)
+	mockClient := &mockDNSClient{}
+	p, err := New("my-pihole", config, WithAPIClient(mockClient))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -405,10 +434,11 @@ func TestProvider_Mode(t *testing.T) {
 		{
 			name: "API mode",
 			config: &Config{
-				Mode:     ModeAPI,
-				URL:      "http://pihole.local",
-				Password: "test",
-				TTL:      300,
+				Mode:       ModeAPI,
+				URL:        "http://pihole.local",
+				Password:   "test",
+				APIVersion: "v5", // Skip auto-detection
+				TTL:        300,
 			},
 			wantMode: ModeAPI,
 		},
@@ -427,7 +457,11 @@ func TestProvider_Mode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, err := New("test", tt.config)
+			var opts []ProviderOption
+			if tt.config.Mode == ModeAPI {
+				opts = append(opts, WithAPIClient(&mockDNSClient{}))
+			}
+			p, err := New("test", tt.config, opts...)
 			if err != nil {
 				t.Fatalf("New() error = %v", err)
 			}
@@ -440,19 +474,16 @@ func TestProvider_Mode(t *testing.T) {
 }
 
 func TestProvider_UnsupportedRecordTypes(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"success": true}`))
-	}))
-	defer server.Close()
-
 	config := &Config{
-		Mode:     ModeAPI,
-		URL:      server.URL,
-		Password: "test",
-		TTL:      300,
+		Mode:       ModeAPI,
+		URL:        "http://pihole.local",
+		Password:   "test",
+		APIVersion: "v5", // Skip auto-detection
+		TTL:        300,
 	}
 
-	p, err := New("test", config)
+	mockClient := &mockDNSClient{}
+	p, err := New("test", config, WithAPIClient(mockClient))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

@@ -10,13 +10,12 @@ import (
 
 func TestVersionDetector_DetectV6(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/info" {
+		if r.URL.Path == "/api/info/login" {
 			w.Header().Set("Content-Type", "application/json")
 			resp := map[string]any{
-				"ftl": map[string]string{
-					"version": "v6.0.0",
-					"branch":  "master",
-				},
+				"dns":        true,
+				"https_port": 443,
+				"took":       0.001,
 			}
 			_ = json.NewEncoder(w).Encode(resp)
 			return
@@ -34,15 +33,15 @@ func TestVersionDetector_DetectV6(t *testing.T) {
 	if version != APIVersionV6 {
 		t.Errorf("Detect() version = %v, want %v", version, APIVersionV6)
 	}
-	if versionStr != "v6.0.0" {
-		t.Errorf("Detect() versionStr = %v, want v6.0.0", versionStr)
+	if versionStr != "v6" {
+		t.Errorf("Detect() versionStr = %v, want v6", versionStr)
 	}
 }
 
 func TestVersionDetector_DetectV5(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// V6 endpoint fails
-		if r.URL.Path == "/api/info" {
+		if r.URL.Path == "/api/info/login" {
 			http.NotFound(w, r)
 			return
 		}

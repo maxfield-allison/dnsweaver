@@ -94,10 +94,13 @@ func (d *VersionDetector) Detect(ctx context.Context) (APIVersion, string, error
 }
 
 // tryV6 probes for Pi-hole v6 API.
-// The v6 API exposes version info at /api/info/version without authentication.
+// The v6 API exposes /api/info/login without authentication, which returns
+// basic status info that we can use to detect v6. Note: /api/info does NOT
+// exist in Pi-hole v6 (it returns 404), so we must use /api/info/login.
 func (d *VersionDetector) tryV6(ctx context.Context) (string, error) {
-	// Pi-hole v6 exposes /api/info without auth
-	url := d.baseURL + "/api/info"
+	// Pi-hole v6 exposes /api/info/login without auth
+	// Response: {"dns":true,"https_port":443,"took":0.001...}
+	url := d.baseURL + "/api/info/login"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -120,23 +123,26 @@ func (d *VersionDetector) tryV6(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("reading response: %w", err)
 	}
 
-	// V6 response structure from /api/info
+	// V6 response structure from /api/info/login
+	// This endpoint doesn't return version info, but its presence and
+	// response structure confirms v6. We return "v6" as the version string.
 	var result struct {
-		FTL struct {
-			Version string `json:"version"`
-			Branch  string `json:"branch"`
-		} `json:"ftl"`
+		DNS       bool    `json:"dns"`
+		HTTPSPort int     `json:"https_port"`
+		Took      float64 `json:"took"`
 	}
 
 	if err := json.Unmarshal(body, &result); err != nil {
 		return "", fmt.Errorf("parsing response: %w", err)
 	}
 
-	if result.FTL.Version == "" {
-		return "", fmt.Errorf("no version in response")
+	// If we got a valid response with the expected fields, this is v6
+	// The HTTPSPort being present (non-zero) confirms the v6 API structure
+	if result.HTTPSPort == 0 {
+		return "", fmt.Errorf("unexpected response structure")
 	}
 
-	return result.FTL.Version, nil
+	return "v6", nil
 }
 
 // tryV5 probes for Pi-hole v5 API.

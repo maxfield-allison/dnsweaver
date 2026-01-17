@@ -235,10 +235,13 @@ func (c *V6APIClient) List(ctx context.Context) ([]piholeRecord, error) {
 	}
 
 	// Response structure for dns config subset
+	// Pi-hole v6 returns: { "config": { "dns": { "hosts": [...], "cnameRecords": [...] } } }
 	var result struct {
 		Config struct {
-			Hosts        []string `json:"hosts"`
-			CnameRecords []string `json:"cnameRecords"`
+			DNS struct {
+				Hosts        []string `json:"hosts"`
+				CnameRecords []string `json:"cnameRecords"`
+			} `json:"dns"`
 		} `json:"config"`
 	}
 
@@ -250,14 +253,14 @@ func (c *V6APIClient) List(ctx context.Context) ([]piholeRecord, error) {
 
 	// Parse A/AAAA records from dns.hosts
 	// Format: "IP HOSTNAME [HOSTNAME ...]"
-	for _, entry := range result.Config.Hosts {
+	for _, entry := range result.Config.DNS.Hosts {
 		hostRecords := c.parseHostEntry(entry)
 		records = append(records, hostRecords...)
 	}
 
 	// Parse CNAME records from dns.cnameRecords
 	// Format: "<alias>,<target>[,<ttl>]"
-	for _, entry := range result.Config.CnameRecords {
+	for _, entry := range result.Config.DNS.CnameRecords {
 		if record := c.parseCNAMEEntry(entry); record != nil {
 			records = append(records, *record)
 		}

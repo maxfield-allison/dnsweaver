@@ -119,16 +119,19 @@ func TestV6APIClient_List(t *testing.T) {
 		}
 
 		if r.URL.Path == "/api/config/dns" {
+			// Pi-hole v6 returns: { "config": { "dns": { "hosts": [...], "cnameRecords": [...] } } }
 			resp := map[string]any{
 				"config": map[string]any{
-					"hosts": []string{
-						"192.168.1.100 server.local",
-						"192.168.1.101 db.local cache.local",
-						"2001:db8::1 ipv6host.local",
-					},
-					"cnameRecords": []string{
-						"www.local,server.local",
-						"api.local,server.local,3600",
+					"dns": map[string]any{
+						"hosts": []string{
+							"192.168.1.100 server.local",
+							"192.168.1.101 db.local cache.local",
+							"2001:db8::1 ipv6host.local",
+						},
+						"cnameRecords": []string{
+							"www.local,server.local",
+							"api.local,server.local,3600",
+						},
 					},
 				},
 			}

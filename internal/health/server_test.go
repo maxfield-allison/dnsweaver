@@ -185,3 +185,115 @@ func TestServer_RegisterChecker(t *testing.T) {
 		t.Error("expected checker 'test' to be registered")
 	}
 }
+
+func TestServer_handleReady_Degraded(t *testing.T) {
+	s := New(0)
+
+	// Register a degraded checker that reports degraded status
+	s.RegisterDegradedChecker("pending-providers", func(ctx context.Context) (bool, string) {
+		return true, "some providers are initializing"
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+
+	s.handleReady(w, req)
+
+	// Degraded should still return 200 OK (service is usable)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	var resp Response
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != StatusDegraded {
+		t.Errorf("expected status 'degraded', got %q", resp.Status)
+	}
+
+	if len(resp.Degraded) != 1 {
+		t.Fatalf("expected 1 degraded component, got %d", len(resp.Degraded))
+	}
+
+	if resp.Degraded[0].Message != "some providers are initializing" {
+		t.Errorf("expected degraded message, got %q", resp.Degraded[0].Message)
+	}
+}
+
+func TestServer_handleReady_NoDegraded(t *testing.T) {
+	s := New(0)
+
+	// Register a degraded checker that returns not degraded
+	s.RegisterDegradedChecker("pending-providers", func(ctx context.Context) (bool, string) {
+		return false, "" // No pending providers
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+
+	s.handleReady(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", w.Code)
+	}
+
+	var resp Response
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "ready" {
+		t.Errorf("expected status 'ready', got %q", resp.Status)
+	}
+}
+
+func TestServer_handleReady_DegradedWithUnhealthyChecker(t *testing.T) {
+	s := New(0)
+
+	// Register a failing health checker
+	s.RegisterChecker("failing-checker", func(ctx context.Context) error {
+		return errors.New("checker failed")
+	})
+
+	// Register a degraded checker
+	s.RegisterDegradedChecker("pending-providers", func(ctx context.Context) (bool, string) {
+		return true, "providers pending"
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+
+	s.handleReady(w, req)
+
+	// Unhealthy takes precedence over degraded - should return 503
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected status 503 (unhealthy), got %d", w.Code)
+	}
+
+	var resp Response
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "not_ready" {
+		t.Errorf("expected status 'not_ready', got %q", resp.Status)
+	}
+}
+
+func TestServer_RegisterDegradedChecker(t *testing.T) {
+	s := New(0)
+
+	s.RegisterDegradedChecker("test-degraded", func(ctx context.Context) (bool, string) {
+		return false, ""
+	})
+
+	if len(s.degradedCheckers) != 1 {
+		t.Errorf("expected 1 degraded checker, got %d", len(s.degradedCheckers))
+	}
+
+	if _, ok := s.degradedCheckers["test-degraded"]; !ok {
+		t.Error("expected degraded checker 'test-degraded' to be registered")
+	}
+}

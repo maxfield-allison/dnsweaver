@@ -225,6 +225,32 @@ func (r *Registry) PingAll(ctx context.Context) map[string]error {
 	return results
 }
 
+// Remove removes a provider instance by name.
+// Returns true if the provider was found and removed, false otherwise.
+func (r *Registry) Remove(name string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	inst, ok := r.byName[name]
+	if !ok {
+		return false
+	}
+
+	// Remove from byName map
+	delete(r.byName, name)
+
+	// Remove from instances slice
+	for i, p := range r.instances {
+		if p == inst {
+			r.instances = append(r.instances[:i], r.instances[i+1:]...)
+			break
+		}
+	}
+
+	r.logger.Debug("removed provider instance", slog.String("name", name))
+	return true
+}
+
 // Close cleanly shuts down all provider instances.
 // This allows providers to release resources if needed.
 func (r *Registry) Close() error {

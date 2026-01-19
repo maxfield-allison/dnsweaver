@@ -1,7 +1,7 @@
 # dnsweaver - GitLab CI/CD Pipeline
 # Streamlined from go-project-template
 
-stages: [validate, test, security, build, docker, mirror, deploy, github-release]
+stages: [validate, test, security, build, docker, mirror, deploy, integration, github-release]
 
 variables:
   GOPROXY: https://proxy.golang.org,direct
@@ -282,6 +282,34 @@ deploy:production:
       changes: *docker-files
       when: manual
     - if: $CI_COMMIT_TAG
+      when: manual
+  allow_failure: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Integration Tests (post-deploy validation)
+# ─────────────────────────────────────────────────────────────────────────────
+
+integration:smoke:
+  stage: integration
+  image: alpine:3.20
+  needs:
+    - job: deploy:dev
+      optional: true
+  before_script:
+    - apk add --no-cache bash curl python3
+  script:
+    - |
+      # Verify required variables
+      [ -z "$SWARM_VIP" ] && echo "SWARM_VIP not configured" && exit 0
+      [ -z "$TECHNITIUM_HOST" ] && echo "TECHNITIUM_HOST not configured" && exit 0
+      [ -z "$TECHNITIUM_TOKEN" ] && echo "TECHNITIUM_TOKEN not configured" && exit 0
+      [ -z "$TEST_ZONE" ] && echo "TEST_ZONE not configured" && exit 0
+
+      # Run smoke tests
+      chmod +x scripts/integration-test.sh
+      bash scripts/integration-test.sh --smoke
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
       when: manual
   allow_failure: true
 

@@ -16,12 +16,18 @@ import (
 // Health status values.
 const (
 	StatusReady    = "ready"
+	StatusDegraded = "degraded"
 	StatusNotReady = "not_ready"
 )
 
 // HealthChecker is a function that checks the health of a component.
 // Returns an error if the component is unhealthy.
 type HealthChecker func(ctx context.Context) error
+
+// DegradedChecker is a function that checks if a component is in a degraded state.
+// Returns (true, message) if degraded, (false, "") if not degraded.
+// Degraded means the system is functional but not fully healthy (e.g., some providers unavailable).
+type DegradedChecker func(ctx context.Context) (degraded bool, message string)
 
 // HealthStatus represents the health status of a component.
 type HealthStatus struct {
@@ -30,10 +36,17 @@ type HealthStatus struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// DegradedStatus represents a degraded component.
+type DegradedStatus struct {
+	Name    string `json:"name"`
+	Message string `json:"message"`
+}
+
 // Response represents a health check response.
 type Response struct {
-	Status     string         `json:"status"`
-	Components []HealthStatus `json:"components,omitempty"`
+	Status     string           `json:"status"`
+	Components []HealthStatus   `json:"components,omitempty"`
+	Degraded   []DegradedStatus `json:"degraded,omitempty"`
 }
 
 // Server provides /health, /ready, and /metrics endpoints.
@@ -44,8 +57,9 @@ type Server struct {
 	logger  *slog.Logger
 	timeout time.Duration
 
-	mu       sync.RWMutex
-	checkers map[string]HealthChecker
+	mu               sync.RWMutex
+	checkers         map[string]HealthChecker
+	degradedCheckers map[string]DegradedChecker
 }
 
 // Option is a functional option for configuring the Server.
@@ -68,11 +82,12 @@ func WithTimeout(timeout time.Duration) Option {
 // New creates a new health server on the specified port.
 func New(port int, opts ...Option) *Server {
 	s := &Server{
-		port:     port,
-		mux:      http.NewServeMux(),
-		logger:   slog.Default(),
-		timeout:  5 * time.Second,
-		checkers: make(map[string]HealthChecker),
+		port:             port,
+		mux:              http.NewServeMux(),
+		logger:           slog.Default(),
+		timeout:          5 * time.Second,
+		checkers:         make(map[string]HealthChecker),
+		degradedCheckers: make(map[string]DegradedChecker),
 	}
 
 	for _, opt := range opts {
@@ -89,6 +104,15 @@ func (s *Server) RegisterChecker(name string, checker HealthChecker) {
 	defer s.mu.Unlock()
 	s.checkers[name] = checker
 	s.logger.Debug("registered health checker", slog.String("name", name))
+}
+
+// RegisterDegradedChecker adds a degraded state checker for the /ready endpoint.
+// Degraded checkers report when the system is functional but not fully healthy.
+func (s *Server) RegisterDegradedChecker(name string, checker DegradedChecker) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.degradedCheckers[name] = checker
+	s.logger.Debug("registered degraded checker", slog.String("name", name))
 }
 
 func (s *Server) setupRoutes() {
@@ -110,14 +134,21 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	for name, checker := range s.checkers {
 		checkers[name] = checker
 	}
+	degradedCheckers := make(map[string]DegradedChecker, len(s.degradedCheckers))
+	for name, checker := range s.degradedCheckers {
+		degradedCheckers[name] = checker
+	}
 	s.mu.RUnlock()
 
 	ctx, cancel := context.WithTimeout(r.Context(), s.timeout)
 	defer cancel()
 
 	var components []HealthStatus
+	var degradedList []DegradedStatus
 	allHealthy := true
+	hasDegraded := false
 
+	// Run health checkers
 	for name, checker := range checkers {
 		status := HealthStatus{Name: name, Healthy: true}
 		if err := checker(ctx); err != nil {
@@ -132,15 +163,36 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 		components = append(components, status)
 	}
 
+	// Run degraded checkers
+	for name, checker := range degradedCheckers {
+		if degraded, message := checker(ctx); degraded {
+			hasDegraded = true
+			degradedList = append(degradedList, DegradedStatus{
+				Name:    name,
+				Message: message,
+			})
+			s.logger.Debug("degraded state detected",
+				slog.String("component", name),
+				slog.String("message", message),
+			)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 
-	resp := Response{Components: components}
-	if allHealthy {
-		resp.Status = StatusReady
-		w.WriteHeader(http.StatusOK)
-	} else {
+	resp := Response{Components: components, Degraded: degradedList}
+	if !allHealthy {
+		// Unhealthy - at least one health checker failed
 		resp.Status = StatusNotReady
 		w.WriteHeader(http.StatusServiceUnavailable)
+	} else if hasDegraded {
+		// Healthy but degraded - all checkers passed but some degradation
+		resp.Status = StatusDegraded
+		w.WriteHeader(http.StatusOK) // 200 OK for degraded (still functional)
+	} else {
+		// Fully healthy
+		resp.Status = StatusReady
+		w.WriteHeader(http.StatusOK)
 	}
 
 	_ = json.NewEncoder(w).Encode(resp)

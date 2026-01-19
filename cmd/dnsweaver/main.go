@@ -112,11 +112,38 @@ func run() error {
 		return fmt.Errorf("registering sources: %w", err)
 	}
 
-	// Initialize provider registry
+	// Initialize provider registry and manager (#125)
+	// The manager handles graceful initialization - providers that fail to connect
+	// are retried in the background instead of causing a fatal error.
 	providerRegistry := provider.NewRegistry(logger)
 	registerProviderFactories(providerRegistry)
-	if err := createProviderInstances(providerRegistry, cfg); err != nil {
-		return fmt.Errorf("creating provider instances: %w", err)
+
+	providerManager := provider.NewManager(providerRegistry,
+		provider.WithManagerLogger(logger),
+	)
+	if err := initializeProviders(providerManager, cfg); err != nil {
+		return fmt.Errorf("initializing providers: %w", err)
+	}
+
+	// Start provider manager background retry loop
+	if err := providerManager.Start(ctx); err != nil {
+		return fmt.Errorf("starting provider manager: %w", err)
+	}
+	defer providerManager.Stop()
+
+	// Log provider status summary
+	if providerManager.PendingCount() > 0 {
+		logger.Warn("some providers failed to initialize and will be retried",
+			slog.Int("ready", providerManager.ReadyCount()),
+			slog.Int("pending", providerManager.PendingCount()),
+		)
+		for _, status := range providerManager.PendingProviders() {
+			logger.Warn("pending provider",
+				slog.String("provider", status.Name),
+				slog.String("type", status.Type),
+				slog.String("error", status.LastError),
+			)
+		}
 	}
 
 	// Initialize reconciler
@@ -181,18 +208,33 @@ func run() error {
 		)
 	}
 
-	// Start health server with provider health checkers (#10)
+	// Start health server with provider manager status (#10, #125)
 	healthServer := health.New(cfg.HealthPort(),
 		health.WithLogger(logger),
 	)
 
 	// Register provider health checkers for /ready endpoint
+	// Ready providers get connectivity checks
 	for _, inst := range providerRegistry.All() {
 		inst := inst // capture for closure
 		healthServer.RegisterChecker("provider:"+inst.Name(), func(ctx context.Context) error {
 			return inst.Ping(ctx)
 		})
 	}
+
+	// Register a degraded checker for pending providers (#125)
+	// This reports degraded status (not unhealthy) when providers are pending
+	healthServer.RegisterDegradedChecker("provider-manager", func(ctx context.Context) (bool, string) {
+		if providerManager.PendingCount() > 0 {
+			pending := providerManager.PendingProviders()
+			names := make([]string, len(pending))
+			for i, p := range pending {
+				names[i] = p.Name
+			}
+			return true, fmt.Sprintf("%d providers pending: %v", len(pending), names)
+		}
+		return false, ""
+	})
 
 	if err := healthServer.Start(); err != nil {
 		return fmt.Errorf("starting health server: %w", err)
@@ -371,11 +413,15 @@ func registerProviderFactories(registry *provider.Registry) {
 	registry.RegisterFactory("pihole", pihole.Factory())
 }
 
-func createProviderInstances(registry *provider.Registry, cfg *config.Config) error {
+// initializeProviders initializes all configured providers using the manager.
+// Unlike createProviderInstances, this method does not fail fatally if a provider
+// is temporarily unavailable - it queues it for retry instead.
+func initializeProviders(manager *provider.Manager, cfg *config.Config) error {
 	for _, inst := range cfg.ProviderInstances {
 		providerCfg := inst.ToProviderConfig()
-		if err := registry.CreateInstance(providerCfg); err != nil {
-			return fmt.Errorf("creating provider %s: %w", inst.Name, err)
+		if err := manager.InitializeProvider(providerCfg); err != nil {
+			// Only returns error for invalid configuration (not connection failures)
+			return fmt.Errorf("invalid provider config %s: %w", inst.Name, err)
 		}
 	}
 	return nil

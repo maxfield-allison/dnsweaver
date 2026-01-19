@@ -137,6 +137,45 @@ var (
 		},
 		[]string{"provider"},
 	)
+
+	// ProviderAvailable tracks provider availability status (1=ready, 0=pending initialization).
+	// This is different from ProviderHealthy which tracks connectivity to ready providers.
+	ProviderAvailable = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: Namespace,
+			Name:      "provider_available",
+			Help:      "Provider availability status (1=ready, 0=pending initialization).",
+		},
+		[]string{"provider", "type"},
+	)
+
+	// ProviderInitRetries tracks the number of initialization retry attempts per provider.
+	ProviderInitRetries = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: Namespace,
+			Name:      "provider_init_retries_total",
+			Help:      "Total number of provider initialization retry attempts.",
+		},
+		[]string{"provider", "status"}, // status: "success", "failed"
+	)
+
+	// ProvidersReady tracks the number of ready providers.
+	ProvidersReady = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: Namespace,
+			Name:      "providers_ready",
+			Help:      "Number of providers that are ready (initialized successfully).",
+		},
+	)
+
+	// ProvidersPending tracks the number of providers pending initialization.
+	ProvidersPending = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: Namespace,
+			Name:      "providers_pending",
+			Help:      "Number of providers pending initialization (failed to connect).",
+		},
+	)
 )
 
 // Source metrics.

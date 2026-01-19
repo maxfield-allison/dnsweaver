@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"gitlab.bluewillows.net/root/dnsweaver/pkg/provider"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/dnsmasq"
@@ -13,18 +14,19 @@ import (
 
 // Provider implements provider.Provider for Pi-hole DNS.
 // It supports two modes:
-// - API mode: Uses Pi-hole's Admin API (recommended for Pi-hole v5+)
+// - API mode: Uses Pi-hole's Admin API (supports both v5 and v6)
 // - File mode: Uses dnsmasq-style config files (for containerized Pi-hole)
 type Provider struct {
 	name       string
 	zone       string
 	ttl        int
 	mode       Mode
+	apiVersion APIVersion   // Detected or configured API version
 	httpClient *http.Client // Custom HTTP client (optional, API mode only)
 	logger     *slog.Logger
 
-	// API mode client
-	apiClient *APIClient
+	// API mode client (implements DNSClient interface)
+	dnsClient DNSClient
 
 	// File mode provider (wraps dnsmasq)
 	fileProvider *dnsmasq.Provider
@@ -55,9 +57,10 @@ func WithProviderHTTPClient(client *http.Client) ProviderOption {
 }
 
 // WithAPIClient sets a custom API client (for testing).
-func WithAPIClient(client *APIClient) ProviderOption {
+// The client must implement the DNSClient interface.
+func WithAPIClient(client DNSClient) ProviderOption {
 	return func(p *Provider) {
-		p.apiClient = client
+		p.dnsClient = client
 	}
 }
 
@@ -93,18 +96,41 @@ func New(name string, config *Config, opts ...ProviderOption) (*Provider, error)
 	// Initialize the appropriate client based on mode
 	switch config.Mode {
 	case ModeAPI:
-		if p.apiClient == nil {
-			// Build API client options
-			apiOpts := []APIClientOption{WithAPILogger(p.logger)}
-			if p.httpClient != nil {
-				apiOpts = append(apiOpts, WithHTTPClient(p.httpClient))
+		if p.dnsClient == nil {
+			// Determine API version (detect or use configured)
+			apiVersion, err := p.resolveAPIVersion(config)
+			if err != nil {
+				return nil, fmt.Errorf("determining Pi-hole API version: %w", err)
 			}
-			p.apiClient = NewAPIClient(
-				config.URL,
-				config.Password,
-				config.Zone,
-				apiOpts...,
-			)
+			p.apiVersion = apiVersion
+
+			// Create the appropriate client based on version
+			switch apiVersion {
+			case APIVersionV5:
+				apiOpts := []APIClientOption{WithAPILogger(p.logger)}
+				if p.httpClient != nil {
+					apiOpts = append(apiOpts, WithHTTPClient(p.httpClient))
+				}
+				p.dnsClient = NewAPIClient(
+					config.URL,
+					config.Password,
+					config.Zone,
+					apiOpts...,
+				)
+			case APIVersionV6:
+				v6Opts := []V6APIClientOption{WithV6Logger(p.logger)}
+				if p.httpClient != nil {
+					v6Opts = append(v6Opts, WithV6HTTPClient(p.httpClient))
+				}
+				p.dnsClient = NewV6APIClient(
+					config.URL,
+					config.Password,
+					config.Zone,
+					v6Opts...,
+				)
+			default:
+				return nil, fmt.Errorf("unsupported API version: %s", apiVersion)
+			}
 		}
 	case ModeFile:
 		if p.fileProvider == nil {
@@ -209,7 +235,9 @@ func (p *Provider) Mode() Mode {
 func (p *Provider) Ping(ctx context.Context) error {
 	switch p.mode {
 	case ModeAPI:
-		return p.apiClient.Ping(ctx)
+		// For API mode, try to list records to verify connectivity
+		_, err := p.dnsClient.List(ctx)
+		return err
 	case ModeFile:
 		return p.fileProvider.Ping(ctx)
 	default:
@@ -231,7 +259,7 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 
 // listAPI retrieves records via the Pi-hole API.
 func (p *Provider) listAPI(ctx context.Context) ([]provider.Record, error) {
-	piholeRecords, err := p.apiClient.List(ctx)
+	piholeRecords, err := p.dnsClient.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing records: %w", err)
 	}
@@ -292,7 +320,7 @@ func (p *Provider) createAPI(ctx context.Context, record provider.Record) error 
 		Target:   record.Target,
 	}
 
-	if err := p.apiClient.Create(ctx, rec); err != nil {
+	if err := p.dnsClient.Create(ctx, rec); err != nil {
 		return fmt.Errorf("creating %s record: %w", record.Type, err)
 	}
 
@@ -334,7 +362,7 @@ func (p *Provider) deleteAPI(ctx context.Context, record provider.Record) error 
 		Target:   record.Target,
 	}
 
-	if err := p.apiClient.Delete(ctx, rec); err != nil {
+	if err := p.dnsClient.Delete(ctx, rec); err != nil {
 		return fmt.Errorf("deleting %s record: %w", record.Type, err)
 	}
 
@@ -346,6 +374,44 @@ func (p *Provider) deleteAPI(ctx context.Context, record provider.Record) error 
 	)
 
 	return nil
+}
+
+// resolveAPIVersion determines which Pi-hole API version to use.
+// If API_VERSION is set to "v5" or "v6", that version is used.
+// Otherwise, the version is auto-detected by probing the Pi-hole instance.
+func (p *Provider) resolveAPIVersion(config *Config) (APIVersion, error) {
+	// Check for explicit version configuration
+	if config.APIVersion != "" && config.APIVersion != "auto" {
+		switch strings.ToLower(config.APIVersion) {
+		case "v5":
+			p.logger.Info("using configured Pi-hole API version",
+				slog.String("version", "v5"))
+			return APIVersionV5, nil
+		case "v6":
+			p.logger.Info("using configured Pi-hole API version",
+				slog.String("version", "v6"))
+			return APIVersionV6, nil
+		}
+	}
+
+	// Auto-detect version by probing the Pi-hole instance
+	detector := NewVersionDetector(config.URL, p.httpClient, p.logger)
+	version, versionStr, err := detector.Detect(context.Background())
+	if err != nil {
+		return APIVersionUnknown, err
+	}
+
+	p.logger.Info("auto-detected Pi-hole API version",
+		slog.String("version", version.String()),
+		slog.String("pihole_version", versionStr))
+
+	return version, nil
+}
+
+// APIVersion returns the detected or configured API version.
+// Returns APIVersionUnknown if the provider is in file mode.
+func (p *Provider) APIVersion() APIVersion {
+	return p.apiVersion
 }
 
 // Ensure Provider implements provider.Provider at compile time.

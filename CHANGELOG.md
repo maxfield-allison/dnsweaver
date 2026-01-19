@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-01-19
+
+### Added
+- **Pi-hole v6 API Support** (#74): Full support for Pi-hole v6 REST API
+  - Automatic version detection probes Pi-hole to determine API version
+  - Session-based authentication with SID tokens for v6
+  - Supports `dns.hosts` and `dns.cnameRecords` config endpoints
+  - New `API_VERSION` config option to override auto-detection (`v5`/`v6`/`auto`)
+  - Maintains full backward compatibility with Pi-hole v5 legacy API
+- **Graceful Provider Initialization** (#125): Resilient startup when providers are unavailable
+  - Providers that fail to connect at startup are retried in the background
+  - dnsweaver starts in "degraded" mode and becomes healthy once providers recover
+  - Configurable retry interval and max attempts
+  - Ping verification ensures provider connectivity before marking ready
+- **Shared SSH/SFTP Client Package** (#120): New `pkg/sshutil` for remote provider operations
+  - SSH client with connection pooling and keepalive
+  - SFTP-based FileSystem interface for remote file operations
+  - SSH exec-based CommandRunner for remote commands
+  - Configuration loading with Docker secrets support (`_FILE` pattern)
+  - Foundation for remote dnsmasq, BIND, and hosts-file providers
+
+### Fixed
+- **Pi-hole v6 version detection** (#126): Use correct `/api/info/login` endpoint
+  - Pi-hole v6 does not have `/api/info` endpoint (returns 404)
+  - Changed to probe `/api/info/login` which is unauthenticated and confirms v6
+- **Pi-hole v6 List() returns 0 records** (#103): Correct API response parsing
+  - Pi-hole v6 `/api/config/dns` returns hosts nested under `config.dns`, not `config`
+  - Fixed parsing to handle `{ "config": { "dns": { "hosts": [...] } } }` structure
+  - Resolves "Item already present" errors when records already existed
+
 ## [0.6.0] - 2026-01-15
 
 ### Added

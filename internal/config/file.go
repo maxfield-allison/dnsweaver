@@ -47,7 +47,6 @@ type FileReconcilerConfig struct {
 	CleanupOnStop     *bool  `yaml:"cleanup_on_stop,omitempty"`    // Delete records when containers stop
 	OwnershipTracking *bool  `yaml:"ownership_tracking,omitempty"` // Use TXT records for ownership
 	AdoptExisting     *bool  `yaml:"adopt_existing,omitempty"`     // Adopt pre-existing DNS records
-	OrphanDelay       string `yaml:"orphan_delay,omitempty"`       // Delay before orphan cleanup
 }
 
 // FileDockerConfig holds Docker connection settings.
@@ -124,7 +123,6 @@ func (c *FileConfig) interpolateEnvVars() {
 
 	if c.Reconciler != nil {
 		c.Reconciler.Interval = InterpolateEnvVars(c.Reconciler.Interval)
-		c.Reconciler.OrphanDelay = InterpolateEnvVars(c.Reconciler.OrphanDelay)
 	}
 
 	if c.Docker != nil {

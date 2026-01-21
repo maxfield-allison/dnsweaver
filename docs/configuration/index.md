@@ -36,6 +36,14 @@ dnsweaver is configured entirely through environment variables, making it ideal 
 
     [:octicons-arrow-right-24: Secrets Management](secrets.md)
 
+-   :material-shield-sync:{ .lg .middle } **Operational Modes**
+
+    ---
+
+    Control how aggressively dnsweaver manages records with managed, authoritative, and additive modes.
+
+    [:octicons-arrow-right-24: Operational Modes](modes.md)
+
 </div>
 
 ## Quick Reference

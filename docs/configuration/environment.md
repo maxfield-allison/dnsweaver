@@ -2,6 +2,20 @@
 
 All configuration is via environment variables with the `DNSWEAVER_` prefix. Variables support the `_FILE` suffix for Docker secrets.
 
+## Configuration File
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DNSWEAVER_CONFIG` | *(none)* | Path to YAML configuration file (see [config.example.yml](../config.example.yml)) |
+
+When set, dnsweaver loads configuration from the specified YAML file. Environment variables override file values when both are set.
+
+Alternatively, use the `--config` CLI flag:
+
+```bash
+dnsweaver --config /etc/dnsweaver/config.yml
+```
+
 ## Global Settings
 
 | Variable | Default | Description |

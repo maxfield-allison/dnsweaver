@@ -57,6 +57,9 @@ theme:
   logo: assets/logo.svg
   # favicon uses Material theme default
 
+extra_javascript:
+  - assets/javascripts/mermaid-init.js
+
 extra:
   generator: false
   status:

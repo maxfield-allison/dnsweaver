@@ -27,13 +27,16 @@ set -euo pipefail
 #   SWARM_VIP           - Docker Swarm VIP address
 #   TECHNITIUM_HOST     - Technitium DNS server address
 #   TECHNITIUM_TOKEN    - Technitium API token
-#   SSH_HOST            - Swarm manager hostname for SSH
+#   SSH_HOST            - Swarm manager hostname for SSH (or DEPLOY_HOST as fallback)
 #   TEST_ZONE           - DNS zone for testing
 #
 # Optional variables:
 #   DNSWEAVER_PORT      - Health endpoint port (default: 8089)
 
 DNSWEAVER_PORT="${DNSWEAVER_PORT:-8089}"
+
+# SSH_HOST can fall back to DEPLOY_HOST (common CI variable)
+SSH_HOST="${SSH_HOST:-${DEPLOY_HOST:-}}"
 
 # Validate required environment variables
 validate_config() {
@@ -42,7 +45,7 @@ validate_config() {
     [[ -z "${SWARM_VIP:-}" ]] && missing+=("SWARM_VIP")
     [[ -z "${TECHNITIUM_HOST:-}" ]] && missing+=("TECHNITIUM_HOST")
     [[ -z "${TECHNITIUM_TOKEN:-}" ]] && missing+=("TECHNITIUM_TOKEN")
-    [[ -z "${SSH_HOST:-}" ]] && missing+=("SSH_HOST")
+    [[ -z "${SSH_HOST:-}" ]] && missing+=("SSH_HOST (or DEPLOY_HOST)")
     [[ -z "${TEST_ZONE:-}" ]] && missing+=("TEST_ZONE")
 
     if [[ ${#missing[@]} -gt 0 ]]; then

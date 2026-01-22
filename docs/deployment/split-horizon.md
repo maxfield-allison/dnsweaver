@@ -4,12 +4,16 @@ Split-horizon DNS (also called split-brain DNS) allows the same hostname to reso
 
 ## What Is Split-Horizon DNS?
 
-```
-Internal Query (LAN):
-  app.example.com → 10.0.0.100 (direct to reverse proxy)
-
-External Query (Internet):
-  app.example.com → 203.0.113.50 (public IP or tunnel)
+```mermaid
+flowchart TB
+    subgraph Internal["Internal Query (LAN)"]
+        A1[app.example.com] --> B1[10.0.0.100]
+        B1 --> C1[Direct to reverse proxy]
+    end
+    subgraph External["External Query (Internet)"]
+        A2[app.example.com] --> B2[203.0.113.50]
+        B2 --> C2[Public IP or tunnel]
+    end
 ```
 
 This allows:
@@ -72,9 +76,14 @@ Now:
 
 ### Pattern 1: Cloudflare Tunnel + Internal DNS
 
-```
-Internet → Cloudflare → Tunnel → Reverse Proxy → Container
-LAN      → Internal DNS        → Reverse Proxy → Container
+```mermaid
+flowchart LR
+    subgraph External["External Path"]
+        E1[Internet] --> E2[Cloudflare] --> E3[Tunnel] --> E4[Reverse Proxy] --> E5[Container]
+    end
+    subgraph Internal["Internal Path"]
+        I1[LAN] --> I2[Internal DNS] --> I3[Reverse Proxy] --> I4[Container]
+    end
 ```
 
 ```yaml
@@ -91,9 +100,14 @@ LAN      → Internal DNS        → Reverse Proxy → Container
 
 ### Pattern 2: Public IP + Internal IP
 
-```
-Internet → Public IP → NAT → Reverse Proxy → Container
-LAN      → Internal DNS   → Reverse Proxy → Container
+```mermaid
+flowchart LR
+    subgraph External["External Path"]
+        E1[Internet] --> E2[Public IP] --> E3[NAT] --> E4[Reverse Proxy] --> E5[Container]
+    end
+    subgraph Internal["Internal Path"]
+        I1[LAN] --> I2[Internal DNS] --> I3[Reverse Proxy] --> I4[Container]
+    end
 ```
 
 ```yaml

@@ -71,11 +71,10 @@ secrets:
 
 ### How It Works
 
-```
-┌─────────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  Docker Events  │────▶│  dnsweaver   │────▶│  DNS Providers  │
-│  (start/stop)   │     │  (matching)  │     │  (A/CNAME/SRV)  │
-└─────────────────┘     └──────────────┘     └─────────────────┘
+```mermaid
+flowchart LR
+    A["Docker Events<br/>(start/stop)"] --> B["dnsweaver<br/>(matching)"]
+    B --> C["DNS Providers<br/>(A/CNAME/SRV)"]
 ```
 
 1. A container starts with a Traefik label:

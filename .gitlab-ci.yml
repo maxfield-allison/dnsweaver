@@ -1,7 +1,7 @@
 # dnsweaver - GitLab CI/CD Pipeline
 # Streamlined from go-project-template
 
-stages: [validate, test, security, build, docker, mirror, deploy, integration, github-release]
+stages: [validate, test, security, build, pages, docker, mirror, deploy, integration, github-release]
 
 variables:
   GOPROXY: https://proxy.golang.org,direct
@@ -143,6 +143,46 @@ build:go:
     paths: [$BINARY_NAME]
     expire_in: 1 day
   rules: *rules-code-changes
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pages (Documentation Preview)
+# ─────────────────────────────────────────────────────────────────────────────
+
+.pages-base:
+  stage: pages
+  image: python:3.12-alpine
+  before_script:
+    - apk add --no-cache git cairo-dev libffi-dev build-base
+    - pip install mkdocs-material mkdocs-git-revision-date-localized-plugin pillow cairosvg
+
+# Feature branch doc preview - accessible at $CI_PAGES_URL/-/jobs/$CI_JOB_ID/artifacts/public/
+pages:preview:
+  extends: .pages-base
+  script:
+    - mkdocs build --site-dir public
+  artifacts:
+    paths: [public]
+    expire_in: 7 days
+  environment:
+    name: docs/preview/$CI_COMMIT_REF_SLUG
+    url: $CI_JOB_URL/artifacts/public/index.html
+    auto_stop_in: 7 days
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^(feature|bugfix|hotfix|fix)\//
+      changes: ["{docs/**/*,mkdocs.yml,README.md}"]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes: ["{docs/**/*,mkdocs.yml,README.md}"]
+
+# Main GitLab Pages deployment (develop/main only)
+pages:
+  extends: .pages-base
+  script:
+    - mkdocs build --site-dir public
+  artifacts:
+    paths: [public]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"
+      changes: ["{docs/**/*,mkdocs.yml,README.md}"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Docker (multi-arch)

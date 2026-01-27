@@ -128,6 +128,7 @@ nav:
       - providers/index.md
       - Technitium: providers/technitium.md
       - Cloudflare: providers/cloudflare.md
+      - RFC 2136: providers/rfc2136.md
       - Pi-hole: providers/pihole.md
       - dnsmasq: providers/dnsmasq.md
       - Webhook: providers/webhook.md

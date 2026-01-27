@@ -216,6 +216,12 @@ var providerConfigFields = []struct {
 	{"MODE", false},                 // Pi-hole specific (api/file)
 	{"PASSWORD", true},              // Pi-hole specific
 	{"INSECURE_SKIP_VERIFY", false}, // TLS certificate verification skip
+	// RFC 2136 specific fields
+	{"SERVER", false},         // RFC 2136: DNS server address (host:port)
+	{"TSIG_KEY_NAME", false},  // RFC 2136: TSIG key name
+	{"TSIG_SECRET", true},     // RFC 2136: TSIG secret (supports _FILE)
+	{"TSIG_ALGORITHM", false}, // RFC 2136: TSIG algorithm (hmac-sha256, etc.)
+	{"USE_TCP", false},        // RFC 2136: Force TCP transport
 }
 
 // mergeProviderEnvOverrides applies environment variable overrides to a

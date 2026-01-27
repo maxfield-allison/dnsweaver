@@ -29,11 +29,14 @@ workflow:
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     changes: *code-files
 
-# Feature branches: run validate/test/security/build but NOT docker (no image push)
+# Docker builds: main, develop, tags, AND feature branches
+# Feature branch images are tagged as feature-<slug> for easy identification/cleanup
 .rules-docker: &rules-docker
   - if: $CI_COMMIT_TAG
   - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
     changes: &docker-files ["{**/*.go,go.mod,go.sum,Dockerfile,.dockerignore}"]
+  - if: $CI_COMMIT_BRANCH =~ /^(feature|bugfix|hotfix|fix)\//
+    changes: *docker-files
 
 .go-base:
   image: golang:1.24-alpine
@@ -199,7 +202,12 @@ pages:
       if [ -n "$CI_COMMIT_TAG" ]; then TAG="$CI_COMMIT_TAG"; EXTRA="latest"
       elif [ "$CI_COMMIT_BRANCH" = "main" ]; then TAG="edge"; EXTRA=""
       elif [ "$CI_COMMIT_BRANCH" = "develop" ]; then TAG="dev"; EXTRA=""
-      else TAG="$CI_COMMIT_SHORT_SHA"; EXTRA=""; fi
+      else
+        # Feature/bugfix/hotfix branches: use sanitized branch name as tag
+        # feature/132-rfc2136-provider -> feature-132-rfc2136-provider
+        TAG=$(echo "$CI_COMMIT_BRANCH" | sed 's|/|-|g')
+        EXTRA=""
+      fi
       echo "TAG=$TAG" > build.env && echo "EXTRA=$EXTRA" >> build.env
   rules: *rules-docker
 

@@ -52,6 +52,14 @@ dnsweaver supports multiple DNS providers, each with different capabilities and 
 
     [:octicons-arrow-right-24: Configuration](webhook.md)
 
+-   :material-update:{ .lg .middle } **RFC 2136**
+
+    ---
+
+    Industry-standard Dynamic DNS protocol. BIND, Windows DNS, PowerDNS, etc.
+
+    [:octicons-arrow-right-24: Configuration](rfc2136.md)
+
 </div>
 
 ## Provider Comparison
@@ -60,6 +68,7 @@ dnsweaver supports multiple DNS providers, each with different capabilities and 
 | :------- | :------- | :----------- | :------- |
 | [Technitium](technitium.md) | REST API | A, AAAA, CNAME, SRV, TXT | Self-hosted, full-featured DNS |
 | [Cloudflare](cloudflare.md) | REST API | A, AAAA, CNAME, TXT | Public DNS with CDN/proxy |
+| [RFC 2136](rfc2136.md) | DNS Protocol | A, AAAA, CNAME, SRV, TXT | BIND, Windows DNS, PowerDNS, Knot |
 | [Pi-hole](pihole.md) | REST API or File | A, AAAA, CNAME | Existing Pi-hole setups |
 | [dnsmasq](dnsmasq.md) | File | A, AAAA, CNAME | Simple file-based DNS |
 | [Webhook](webhook.md) | HTTP Callback | Any | Custom integrations |

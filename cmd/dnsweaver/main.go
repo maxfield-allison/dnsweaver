@@ -25,6 +25,7 @@ import (
 	"gitlab.bluewillows.net/root/dnsweaver/providers/cloudflare"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/dnsmasq"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/pihole"
+	"gitlab.bluewillows.net/root/dnsweaver/providers/rfc2136"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/technitium"
 	"gitlab.bluewillows.net/root/dnsweaver/providers/webhook"
 	dnsweaversource "gitlab.bluewillows.net/root/dnsweaver/sources/dnsweaver"
@@ -411,6 +412,9 @@ func registerProviderFactories(registry *provider.Registry) {
 
 	// Register Pi-hole provider factory (local DNS via Pi-hole API or file mode)
 	registry.RegisterFactory("pihole", pihole.Factory())
+
+	// Register RFC 2136 provider factory (BIND, Windows DNS, PowerDNS, etc.)
+	registry.RegisterFactory("rfc2136", rfc2136.Factory())
 }
 
 // initializeProviders initializes all configured providers using the manager.

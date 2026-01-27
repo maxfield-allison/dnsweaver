@@ -35,6 +35,10 @@ var (
 
 	// ErrZoneMismatch is returned when a record name doesn't match the configured zone.
 	ErrZoneMismatch = errors.New("record name does not match configured zone")
+
+	// ErrAXFRFailed is returned when a zone transfer (AXFR) fails.
+	// This typically happens when the server blocks zone transfers.
+	ErrAXFRFailed = errors.New("zone transfer (AXFR) failed")
 )
 
 // Client handles RFC 2136 Dynamic DNS updates.
@@ -529,6 +533,82 @@ func (c *Client) isInZone(fqdn string) bool {
 // For RFC 2136, this is a no-op as connections are not persistent.
 func (c *Client) Close() error {
 	return nil
+}
+
+// ListByAXFR performs a zone transfer (AXFR) to retrieve all records in the zone.
+// This requires the server to allow zone transfers from this client.
+// Many DNS servers restrict AXFR to specific IPs for security reasons.
+// Returns ErrAXFRFailed if the zone transfer is refused or fails.
+func (c *Client) ListByAXFR(ctx context.Context) ([]Record, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	// AXFR always uses TCP
+	transfer := &dns.Transfer{
+		TsigSecret: nil,
+	}
+
+	// Apply TSIG if configured
+	if c.tsig != nil {
+		transfer.TsigSecret = map[string]string{
+			c.tsig.Name: c.tsig.Secret,
+		}
+	}
+
+	msg := new(dns.Msg)
+	msg.SetAxfr(c.config.Zone)
+
+	// Apply TSIG to the message if configured
+	if c.tsig != nil {
+		c.tsig.ApplyToMessage(msg)
+	}
+
+	c.logger.Debug("initiating AXFR zone transfer",
+		slog.String("server", c.config.GetServer()),
+		slog.String("zone", c.config.Zone),
+	)
+
+	// Perform the zone transfer
+	env, err := transfer.In(msg, c.config.GetServer())
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrAXFRFailed, err)
+	}
+
+	var records []Record
+	for e := range env {
+		if e.Error != nil {
+			// Log the error but continue processing
+			c.logger.Warn("AXFR envelope error",
+				slog.String("error", e.Error.Error()),
+			)
+			continue
+		}
+
+		for _, rr := range e.RR {
+			// Skip SOA and NS records (zone infrastructure)
+			header := rr.Header()
+			if header.Rrtype == dns.TypeSOA || header.Rrtype == dns.TypeNS {
+				continue
+			}
+
+			record, err := RecordFromRR(rr)
+			if err != nil {
+				c.logger.Debug("skipping unsupported record type",
+					slog.String("type", dns.TypeToString[header.Rrtype]),
+					slog.String("name", header.Name),
+				)
+				continue
+			}
+			records = append(records, record)
+		}
+	}
+
+	c.logger.Debug("AXFR zone transfer complete",
+		slog.String("zone", c.config.Zone),
+		slog.Int("records", len(records)),
+	)
+
+	return records, nil
 }
 
 // RcodeToError converts a DNS rcode to an appropriate error.

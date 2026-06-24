@@ -1,3 +1,8 @@
+---
+title: Traefik File Source
+description: dnsweaver reads Traefik dynamic configuration files to discover hostnames and manage DNS records for non-Docker workloads.
+---
+
 # Traefik File Provider
 
 dnsweaver can read Traefik configuration files to discover hostnames, enabling DNS management for non-Docker workloads.

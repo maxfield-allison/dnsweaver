@@ -1,3 +1,8 @@
+---
+title: Docker Labels Source
+description: dnsweaver watches Docker containers and extracts hostnames from Traefik, Caddy, nginx-proxy, and native labels to create DNS records automatically.
+---
+
 # Docker Labels
 
 dnsweaver watches Docker containers and services for hostname information, extracting them from labels to create DNS records.

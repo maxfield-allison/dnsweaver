@@ -12,6 +12,18 @@ dnsweaver watches Docker events, Kubernetes resources, and Proxmox VE clusters t
 
 📚 **[Full Documentation](https://maxfield-allison.github.io/dnsweaver/)**
 
+## Why dnsweaver?
+
+Think of dnsweaver as **external-dns for the homelab**. Where most tools solve a slice of the problem, dnsweaver covers the parts self-hosters actually run into:
+
+- **It does Proxmox.** Auto-create A records for VMs and LXCs from the PVE API — something almost no other DNS automation tool offers.
+- **It speaks self-hosted DNS.** First-class [Technitium](https://maxfield-allison.github.io/dnsweaver/providers/technitium/), [Pi-hole](https://maxfield-allison.github.io/dnsweaver/providers/pihole/), [AdGuard Home](https://maxfield-allison.github.io/dnsweaver/providers/adguard/), and [dnsmasq](https://maxfield-allison.github.io/dnsweaver/providers/dnsmasq/) support — not an afterthought, and not alpha.
+- **It's multi-platform.** Docker, Docker Swarm, Kubernetes, and Proxmox in one binary. Run one or all of them at once. `external-dns` is Kubernetes-only.
+- **It does split-horizon out of the box.** Internal and external records from the *same* labels — route private hostnames to Technitium and public ones to Cloudflare simultaneously.
+- **It's a single static Go binary.** ~15 MB, multi-arch (amd64/arm64), zero runtime dependencies. No Node.js, no sidecars.
+
+If you manage a homelab with Traefik, Proxmox, and a self-hosted resolver and you're still creating DNS records by hand, dnsweaver is built for you.
+
 ## Features
 
 - 🔀 **Multi-Provider Support** — Route different domains to different DNS providers
@@ -197,6 +209,12 @@ With this configuration, when `app.example.com` starts:
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING](https://maxfield-allison.github.io/dnsweaver/contributing/) for guidelines.
+
+## Star History
+
+If dnsweaver saves you time, a ⭐ helps others find it.
+
+[![Star History Chart](https://api.star-history.com/svg?repos=maxfield-allison/dnsweaver&type=Date)](https://star-history.com/#maxfield-allison/dnsweaver&Date)
 
 ## License
 

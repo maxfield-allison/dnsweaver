@@ -1,3 +1,8 @@
+---
+title: Docker Swarm Source
+description: Automate DNS records for Docker Swarm services with dnsweaver — cluster-wide service discovery with multi-instance-safe ownership tracking.
+---
+
 # Docker Swarm
 
 Docker Swarm mode provides service discovery across a cluster. dnsweaver integrates with Swarm to manage DNS for services.

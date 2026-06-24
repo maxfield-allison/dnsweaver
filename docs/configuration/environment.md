@@ -1,3 +1,8 @@
+---
+title: Environment Variables Reference
+description: Complete reference for every dnsweaver environment variable — instances, providers, sources, TLS, and secrets configuration with the DNSWEAVER_ prefix.
+---
+
 # Environment Variables Reference
 
 All configuration is via environment variables with the `DNSWEAVER_` prefix. Variables support the `_FILE` suffix for [secrets management](secrets.md) (Docker secrets, Kubernetes Secrets, or any file-based injection).

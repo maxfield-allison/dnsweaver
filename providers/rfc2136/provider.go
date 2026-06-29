@@ -358,11 +358,9 @@ func (p *Provider) toRFC2136Record(record provider.Record) (dnsupdate.Record, er
 	}
 
 	// Determine TTL (clamp to valid uint32 range for DNS wire format).
-	// max(0, ...) guards the lower bound so a negative value can never wrap to a
-	// large uint32; min(..., MaxUint32) guards the upper bound.
-	ttl := uint32(min(max(0, p.ttl), math.MaxUint32))
+	ttl := clampTTL(p.ttl)
 	if record.TTL > 0 {
-		ttl = uint32(min(max(0, record.TTL), math.MaxUint32))
+		ttl = clampTTL(record.TTL)
 	}
 
 	r := dnsupdate.Record{
@@ -410,6 +408,20 @@ func (p *Provider) toRFC2136Record(record provider.Record) (dnsupdate.Record, er
 }
 
 // recordTypeToUint16 converts provider.RecordType to dns.Type.
+// clampTTL converts a TTL expressed as a platform int into the uint32 used by
+// the DNS wire format, clamping out-of-range values. The explicit comparison
+// guards (rather than min/max) keep the bounds check legible to static
+// analyzers: negatives clamp to 0 and values above MaxUint32 clamp to the max.
+func clampTTL(v int) uint32 {
+	if v < 0 {
+		return 0
+	}
+	if v > math.MaxUint32 {
+		return math.MaxUint32
+	}
+	return uint32(v)
+}
+
 func recordTypeToUint16(rt provider.RecordType) uint16 {
 	switch rt {
 	case provider.RecordTypeA:

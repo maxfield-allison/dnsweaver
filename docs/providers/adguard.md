@@ -1,3 +1,8 @@
+---
+title: AdGuard Home DNS Provider
+description: Automate AdGuard Home DNS rewrites from Docker, Kubernetes, and Proxmox with dnsweaver — managed A, AAAA, and CNAME records via the AdGuard Home API.
+---
+
 # AdGuard Home
 
 AdGuard Home is a network-wide ad blocker and DNS server. dnsweaver manages DNS records via AdGuard Home's DNS Rewrite API.

@@ -1,3 +1,8 @@
+---
+title: Pi-hole DNS Provider
+description: Automatically create and delete Pi-hole local DNS records from Docker containers and Kubernetes with dnsweaver — Pi-hole v6 API or file mode.
+---
+
 # Pi-hole
 
 Pi-hole is a network-wide ad blocker that also serves as a local DNS server. dnsweaver supports Pi-hole through its API or by direct file manipulation.

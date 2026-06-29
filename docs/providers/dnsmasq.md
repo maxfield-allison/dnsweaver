@@ -1,3 +1,8 @@
+---
+title: dnsmasq DNS Provider
+description: Automatically manage dnsmasq A and CNAME records from Docker and Kubernetes with dnsweaver through file-based configuration.
+---
+
 # dnsmasq
 
 dnsmasq is a lightweight DNS/DHCP server commonly used in routers and containers. dnsweaver manages dnsmasq through configuration files.

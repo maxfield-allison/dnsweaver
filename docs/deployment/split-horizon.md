@@ -1,3 +1,8 @@
+---
+title: Split-Horizon DNS
+description: Set up split-horizon (split-brain) DNS for your homelab with dnsweaver — route internal hostnames to Technitium or Pi-hole and public ones to Cloudflare from the same labels.
+---
+
 # Split-Horizon DNS
 
 Split-horizon DNS (also called split-brain DNS) allows the same hostname to resolve to different addresses depending on where the query originates. dnsweaver makes this easy with multi-provider support.

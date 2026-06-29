@@ -1,3 +1,8 @@
+---
+title: Docker Swarm Deployment
+description: Production deployment guide for running dnsweaver on Docker Swarm clusters with automatic DNS record management.
+---
+
 # Docker Swarm Deployment
 
 Production deployment for Docker Swarm clusters.

@@ -1,3 +1,8 @@
+---
+title: FAQ
+description: Frequently asked questions about dnsweaver — how it compares to external-dns, supported providers and platforms, ownership tracking, and troubleshooting.
+---
+
 # Frequently Asked Questions
 
 ## General

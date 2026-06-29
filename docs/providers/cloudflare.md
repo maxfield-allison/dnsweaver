@@ -1,3 +1,8 @@
+---
+title: Cloudflare DNS Provider
+description: Automate Cloudflare DNS records from Docker, Kubernetes, and Proxmox with dnsweaver — A, AAAA, CNAME, SRV, and TXT records with optional proxying.
+---
+
 # Cloudflare
 
 Cloudflare provides public DNS with optional proxy/CDN capabilities. dnsweaver supports Cloudflare's API for automated record management.

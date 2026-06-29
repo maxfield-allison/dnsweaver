@@ -1,3 +1,8 @@
+---
+title: Webhook DNS Provider
+description: Integrate dnsweaver with any DNS system using the webhook provider — send HTTP requests to custom endpoints for record create, update, and delete.
+---
+
 # Webhook Provider
 
 The webhook provider sends HTTP requests to custom endpoints, enabling integration with any DNS system.

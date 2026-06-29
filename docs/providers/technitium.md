@@ -1,3 +1,8 @@
+---
+title: Technitium DNS Provider
+description: Automatically manage Technitium DNS records from Docker, Kubernetes, and Proxmox with dnsweaver — A, AAAA, CNAME, SRV, and TXT support via the Technitium API.
+---
+
 # Technitium DNS
 
 Technitium is a self-hosted DNS server with a REST API. It's the most full-featured provider in dnsweaver with support for all record types.

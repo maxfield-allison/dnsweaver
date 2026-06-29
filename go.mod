@@ -1,6 +1,6 @@
 module github.com/maxfield-allison/dnsweaver
 
-go 1.26.0
+go 1.26.4
 
 require (
 	github.com/BurntSushi/toml v1.6.0

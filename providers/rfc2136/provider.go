@@ -357,10 +357,12 @@ func (p *Provider) toRFC2136Record(record provider.Record) (dnsupdate.Record, er
 		}
 	}
 
-	// Determine TTL (clamp to valid uint32 range for DNS wire format)
+	// Determine TTL (clamp to valid uint32 range for DNS wire format).
+	// max(0, ...) guards the lower bound so a negative value can never wrap to a
+	// large uint32; min(..., MaxUint32) guards the upper bound.
 	ttl := uint32(min(max(0, p.ttl), math.MaxUint32))
 	if record.TTL > 0 {
-		ttl = uint32(min(record.TTL, math.MaxUint32))
+		ttl = uint32(min(max(0, record.TTL), math.MaxUint32))
 	}
 
 	r := dnsupdate.Record{

@@ -84,6 +84,14 @@ dnsweaver supports multiple DNS providers, each with different capabilities and 
 
     [:octicons-arrow-right-24: Configuration](adguard.md)
 
+-   :material-firewall:{ .lg .middle } **OPNsense**
+
+    ---
+
+    Manage Unbound or Dnsmasq host overrides on OPNsense. REST API.
+
+    [:octicons-arrow-right-24: Configuration](opnsense.md)
+
 </div>
 
 ## Provider Comparison
@@ -97,6 +105,7 @@ dnsweaver supports multiple DNS providers, each with different capabilities and 
 | [PowerDNS](powerdns.md) | REST API | A, AAAA, CNAME, SRV, TXT | PowerDNS via native HTTP API |
 | [Pi-hole](pihole.md) | REST API or File | A, CNAME | Existing Pi-hole setups |
 | [AdGuard Home](adguard.md) | REST API | A, AAAA, CNAME | Existing AdGuard Home setups |
+| [OPNsense](opnsense.md) | REST API | A, AAAA | Unbound or Dnsmasq host overrides on OPNsense |
 | [dnsmasq](dnsmasq.md) | File | A, CNAME | Simple file-based DNS |
 | [Webhook](webhook.md) | HTTP Callback | Any | Custom integrations |
 

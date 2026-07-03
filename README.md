@@ -52,6 +52,7 @@ If you manage a homelab with Traefik, Proxmox, and a self-hosted resolver and yo
 | [PowerDNS](https://maxfield-allison.github.io/dnsweaver/providers/powerdns/) | A, AAAA, CNAME, SRV, TXT | Native Authoritative HTTP API |
 | [Pi-hole](https://maxfield-allison.github.io/dnsweaver/providers/pihole/) | A, CNAME | API or file mode |
 | [AdGuard Home](https://maxfield-allison.github.io/dnsweaver/providers/adguard/) | A, AAAA, CNAME | DNS rewrite management |
+| [OPNsense](https://maxfield-allison.github.io/dnsweaver/providers/opnsense/) | A, AAAA | Unbound or Dnsmasq host overrides via REST API |
 | [dnsmasq](https://maxfield-allison.github.io/dnsweaver/providers/dnsmasq/) | A, CNAME | File-based configuration |
 | [Webhook](https://maxfield-allison.github.io/dnsweaver/providers/webhook/) | Any | Custom integrations |
 

@@ -132,6 +132,7 @@ nav:
       - PowerDNS: providers/powerdns.md
       - Pi-hole: providers/pihole.md
       - AdGuard Home: providers/adguard.md
+      - OPNsense: providers/opnsense.md
       - dnsmasq: providers/dnsmasq.md
       - Webhook: providers/webhook.md
   - Sources:

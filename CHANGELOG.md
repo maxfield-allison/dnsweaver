@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **OPNsense provider** with pluggable engine backend for **Unbound** and
+  **Dnsmasq** (OPNsense 24.7+), driven by the OPNsense REST API
+  ([GitHub #114](https://github.com/maxfield-allison/dnsweaver/issues/114),
+  GitLab #188). One provider covers both DNS engines OPNsense ships with;
+  pick with `DNSWEAVER_{NAME}_ENGINE=unbound|dnsmasq` (default `unbound`).
+  Ownership is tracked via a `dnsweaver:{instance}` prefix on the host
+  override's description field, since neither engine's host overrides support
+  TXT records — dnsweaver only lists and mutates rows it owns, so
+  operator-managed host overrides in the OPNsense GUI are always safe.
+  Post-write reload behavior is controlled by
+  `DNSWEAVER_{NAME}_RECONFIGURE_MODE` (`per_write` default, or `never`).
+  Supports A/AAAA in v1; see
+  [docs/providers/opnsense.md](docs/providers/opnsense.md).
+
 ## [2.2.1] - 2026-07-03
 
 Patch release rolling up TLS diagnostics, RFC 2136 TTL hardening, a Go toolchain
@@ -170,6 +185,7 @@ release workflow.
   (GHCR + Docker Hub) and publishing GitHub Releases on version tags. `main` and
   tags are synced one-way GitHub→GitLab.
 - Removed the dead `advanced-git-sync` integration.
+## [1.6.0] - 2026-06-10
 
 ### Added
 - **SSH remote management for the dnsmasq provider is now functional**

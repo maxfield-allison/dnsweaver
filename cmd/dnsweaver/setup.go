@@ -17,6 +17,7 @@ import (
 	"github.com/maxfield-allison/dnsweaver/providers/adguard"
 	"github.com/maxfield-allison/dnsweaver/providers/cloudflare"
 	"github.com/maxfield-allison/dnsweaver/providers/dnsmasq"
+	"github.com/maxfield-allison/dnsweaver/providers/opnsense"
 	"github.com/maxfield-allison/dnsweaver/providers/ovh"
 	"github.com/maxfield-allison/dnsweaver/providers/pihole"
 	"github.com/maxfield-allison/dnsweaver/providers/powerdns"
@@ -313,6 +314,9 @@ func registerProviderFactories(registry *provider.Registry) {
 
 	// Register OVHcloud provider factory (public DNS)
 	registry.RegisterFactory("ovh", ovh.Factory())
+
+	// Register OPNsense provider factory (Unbound/Dnsmasq host overrides via REST API)
+	registry.RegisterFactory("opnsense", opnsense.Factory())
 }
 
 // initializeProviders initializes all configured providers using the manager.

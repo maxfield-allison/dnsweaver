@@ -8,7 +8,7 @@ For test templates and patterns, see the [templates/](templates/) directory.
 
 | Category | Test Cases | Description |
 |----------|-----------|-------------|
-| [Provider Tests](#provider-tests) | 9 providers × record types | CRUD operations, orphan cleanup |
+| [Provider Tests](#provider-tests) | 10 providers × record types | CRUD operations, orphan cleanup |
 | [Source Tests](#source-tests) | 3 sources × modes | Service discovery, watch/poll |
 | [Scenario Tests](#scenario-tests) | 9 scenarios | End-to-end behavior, recovery |
 | [Reconciler Tests](#reconciler-tests) | Edge cases | Multi-provider, conflict resolution |
@@ -31,6 +31,7 @@ Each provider must pass the full test matrix for every record type it supports.
 | Pi-hole v5 | ✅ | ✅ | ✅ | ❌ | ❌ | Custom list |
 | Pi-hole v6 | ✅ | ✅ | ✅ | ❌ | ❌ | Custom list |
 | AdGuard Home | ✅ | ✅ | ✅ | ❌ | ❌ | DNS rewrite |
+| OPNsense | ✅ | ✅ | ❌ | ❌ | ❌ | Description prefix |
 | dnsmasq | ✅ | ✅ | ✅ | ❌ | ❌ | Config file |
 | Webhook | ✅ | ✅ | ✅ | ✅ | ✅ | Callback |
 

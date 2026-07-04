@@ -124,6 +124,20 @@ type GlobalConfig struct {
 	InstanceID string // Unique identifier for this dnsweaver instance (for shared zone management)
 }
 
+// normalizePlatform lowercases the platform value and maps recognized aliases
+// to their canonical form. "standalone" is an alias for "none" — both mean
+// "create no container-runtime client" so dnsweaver can run as a bare binary
+// on a host, VM, or LXC using only non-container sources (Proxmox, file
+// discovery). Unknown values are returned lowercased for the caller to reject.
+func normalizePlatform(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "standalone":
+		return "none"
+	default:
+		return strings.ToLower(strings.TrimSpace(v))
+	}
+}
+
 // loadGlobalConfig loads global configuration from environment variables.
 // Returns a list of validation errors (may be empty).
 func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
@@ -160,12 +174,12 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	if cfg.Platform == "" {
 		cfg.Platform = DefaultPlatform
 	}
-	cfg.Platform = strings.ToLower(cfg.Platform)
+	cfg.Platform = normalizePlatform(cfg.Platform)
 	switch cfg.Platform {
-	case "docker", "kubernetes", "both":
+	case "docker", "kubernetes", "both", "none":
 		// Valid
 	default:
-		errs = append(errs, configErrFull("DNSWEAVER_PLATFORM", fmt.Sprintf("invalid value %q", cfg.Platform), "Must be one of: docker, kubernetes, both", "DNSWEAVER_PLATFORM=docker"))
+		errs = append(errs, configErrFull("DNSWEAVER_PLATFORM", fmt.Sprintf("invalid value %q", cfg.Platform), "Must be one of: docker, kubernetes, both, none", "DNSWEAVER_PLATFORM=docker"))
 	}
 
 	// Validate log level

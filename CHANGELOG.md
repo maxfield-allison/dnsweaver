@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Standalone platform mode** (`DNSWEAVER_PLATFORM=none`, alias `standalone`).
+  dnsweaver can now run as a bare binary on a host, VM, or LXC with no Docker or
+  Kubernetes runtime — previously it always created a Docker (or Kubernetes)
+  client at startup and exited fatally with `Cannot connect to the Docker
+  daemon` even when only non-container sources were configured. With `none`, no
+  container-runtime client is created; configure at least one non-container
+  source instead — a Proxmox VE source (`DNSWEAVER_PROXMOX_URL`), an Incus
+  source (`DNSWEAVER_INCUS_URL`/`DNSWEAVER_INCUS_SOCKET_PATH`), or a
+  file-discovery source (e.g. `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS`). Startup
+  fails with an actionable error if `none` is set without any such source.
+  ([GitHub #116](https://github.com/maxfield-allison/dnsweaver/issues/116))
 - **OPNsense provider** with pluggable engine backend for **Unbound** and
   **Dnsmasq** (OPNsense 24.7+), driven by the OPNsense REST API
   ([GitHub #114](https://github.com/maxfield-allison/dnsweaver/issues/114),

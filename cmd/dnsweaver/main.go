@@ -327,8 +327,14 @@ func run() error {
 		)
 	}
 
+	if len(listers) == 0 && len(sourceRegistry.DiscoverableSources()) == 0 {
+		return fmt.Errorf("no workload listers or discovery sources configured: set DNSWEAVER_PLATFORM to docker, kubernetes, or both; set DNSWEAVER_PROXMOX_URL for Proxmox VE; set DNSWEAVER_INCUS_URL/DNSWEAVER_INCUS_SOCKET_PATH for Incus; or, when running standalone (DNSWEAVER_PLATFORM=none), configure a file-discovery source such as DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS")
+	}
+
 	if len(listers) == 0 {
-		return fmt.Errorf("no platform watchers configured: set DNSWEAVER_PLATFORM to docker, kubernetes, or both, set DNSWEAVER_PROXMOX_URL for Proxmox VE, or set DNSWEAVER_INCUS_URL/DNSWEAVER_INCUS_SOCKET_PATH for Incus")
+		logger.Info("running in standalone mode with file discovery only (no workload listers)",
+			slog.String("platform", cfg.Platform()),
+		)
 	}
 
 	rec := reconciler.New(listers, sourceRegistry, providerRegistry,

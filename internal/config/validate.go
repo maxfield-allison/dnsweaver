@@ -55,7 +55,7 @@ func validateConfig(cfg *Config) []*ConfigError {
 
 	// Validate platform value
 	switch cfg.Global.Platform {
-	case "docker", "kubernetes", "both":
+	case "docker", "kubernetes", "both", "none":
 		// Valid
 	case "":
 		// Will use default
@@ -63,7 +63,7 @@ func validateConfig(cfg *Config) []*ConfigError {
 		errs = append(errs, configErrFull(
 			"platform",
 			fmt.Sprintf("invalid value %q", cfg.Global.Platform),
-			"Must be one of: docker, kubernetes, both",
+			"Must be one of: docker, kubernetes, both, none",
 			"DNSWEAVER_PLATFORM=docker",
 		))
 	}

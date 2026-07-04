@@ -68,7 +68,7 @@ The socket proxy only needs read-only access to containers, services, and events
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DNSWEAVER_PLATFORM` | `docker` | Platform mode: `docker`, `kubernetes`, or `both` |
+| `DNSWEAVER_PLATFORM` | `docker` | Platform mode: `docker`, `kubernetes`, `both`, or `none` |
 | `DNSWEAVER_INSTANCE_ID` | *(empty)* | Unique instance identifier for multi-instance coordination |
 
 Set `DNSWEAVER_PLATFORM` to control which workload sources are active:
@@ -76,6 +76,27 @@ Set `DNSWEAVER_PLATFORM` to control which workload sources are active:
 - **`docker`** — Watch Docker containers/services only (default, backward-compatible)
 - **`kubernetes`** — Watch Kubernetes Ingress/IngressRoute/HTTPRoute/Service resources only
 - **`both`** — Watch both Docker and Kubernetes workloads simultaneously
+- **`none`** (alias: `standalone`) — Create no container-runtime client. Use this to run dnsweaver as a bare binary on a host, VM, or LXC where there is no Docker or Kubernetes. You must configure at least one non-container source: a Proxmox VE source (`DNSWEAVER_PROXMOX_URL`), an Incus source (`DNSWEAVER_INCUS_URL` / `DNSWEAVER_INCUS_SOCKET_PATH`), or a file-discovery source (e.g. `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS`). Startup will fail if `none` is set and no such source is configured.
+
+### Standalone (no Docker or Kubernetes)
+
+To run dnsweaver directly on a host alongside, for example, Technitium DNS, using only the Proxmox VE source:
+
+```bash
+DNSWEAVER_PLATFORM=none
+DNSWEAVER_SOURCES=proxmox
+DNSWEAVER_PROXMOX_URL=https://pve.example.com:8006/
+DNSWEAVER_PROXMOX_TOKEN_ID=user@pve!dnsweaver
+DNSWEAVER_PROXMOX_TOKEN_SECRET_FILE=/etc/dnsweaver/pve-token
+
+DNSWEAVER_INSTANCES=technitium
+DNSWEAVER_TECHNITIUM_TYPE=technitium
+DNSWEAVER_TECHNITIUM_URL=http://127.0.0.1:5380
+DNSWEAVER_TECHNITIUM_TOKEN_FILE=/etc/dnsweaver/technitium-token
+DNSWEAVER_TECHNITIUM_ZONE=example.com
+```
+
+With `DNSWEAVER_PLATFORM=none` no Docker or Kubernetes client is created, so dnsweaver no longer fails with `Cannot connect to the Docker daemon` on hosts without a container runtime.
 
 ## Kubernetes Settings
 

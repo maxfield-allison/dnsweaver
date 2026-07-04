@@ -274,12 +274,12 @@ func mergeGlobalConfig(base *GlobalConfig) (*GlobalConfig, []*ConfigError) {
 
 	// Override platform if set in env
 	if v := getEnv("DNSWEAVER_PLATFORM"); v != "" {
-		cfg.Platform = strings.ToLower(v)
+		cfg.Platform = normalizePlatform(v)
 		switch cfg.Platform {
-		case "docker", "kubernetes", "both":
+		case "docker", "kubernetes", "both", "none":
 			// Valid
 		default:
-			errs = append(errs, configErrFull("DNSWEAVER_PLATFORM", fmt.Sprintf("invalid value %q", v), "Must be one of: docker, kubernetes, both", "DNSWEAVER_PLATFORM=docker"))
+			errs = append(errs, configErrFull("DNSWEAVER_PLATFORM", fmt.Sprintf("invalid value %q", v), "Must be one of: docker, kubernetes, both, none", "DNSWEAVER_PLATFORM=docker"))
 		}
 	}
 

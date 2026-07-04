@@ -30,6 +30,7 @@ func clearGlobalEnv(t *testing.T) {
 		"DNSWEAVER_SOURCES",
 		"DNSWEAVER_SOURCE",
 		"DNSWEAVER_INSTANCE_ID",
+		"DNSWEAVER_PLATFORM",
 	}
 	for _, v := range envVars {
 		os.Unsetenv(v)

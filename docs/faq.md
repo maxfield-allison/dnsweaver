@@ -29,6 +29,10 @@ dnsweaver watches Kubernetes resources (Ingress, IngressRoute, HTTPRoute, Servic
 
 Yes! Set `DNSWEAVER_PLATFORM=both` to watch Docker events and Kubernetes resources simultaneously. This is useful for mixed environments or gradual migrations between platforms.
 
+### Can I run dnsweaver without Docker or Kubernetes?
+
+Yes. Set `DNSWEAVER_PLATFORM=none` (alias `standalone`) to run dnsweaver as a bare binary on a host, VM, or LXC with no container runtime. No Docker or Kubernetes client is created, so it won't fail with `Cannot connect to the Docker daemon`. You must configure at least one non-container source — a Proxmox VE source (`DNSWEAVER_PROXMOX_URL`), an Incus source (`DNSWEAVER_INCUS_URL`/`DNSWEAVER_INCUS_SOCKET_PATH`), or a file-discovery source (e.g. `DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS`). See [Standalone](configuration/environment.md#standalone-no-docker-or-kubernetes) for a full example.
+
 ### Can dnsweaver manage existing DNS records?
 
 By default, dnsweaver only manages records it creates (tracked via ownership TXT records). To adopt existing records:
@@ -124,7 +128,7 @@ In addition to the standard provider configuration, Kubernetes-specific options 
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DNSWEAVER_PLATFORM` | Platform to watch: `docker`, `kubernetes`, or `both` | `docker` |
+| `DNSWEAVER_PLATFORM` | Platform to watch: `docker`, `kubernetes`, `both`, or `none` | `docker` |
 | `DNSWEAVER_KUBE_NAMESPACES` | Comma-separated list of namespaces to watch | All namespaces |
 | `DNSWEAVER_KUBE_LABEL_SELECTOR` | Label selector to filter watched resources | None |
 
@@ -211,7 +215,7 @@ docker exec dnsweaver ls -la /var/run/docker.sock
 ```
 
 !!! tip
-    If running on Kubernetes only, set `DNSWEAVER_PLATFORM=kubernetes` to skip the Docker connection entirely.
+    If running on Kubernetes only, set `DNSWEAVER_PLATFORM=kubernetes` to skip the Docker connection entirely. If running with no container runtime at all (e.g. a bare host or LXC using only the Proxmox or a file-discovery source), set `DNSWEAVER_PLATFORM=none`.
 
 ### "Failed to create Kubernetes watcher"
 

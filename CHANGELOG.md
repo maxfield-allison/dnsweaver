@@ -81,6 +81,13 @@ idempotency fix. No new features and no breaking changes.
   and a CI status badge in the README.
   ([#100](https://github.com/maxfield-allison/dnsweaver/pull/100))
 
+### CI
+- **GitLab CI runner image and Dockerfile builder image bumped to
+  `golang:1.26.4-alpine`** to match the `go.mod` toolchain pin from #109. The
+  initial `v2.2.1` tag pipeline failed with
+  `go.mod requires go >= 1.26.4 (running go 1.25.11)`; this bumps both build
+  surfaces in lock-step.
+
 ## [2.2.0] - 2026-06-22
 
 ### Added

@@ -412,7 +412,8 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	// Unified PVE TLS env vars (v1.5+). The legacy DNSWEAVER_PROXMOX_VERIFY_TLS
 	// is honored as a back-compat alias (inverted polarity) with a deprecation
 	// warning. When both are set, the new TLS_SKIP_VERIFY wins and a conflict
-	// warning is emitted. Legacy alias is scheduled for removal in v2.0.
+	// warning is emitted. Legacy alias is scheduled for removal in a future
+	// major release.
 	cfg.ProxmoxTLSCAFile = getEnv("DNSWEAVER_PROXMOX_TLS_CA_FILE")
 	cfg.ProxmoxTLSCertFile = getEnv("DNSWEAVER_PROXMOX_TLS_CERT_FILE")
 	cfg.ProxmoxTLSKeyFile = getEnv("DNSWEAVER_PROXMOX_TLS_KEY_FILE")
@@ -423,12 +424,12 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	_, hasLegacy := os.LookupEnv("DNSWEAVER_PROXMOX_VERIFY_TLS")
 	switch {
 	case hasNew && hasLegacy:
-		slog.Warn("both DNSWEAVER_PROXMOX_VERIFY_TLS (deprecated) and DNSWEAVER_PROXMOX_TLS_SKIP_VERIFY are set; the new TLS_SKIP_VERIFY value wins. Remove VERIFY_TLS — it will be removed in v2.0.")
+		slog.Warn("both DNSWEAVER_PROXMOX_VERIFY_TLS (deprecated) and DNSWEAVER_PROXMOX_TLS_SKIP_VERIFY are set; the new TLS_SKIP_VERIFY value wins. Remove VERIFY_TLS — it will be removed in a future major release.")
 		cfg.ProxmoxTLSSkipVerify = parseBool(skipNew, false)
 	case hasNew:
 		cfg.ProxmoxTLSSkipVerify = parseBool(skipNew, false)
 	case hasLegacy:
-		slog.Warn("DNSWEAVER_PROXMOX_VERIFY_TLS is deprecated; use DNSWEAVER_PROXMOX_TLS_SKIP_VERIFY instead (legacy alias will be removed in v2.0)")
+		slog.Warn("DNSWEAVER_PROXMOX_VERIFY_TLS is deprecated; use DNSWEAVER_PROXMOX_TLS_SKIP_VERIFY instead (legacy alias will be removed in a future major release)")
 		// Invert polarity: VERIFY_TLS=true → TLS_SKIP_VERIFY=false
 		cfg.ProxmoxTLSSkipVerify = !cfg.ProxmoxVerifyTLS
 	}

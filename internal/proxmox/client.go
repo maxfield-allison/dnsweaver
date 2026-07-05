@@ -54,8 +54,8 @@ type ClientConfig struct {
 	//
 	// Deprecated: use TLS for full control (CA bundle, mTLS, SNI, min version,
 	// skip-verify). When TLS is non-nil, VerifyTLS is ignored. Retained so the
-	// legacy DNSWEAVER_PROXMOX_VERIFY_TLS env var path still works for one
-	// release; will be removed in v2.0.
+	// legacy DNSWEAVER_PROXMOX_VERIFY_TLS env var path still works; will be
+	// removed in a future major release.
 	VerifyTLS bool
 
 	// TLS is the unified TLS configuration. When non-nil, it fully describes

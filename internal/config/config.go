@@ -347,7 +347,7 @@ func (c *Config) ProxmoxTargetMode() string {
 //
 // Deprecated: prefer ProxmoxTLS().InsecureSkip (inverted polarity). Retained
 // so the legacy env var DNSWEAVER_PROXMOX_VERIFY_TLS continues to flow through
-// the same Config accessor for one release; will be removed in v2.0.
+// the same Config accessor; will be removed in a future major release.
 func (c *Config) ProxmoxVerifyTLS() bool {
 	return c.Global.ProxmoxVerifyTLS
 }

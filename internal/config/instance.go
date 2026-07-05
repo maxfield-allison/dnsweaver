@@ -220,7 +220,8 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 
 // resolveLegacyTLSSkipVerify migrates DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY
 // into TLS_SKIP_VERIFY in the per-instance ProviderConfig map and emits a
-// deprecation warning when the legacy key is in use. Removed: v2.0.
+// deprecation warning when the legacy key is in use. Scheduled for removal in
+// a future major release.
 func resolveLegacyTLSSkipVerify(cfgMap map[string]string, instanceName string) {
 	const (
 		legacy    = "INSECURE_SKIP_VERIFY"
@@ -230,12 +231,12 @@ func resolveLegacyTLSSkipVerify(cfgMap map[string]string, instanceName string) {
 	_, hasCanonical := cfgMap[canonical]
 	switch {
 	case hasLegacy && hasCanonical:
-		slog.Warn("both DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY (deprecated) and DNSWEAVER_{NAME}_TLS_SKIP_VERIFY are set; the new TLS_SKIP_VERIFY value wins. Remove INSECURE_SKIP_VERIFY — it will be removed in v2.0.",
+		slog.Warn("both DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY (deprecated) and DNSWEAVER_{NAME}_TLS_SKIP_VERIFY are set; the new TLS_SKIP_VERIFY value wins. Remove INSECURE_SKIP_VERIFY — it will be removed in a future major release.",
 			slog.String("instance", instanceName),
 		)
 		delete(cfgMap, legacy)
 	case hasLegacy:
-		slog.Warn("DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY is deprecated; use DNSWEAVER_{NAME}_TLS_SKIP_VERIFY instead (the legacy name will be removed in v2.0)",
+		slog.Warn("DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY is deprecated; use DNSWEAVER_{NAME}_TLS_SKIP_VERIFY instead (the legacy name will be removed in a future major release)",
 			slog.String("instance", instanceName),
 		)
 		cfgMap[canonical] = legacyVal
@@ -272,7 +273,7 @@ var providerConfigFields = []struct {
 	{"API_SECRET", true},            // OPNsense specific: paired with API_KEY for basic auth
 	{"ENGINE", false},               // OPNsense specific: unbound|dnsmasq resolver selection
 	{"RECONFIGURE_MODE", false},     // OPNsense specific: per_write|never
-	{"INSECURE_SKIP_VERIFY", false}, // DEPRECATED: alias for TLS_SKIP_VERIFY, kept one release
+	{"INSECURE_SKIP_VERIFY", false}, // DEPRECATED: alias for TLS_SKIP_VERIFY
 	// Unified TLS fields — consumed by pkg/provider/extractTLSConfig and
 	// passed to every HTTP-based provider via FactoryConfig.HTTP.TLS.
 	{"TLS_CA_FILE", false},        // PEM CA bundle path (appended to system roots)

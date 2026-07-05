@@ -282,9 +282,9 @@ func run() error {
 			BaseURL:     cfg.ProxmoxURL(),
 			TokenID:     cfg.ProxmoxTokenID(),
 			TokenSecret: cfg.ProxmoxTokenSecret(),
-			// Intentional use of deprecated accessor: until v2.0 we pass both
-			// the legacy bool and the unified TLS config so operators on the
-			// old env var still work. The proxmox client prefers TLS when set.
+			// Intentional use of deprecated accessor: we pass both the legacy
+			// bool and the unified TLS config so operators on the old env var
+			// still work. The proxmox client prefers TLS when set.
 			VerifyTLS: cfg.ProxmoxVerifyTLS(), //nolint:staticcheck // SA1019: see comment above
 			TLS:       cfg.ProxmoxTLS(),
 			Logger:    logger,

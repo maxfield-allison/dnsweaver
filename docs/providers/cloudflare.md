@@ -91,6 +91,24 @@ When proxied:
 - Origin IP is hidden
 - Additional features available (caching, WAF, etc.)
 
+### Per-Host Proxy Override (Labels)
+
+`PROXIED` sets the default for **every** record this instance creates. To make
+individual hostnames DNS-only (grey-cloud) while the rest stay proxied, use the
+[native `proxied` label](../sources/native-labels.md#cloudflare-proxy-override-per-host)
+on the workload:
+
+```yaml
+labels:
+  # This host bypasses the Cloudflare proxy even though PROXIED=true
+  - "dnsweaver.hostname=ssh.example.com"
+  - "dnsweaver.proxied=false"
+```
+
+For several records on one service, use the named-record form
+(`dnsweaver.records.<name>.proxied`). Records that omit `proxied` fall back to
+the instance's `PROXIED` default.
+
 ## Split-Horizon with Cloudflare
 
 Common pattern: Cloudflare for external, Technitium for internal:
@@ -130,7 +148,7 @@ Cloudflare's public API uses publicly-trusted certificates so the defaults work 
 | `DNSWEAVER_CLOUDFLARE_TLS_SKIP_VERIFY` | Disable verification (development only — **never** in production) |
 | `DNSWEAVER_CLOUDFLARE_TLS_MIN_VERSION` | `1.2` (default) or `1.3` |
 
-The legacy `DNSWEAVER_CLOUDFLARE_INSECURE_SKIP_VERIFY` variable still works but emits a deprecation warning and will be removed in v2.0.
+The legacy `DNSWEAVER_CLOUDFLARE_INSECURE_SKIP_VERIFY` variable still works but emits a deprecation warning and will be removed in a future major release.
 
 !!! warning "Mounted certs must be readable by uid/gid 1000"
     The container drops privileges to the unprivileged `dnsweaver` user, so a

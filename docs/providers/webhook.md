@@ -183,7 +183,7 @@ Webhook endpoints frequently live on internal services with private CAs or mTLS 
 | `DNSWEAVER_WEBHOOK_TLS_SKIP_VERIFY` | Disable verification (development only) |
 | `DNSWEAVER_WEBHOOK_TLS_MIN_VERSION` | `1.2` (default) or `1.3` |
 
-The legacy `DNSWEAVER_WEBHOOK_INSECURE_SKIP_VERIFY` variable still works but emits a deprecation warning and will be removed in v2.0.
+The legacy `DNSWEAVER_WEBHOOK_INSECURE_SKIP_VERIFY` variable still works but emits a deprecation warning and will be removed in a future major release.
 
 !!! warning "Mounted certs must be readable by uid/gid 1000"
     The container drops privileges to the unprivileged `dnsweaver` user, so a

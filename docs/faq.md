@@ -268,7 +268,7 @@ and is **not recommended for production**:
 ```
 
 The legacy `INSECURE_SKIP_VERIFY` variable still works but emits a deprecation
-warning and will be removed in v2.0.
+warning and will be removed in a future major release.
 
 ### Records created but not resolving
 

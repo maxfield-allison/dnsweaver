@@ -81,6 +81,7 @@ labels:
 | `dnsweaver.hostnames` | - | Comma-separated list of hostnames |
 | `dnsweaver.enabled` | `true` | Enable/disable processing |
 | `dnsweaver.ttl` | - | Override TTL for this container |
+| `dnsweaver.proxied` | provider default | Cloudflare proxy (orange-cloud) override — `true` or `false`. Applies to every hostname on the container. Ignored by non-Cloudflare providers. |
 
 ### Named Record Labels
 
@@ -97,6 +98,8 @@ For advanced use cases, use the named record format: `dnsweaver.records.<name>.<
 | `dnsweaver.records.<name>.priority` | - | Priority (for SRV records) |
 | `dnsweaver.records.<name>.weight` | - | Weight (for SRV records) |
 | `dnsweaver.records.<name>.enabled` | `true` | Enable/disable this record |
+| `dnsweaver.records.<name>.proxied` | provider default | Cloudflare proxy (orange-cloud) override for this record — `true` or `false`. Ignored by non-Cloudflare providers. |
+| `dnsweaver.records.<name>.meta.<key>` | - | Arbitrary provider metadata passed through to the target provider (advanced). |
 
 ## Examples
 
@@ -140,6 +143,39 @@ services:
       - "dnsweaver.records.mc.priority=10"
       - "dnsweaver.records.mc.weight=100"
 ```
+
+### Cloudflare Proxy Override (Per-Host)
+
+When a hostname is served by a [Cloudflare provider](../providers/cloudflare.md),
+the `proxied` label overrides that provider's `PROXIED` default on a per-host
+basis. This is the typical "most services proxied, a few DNS-only" pattern —
+keep the provider default proxied and flip individual hosts off.
+
+Simple hostname form (applies to every hostname on the container):
+
+```yaml
+labels:
+  - "dnsweaver.hostname=ssh.example.com"
+  - "dnsweaver.proxied=false"  # DNS-only, bypass Cloudflare's proxy
+```
+
+Named-record form (mix proxied and DNS-only on one service):
+
+```yaml
+labels:
+  - "dnsweaver.records.app.hostname=app.example.com"
+  - "dnsweaver.records.app.proxied=true"   # orange-cloud
+
+  - "dnsweaver.records.ssh.hostname=ssh.example.com"
+  - "dnsweaver.records.ssh.proxied=false"  # DNS-only
+
+  - "dnsweaver.records.vpn.hostname=vpn.example.com"
+  - "dnsweaver.records.vpn.proxied=false"  # DNS-only
+```
+
+When a record does not set `proxied`, the Cloudflare instance's
+`DNSWEAVER_{NAME}_PROXIED` value (default `true`) is used as the fallback. The
+label is ignored by providers that have no concept of proxying.
 
 ### Combine with Traefik Labels
 

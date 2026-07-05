@@ -40,7 +40,7 @@ flowchart LR
 | `DNSWEAVER_PROXMOX_TLS_SERVER_NAME` | No | — | SNI / verification hostname override. |
 | `DNSWEAVER_PROXMOX_TLS_MIN_VERSION` | No | `1.2` | Minimum TLS protocol version (`1.2` or `1.3`). |
 | `DNSWEAVER_PROXMOX_TLS_SKIP_VERIFY` | No | `false` | Skip PVE TLS certificate verification. Prefer `TLS_CA_FILE`. |
-| `DNSWEAVER_PROXMOX_VERIFY_TLS` | No | `true` | **Deprecated** inverted-polarity alias of `TLS_SKIP_VERIFY` (removed in v2.0). |
+| `DNSWEAVER_PROXMOX_VERIFY_TLS` | No | `true` | **Deprecated** inverted-polarity alias of `TLS_SKIP_VERIFY` (will be removed in a future major release). |
 | `DNSWEAVER_PROXMOX_NODE_FILTER` | No | _(all nodes)_ | Restrict discovery to a single PVE node name |
 | `DNSWEAVER_PROXMOX_TAG_FILTER` | No | _(all tags)_ | Only include resources with this tag (prefix match) |
 | `DNSWEAVER_PROXMOX_STATE_FILTER` | No | `running` | PVE resource status filter (`running`, `stopped`, etc.) |
@@ -310,7 +310,7 @@ DNSWEAVER_PROXMOX_TLS_SKIP_VERIFY=true
 ```
 
 The legacy `DNSWEAVER_PROXMOX_VERIFY_TLS` variable (note inverted polarity)
-still works but emits a deprecation warning and will be removed in v2.0.
+still works but emits a deprecation warning and will be removed in a future major release.
 
 ### No records created
 

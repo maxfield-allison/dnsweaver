@@ -47,7 +47,7 @@ environment:
 | `TLS_SERVER_NAME` | No | — | SNI / verification hostname override |
 | `TLS_MIN_VERSION` | No | `1.2` | Minimum TLS protocol version (`1.2` or `1.3`) |
 | `TLS_SKIP_VERIFY` | No | `false` | Skip TLS certificate verification. Prefer `TLS_CA_FILE`. |
-| `INSECURE_SKIP_VERIFY` | No | `false` | **Deprecated** alias of `TLS_SKIP_VERIFY` (removed in v2.0) |
+| `INSECURE_SKIP_VERIFY` | No | `false` | **Deprecated** alias of `TLS_SKIP_VERIFY` (will be removed in a future major release) |
 | `AUTO_HTTPS_RECORDS` | No | `true` | Auto-create companion HTTPS records (see below) |
 | `AUTO_HTTPS_ALPN` | No | `h2` | ALPN protocol for companion HTTPS records |
 
@@ -186,7 +186,7 @@ you can disable verification entirely — this removes MITM protection and is
 ```
 
 The legacy `DNSWEAVER_TECHNITIUM_INSECURE_SKIP_VERIFY` variable still works
-but emits a deprecation warning and will be removed in v2.0.
+but emits a deprecation warning and will be removed in a future major release.
 
 ## Companion HTTPS Records
 

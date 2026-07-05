@@ -170,7 +170,7 @@ When using API mode against a Pi-hole instance served over HTTPS — typically t
 | `DNSWEAVER_PIHOLE_TLS_SKIP_VERIFY` | Disable verification (development only) |
 | `DNSWEAVER_PIHOLE_TLS_MIN_VERSION` | `1.2` (default) or `1.3` |
 
-The legacy `DNSWEAVER_PIHOLE_INSECURE_SKIP_VERIFY` variable still works but emits a deprecation warning and will be removed in v2.0. File mode does not perform HTTP requests so these keys have no effect there.
+The legacy `DNSWEAVER_PIHOLE_INSECURE_SKIP_VERIFY` variable still works but emits a deprecation warning and will be removed in a future major release. File mode does not perform HTTP requests so these keys have no effect there.
 
 !!! warning "Mounted certs must be readable by uid/gid 1000"
     The container drops privileges to the unprivileged `dnsweaver` user, so a

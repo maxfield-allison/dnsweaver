@@ -144,7 +144,7 @@ Replace `{NAME}` with your instance name. For example, instance `internal-dns` u
 | `DNSWEAVER_{NAME}_TLS_SERVER_NAME` | No | SNI / verification hostname override. Use when the server's certificate CN/SAN does not match the URL host. |
 | `DNSWEAVER_{NAME}_TLS_MIN_VERSION` | No | Minimum TLS protocol version: `1.2` (default) or `1.3`. |
 | `DNSWEAVER_{NAME}_TLS_SKIP_VERIFY` | No | Skip TLS certificate verification (`true`/`false`, default: `false`). **Warning:** disables MITM protection — prefer `TLS_CA_FILE`. |
-| `DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY` | No | **Deprecated** — alias of `TLS_SKIP_VERIFY`. Will be removed in v2.0. |
+| `DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY` | No | **Deprecated** — alias of `TLS_SKIP_VERIFY`. Will be removed in a future major release. |
 
 ### TLS Certificate File Permissions
 
@@ -218,10 +218,10 @@ world-readable inside the container, a real downgrade):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DNSWEAVER_SOURCES` | `traefik` | Comma-separated list: `traefik`, `caddy`, `nginx-proxy`, `dnsweaver`, `kubernetes`, `proxmox` |
+| `DNSWEAVER_SOURCES` | `traefik` | Comma-separated list: `traefik`, `caddy`, `nginx-proxy`, `dnsweaver`, `kubernetes`, `proxmox`, `incus` |
 
 !!! warning "Deprecated Variable"
-    `DNSWEAVER_SOURCE` (singular) is deprecated and will be removed in v2.0. Use `DNSWEAVER_SOURCES` (plural) instead.
+    `DNSWEAVER_SOURCE` (singular) is deprecated and will be removed in a future major release. Use `DNSWEAVER_SOURCES` (plural) instead.
     When both are set, `DNSWEAVER_SOURCES` takes precedence.
 
 ### Traefik File Source Settings
@@ -252,7 +252,7 @@ full setup including the required PVE role privileges.
 | `DNSWEAVER_PROXMOX_TLS_SERVER_NAME` | No | — | SNI/verification hostname override. |
 | `DNSWEAVER_PROXMOX_TLS_MIN_VERSION` | No | `1.2` | Minimum TLS protocol version (`1.2` or `1.3`). |
 | `DNSWEAVER_PROXMOX_TLS_SKIP_VERIFY` | No | `false` | Skip PVE TLS certificate verification. Prefer `TLS_CA_FILE`. |
-| `DNSWEAVER_PROXMOX_VERIFY_TLS` | No | `true` | **Deprecated** — inverted-polarity alias of `TLS_SKIP_VERIFY`. Will be removed in v2.0. |
+| `DNSWEAVER_PROXMOX_VERIFY_TLS` | No | `true` | **Deprecated** — inverted-polarity alias of `TLS_SKIP_VERIFY`. Will be removed in a future major release. |
 | `DNSWEAVER_PROXMOX_NODE_FILTER` | No | *(all)* | Restrict discovery to a single PVE node name |
 | `DNSWEAVER_PROXMOX_TAG_FILTER` | No | *(all)* | Only include resources with this tag (prefix match) |
 | `DNSWEAVER_PROXMOX_STATE_FILTER` | No | `running` | Resource status filter (`running`, `stopped`, etc.) |

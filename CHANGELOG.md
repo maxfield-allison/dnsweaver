@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Deprecation notices for the legacy TLS aliases (`INSECURE_SKIP_VERIFY`,
+  `DNSWEAVER_PROXMOX_VERIFY_TLS`) no longer claim removal "in v2.0" — the
+  project is already past v2.0 and the aliases still ship. The operator-facing
+  log warnings now say "a future major release."
+
+### Documentation
+- Documented the Cloudflare per-host **`proxied` override** in the native Label
+  Reference (`dnsweaver.proxied` and `dnsweaver.records.<name>.proxied`, plus
+  `dnsweaver.records.<name>.meta.<key>`), with a worked example on the native
+  labels and Cloudflare provider pages. Previously the override was usable but
+  undocumented. ([discussion #113](https://github.com/maxfield-allison/dnsweaver/discussions/113))
+- Added the `incus` source to the `DNSWEAVER_SOURCES` enumeration and refreshed
+  stale "will be removed in v2.0" deprecation notes across the provider,
+  environment, FAQ, and Proxmox source pages.
+
 ## [2.3.0] - 2026-07-04
 
 Minor release adding the OPNsense DNS provider and a standalone platform mode for

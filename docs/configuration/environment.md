@@ -52,6 +52,7 @@ dnsweaver --config /etc/dnsweaver/config.yml
 |----------|---------|-------------|
 | `DNSWEAVER_DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker host (socket path or TCP URL) |
 | `DNSWEAVER_DOCKER_MODE` | `auto` | Docker mode: `auto`, `swarm`, `standalone` |
+| `DNSWEAVER_DOCKER_GID` | _(unset)_ | Explicitly add the unprivileged `dnsweaver` user to this group GID so it can read a socket whose GID can't be auto-detected (e.g. a root-owned socket on Synology: set `0`). The process still drops privileges; a [socket proxy](../sources/docker.md#socket-proxy-recommended-for-security) is stronger. |
 
 ### Socket Proxy Support
 

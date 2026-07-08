@@ -13,11 +13,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   privacy leak). `go.mod`, the Dockerfile `GO_VERSION`, and the GitLab CI base
   image are bumped in lock-step.
 
+### Added
+- **`DNSWEAVER_DOCKER_GID` escape hatch** for reading a Docker socket whose group
+  can't be auto-detected. The container entrypoint auto-detects a bind-mounted
+  socket's GID and adds the unprivileged `dnsweaver` user to it, but deliberately
+  skips GID 0 (root-owned sockets) rather than silently granting root-group
+  access. Platforms that force a root-owned socket and won't let you change it
+  (e.g. Synology Container Manager) can now set `DNSWEAVER_DOCKER_GID=0` to opt
+  in explicitly — the process still drops to `uid 1000` via `su-exec`, only a
+  supplementary group is added, so the application never runs as root. A loud
+  startup warning is emitted for the GID-0 case.
+  ([GitHub #79](https://github.com/maxfield-allison/dnsweaver/issues/79))
+
 ### Changed
 - Deprecation notices for the legacy TLS aliases (`INSECURE_SKIP_VERIFY`,
   `DNSWEAVER_PROXMOX_VERIFY_TLS`) no longer claim removal "in v2.0" — the
   project is already past v2.0 and the aliases still ship. The operator-facing
   log warnings now say "a future major release."
+
+### Documentation
+- Made the **Docker socket proxy** the recommended standalone deployment path,
+  with a full runnable example
+  ([`docs/examples/docker-compose.socket-proxy.example.yml`](docs/examples/docker-compose.socket-proxy.example.yml))
+  and a Synology-specific section covering the root-owned socket case. Documented
+  socket permissions, the non-root privilege drop, and `DNSWEAVER_DOCKER_GID`.
+  ([GitHub #79](https://github.com/maxfield-allison/dnsweaver/issues/79))
 
 ### Documentation
 - Documented the Cloudflare per-host **`proxied` override** in the native Label

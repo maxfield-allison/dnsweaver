@@ -79,7 +79,11 @@ environment:
 
 ### Socket Proxy (Recommended for Security)
 
-Use a socket proxy for improved security:
+A socket proxy is the **recommended** way to give dnsweaver Docker access. It
+sits in front of the Docker API and exposes only the read-only endpoints
+dnsweaver needs, so a compromise of dnsweaver can't drive the full Docker API to
+escape the container. dnsweaver connects over TCP and never touches the socket,
+so it also keeps running as its unprivileged `uid 1000` user.
 
 ```yaml
 services:
@@ -87,14 +91,18 @@ services:
     image: tecnativa/docker-socket-proxy
     environment:
       - CONTAINERS=1
-      - SERVICES=1
-      - TASKS=1
-      - NETWORKS=1
+      - EVENTS=1
+      - INFO=1
+      - PING=1
+      # Swarm only:
+      # - SERVICES=1
+      # - TASKS=1
+      # - NETWORKS=1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
   dnsweaver:
-    image: maxamill/dnsweaver:latest
+    image: ghcr.io/maxfield-allison/dnsweaver:latest
     environment:
       - DNSWEAVER_DOCKER_HOST=tcp://socket-proxy:2375
     depends_on:
@@ -103,9 +111,55 @@ services:
 
 Required socket proxy permissions:
 - `CONTAINERS=1` - Read container info
-- `SERVICES=1` - Read service info (Swarm)
-- `TASKS=1` - Read task info (Swarm)
-- `NETWORKS=1` - Read network info
+- `EVENTS=1` - Stream container start/stop events
+- `INFO=1` - dnsweaver queries `/info` at startup
+- `PING=1` - Connectivity/health check
+- `SERVICES=1` - Read service info (Swarm only)
+- `TASKS=1` - Read task info (Swarm only)
+- `NETWORKS=1` - Read network info (Swarm only)
+
+A full runnable example lives at
+[`docs/examples/docker-compose.socket-proxy.example.yml`](https://github.com/maxfield-allison/dnsweaver/blob/main/docs/examples/docker-compose.socket-proxy.example.yml).
+
+## Socket Permissions & the Non-Root User
+
+dnsweaver runs as an unprivileged user (`uid 1000`) inside the container. When
+you bind-mount the socket directly, the container starts as root just long
+enough for its entrypoint to detect the socket's group (GID) and add the
+`dnsweaver` user to it, then drops privileges via `su-exec`. The standard
+compose example works out of the box — no `group_add` needed.
+
+The entrypoint deliberately **does not** grant access when the socket is owned
+by GID 0 (root), because that would silently hand the `dnsweaver` user
+root-group membership. If that happens you'll see a startup log explaining the
+options below.
+
+### `DNSWEAVER_DOCKER_GID` (explicit opt-in)
+
+Set this to force the `dnsweaver` user into a specific group GID. It's an escape
+hatch for platforms whose socket ownership can't be detected or changed:
+
+```yaml
+environment:
+  - DNSWEAVER_DOCKER_GID=0   # read a root-owned socket
+```
+
+The process still drops to `uid 1000` — only a supplementary group is added, so
+the application never runs as root. A socket proxy is still the stronger option.
+
+### Synology (Container Manager)
+
+Synology's Container Manager mounts `/var/run/docker.sock` as `root:root` and
+reverts ownership changes on reboot, and it won't let you create host users with
+arbitrary UIDs/GIDs. Because the socket is GID 0, direct-mount auto-detection is
+intentionally skipped. Two supported ways forward:
+
+1. **Socket proxy (recommended).** The proxy runs as root (which Synology
+   requires anyway) and dnsweaver connects over TCP as `uid 1000`. See the
+   example above.
+2. **`DNSWEAVER_DOCKER_GID=0`.** Quick single-line opt-in that lets the
+   unprivileged dnsweaver user read the root-owned socket. Simpler, but grants
+   the container's user root-group membership, so prefer the proxy where you can.
 
 ## Event Processing
 

@@ -1,0 +1,80 @@
+# Docker Compose Example — Socket Proxy (recommended for security)
+#
+# This is the recommended standalone Docker deployment. Instead of bind-mounting
+# /var/run/docker.sock directly into dnsweaver, a small read-only socket proxy
+# sits in front of the Docker API and exposes ONLY the endpoints dnsweaver needs.
+#
+# Why this is the secure path:
+#   - Direct socket access is equivalent to root on the host (anyone who can talk
+#     to docker.sock can start a privileged container that mounts the host FS).
+#   - dnsweaver only needs to READ containers, events, info, and (in Swarm)
+#     services/tasks/networks. The proxy blocks everything else (create, exec,
+#     volumes, secrets, ...), so a compromise of dnsweaver cannot drive the
+#     Docker API to escape the container.
+#   - dnsweaver never touches the socket, so it keeps running as its unprivileged
+#     uid 1000 user with no GID juggling.
+#
+# This is also the cleanest fix for platforms that force a root-owned socket and
+# won't let you change its ownership (e.g. Synology Container Manager): the proxy
+# runs as root (which those platforms require anyway) and dnsweaver does not.
+#
+# Deploy:
+#   docker compose -f docker-compose.socket-proxy.example.yml up -d
+
+services:
+  # -------------------------------------------------------------------------
+  # Docker socket proxy — the ONLY container that touches the real socket.
+  # -------------------------------------------------------------------------
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    restart: unless-stopped
+    environment:
+      # Grant only what dnsweaver needs (read-only). Everything else stays 0.
+      CONTAINERS: 1   # list/inspect containers (standalone Docker)
+      EVENTS: 1       # stream start/stop events (default on, listed for clarity)
+      INFO: 1         # dnsweaver queries /info at startup
+      PING: 1         # health/connectivity check
+      # Swarm-only endpoints — enable if dnsweaver runs against a Swarm manager:
+      # SERVICES: 1
+      # TASKS: 1
+      # NETWORKS: 1
+    volumes:
+      # Read-only bind of the real socket. On Synology this is root-owned; the
+      # proxy runs as root so it can read it. dnsweaver never sees this mount.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - dnsweaver-internal
+    # The proxy is the trust boundary — never publish port 2375 to the host.
+
+  # -------------------------------------------------------------------------
+  # dnsweaver — talks to the proxy over TCP, runs unprivileged (uid 1000).
+  # -------------------------------------------------------------------------
+  dnsweaver:
+    image: ghcr.io/maxfield-allison/dnsweaver:latest
+    restart: unless-stopped
+    depends_on:
+      - socket-proxy
+    environment:
+      # Point dnsweaver at the proxy instead of a local socket. Because no
+      # unix socket is mounted, the entrypoint's GID auto-detection is a no-op.
+      DNSWEAVER_DOCKER_HOST: "tcp://socket-proxy:2375"
+
+      DNSWEAVER_LOG_LEVEL: "info"
+
+      # --- Example provider config (replace with your own) ---------------
+      DNSWEAVER_INSTANCES: "internal"
+      DNSWEAVER_INTERNAL_TYPE: "technitium"
+      DNSWEAVER_INTERNAL_URL: "http://dns.example.com:5380"
+      DNSWEAVER_INTERNAL_TOKEN: "replace-me"
+      DNSWEAVER_INTERNAL_ZONE: "home.example.com"
+      DNSWEAVER_INTERNAL_RECORD_TYPE: "A"
+      DNSWEAVER_INTERNAL_TARGET: "192.0.2.10"
+      DNSWEAVER_INTERNAL_DOMAINS: "*.home.example.com"
+    networks:
+      - dnsweaver-internal
+    ports:
+      - "8080:8080"   # health endpoint (optional)
+
+networks:
+  dnsweaver-internal:
+    driver: bridge

@@ -226,6 +226,13 @@ func (c *Config) DockerHost() string {
 	return c.Global.DockerHost
 }
 
+// DockerConnectTimeout returns the maximum time to keep retrying the initial
+// Docker connection before failing hard. Zero means fail immediately on the
+// first connection error.
+func (c *Config) DockerConnectTimeout() time.Duration {
+	return c.Global.DockerConnectTimeout
+}
+
 // DockerMode returns the Docker mode (auto/swarm/standalone).
 func (c *Config) DockerMode() string {
 	return c.Global.DockerMode

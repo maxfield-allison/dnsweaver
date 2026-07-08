@@ -12,26 +12,27 @@ import (
 
 // Global configuration defaults.
 const (
-	DefaultLogLevel          = "info"
-	DefaultLogFormat         = "json"
-	DefaultLogMaxSize        = 100  // megabytes
-	DefaultLogMaxBackups     = 5    // number of old log files to keep
-	DefaultLogMaxAge         = 30   // days to retain old logs
-	DefaultLogCompress       = true // compress rotated log files
-	DefaultDryRun            = false
-	DefaultCleanupOrphans    = true
-	DefaultCleanupOnStop     = true
-	DefaultOwnershipTracking = true
-	DefaultAdoptExisting     = false
-	DefaultTTL               = 300
-	DefaultReconcileInterval = 60 * time.Second
-	DefaultShutdownTimeout   = 30 * time.Second
-	DefaultHealthPort        = 8080
-	DefaultDockerHost        = "unix:///var/run/docker.sock"
-	DefaultDockerMode        = "auto"
-	DefaultSource            = "traefik"
-	DefaultInstanceID        = ""
-	DefaultPlatform          = "docker"
+	DefaultLogLevel             = "info"
+	DefaultLogFormat            = "json"
+	DefaultLogMaxSize           = 100  // megabytes
+	DefaultLogMaxBackups        = 5    // number of old log files to keep
+	DefaultLogMaxAge            = 30   // days to retain old logs
+	DefaultLogCompress          = true // compress rotated log files
+	DefaultDryRun               = false
+	DefaultCleanupOrphans       = true
+	DefaultCleanupOnStop        = true
+	DefaultOwnershipTracking    = true
+	DefaultAdoptExisting        = false
+	DefaultTTL                  = 300
+	DefaultReconcileInterval    = 60 * time.Second
+	DefaultShutdownTimeout      = 30 * time.Second
+	DefaultHealthPort           = 8080
+	DefaultDockerHost           = "unix:///var/run/docker.sock"
+	DefaultDockerMode           = "auto"
+	DefaultDockerConnectTimeout = 30 * time.Second
+	DefaultSource               = "traefik"
+	DefaultInstanceID           = ""
+	DefaultPlatform             = "docker"
 )
 
 // InstanceID validation constraints.
@@ -66,8 +67,9 @@ type GlobalConfig struct {
 	Platform string // docker, kubernetes, both
 
 	// Docker connection
-	DockerHost string // Docker socket path or TCP URL
-	DockerMode string // auto, swarm, standalone
+	DockerHost           string        // Docker socket path or TCP URL
+	DockerMode           string        // auto, swarm, standalone
+	DockerConnectTimeout time.Duration // Max time to keep retrying the initial Docker connect before failing hard; 0 = fail immediately
 
 	// Kubernetes settings
 	K8sKubeconfig        string // Path to kubeconfig file; empty = in-cluster
@@ -330,6 +332,25 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 		}
 	} else {
 		cfg.ShutdownTimeout = DefaultShutdownTimeout
+	}
+
+	// Parse DOCKER_CONNECT_TIMEOUT (supports Go duration format: 30s, 1m, etc.)
+	// This bounds how long dnsweaver retries the initial Docker connection before
+	// failing hard. A value of 0 disables retrying (fail immediately on the first
+	// error) for operators who want strict fail-fast behavior. It exists so a
+	// label-driven socket proxy (which only authorizes dnsweaver a few seconds
+	// after its container starts) doesn't lose a startup race (#125).
+	if timeoutStr := getEnv("DNSWEAVER_DOCKER_CONNECT_TIMEOUT"); timeoutStr != "" {
+		timeout, err := time.ParseDuration(timeoutStr)
+		if err != nil {
+			errs = append(errs, configErrFull("DNSWEAVER_DOCKER_CONNECT_TIMEOUT", fmt.Sprintf("invalid duration %q", timeoutStr), "Use Go duration format: 30s, 1m; 0 to fail immediately", "DNSWEAVER_DOCKER_CONNECT_TIMEOUT=30s"))
+		} else if timeout < 0 {
+			errs = append(errs, configErrFull("DNSWEAVER_DOCKER_CONNECT_TIMEOUT", "must not be negative", "Use 0 to fail immediately, or a positive duration to retry", "DNSWEAVER_DOCKER_CONNECT_TIMEOUT=30s"))
+		} else {
+			cfg.DockerConnectTimeout = timeout
+		}
+	} else {
+		cfg.DockerConnectTimeout = DefaultDockerConnectTimeout
 	}
 
 	// Parse HEALTH_PORT

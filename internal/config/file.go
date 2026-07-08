@@ -74,8 +74,9 @@ type FileReconcilerConfig struct {
 
 // FileDockerConfig holds Docker connection settings.
 type FileDockerConfig struct {
-	Host string `yaml:"host,omitempty"` // unix:///var/run/docker.sock or tcp://...
-	Mode string `yaml:"mode,omitempty"` // auto, swarm, standalone
+	Host           string `yaml:"host,omitempty"`            // unix:///var/run/docker.sock or tcp://...
+	Mode           string `yaml:"mode,omitempty"`            // auto, swarm, standalone
+	ConnectTimeout string `yaml:"connect_timeout,omitempty"` // Max time to retry the initial connect before failing hard (e.g. 30s); "0" fails immediately
 }
 
 // FileKubernetesConfig holds Kubernetes watcher settings.
@@ -259,6 +260,7 @@ func (c *FileConfig) ToGlobalConfig() *GlobalConfig {
 		Platform:             DefaultPlatform,
 		DockerHost:           DefaultDockerHost,
 		DockerMode:           DefaultDockerMode,
+		DockerConnectTimeout: DefaultDockerConnectTimeout,
 		K8sWatchIngress:      true,
 		K8sWatchIngressRoute: true,
 		K8sWatchHTTPRoute:    true,
@@ -335,6 +337,11 @@ func (c *FileConfig) ToGlobalConfig() *GlobalConfig {
 		}
 		if c.Docker.Mode != "" {
 			cfg.DockerMode = strings.ToLower(c.Docker.Mode)
+		}
+		if c.Docker.ConnectTimeout != "" {
+			if timeout, err := time.ParseDuration(c.Docker.ConnectTimeout); err == nil && timeout >= 0 {
+				cfg.DockerConnectTimeout = timeout
+			}
 		}
 	}
 

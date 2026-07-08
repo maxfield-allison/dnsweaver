@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -69,12 +70,13 @@ var (
 // standalone mode and provides appropriate methods for each. Use ListWorkloads()
 // for mode-agnostic workload listing.
 type Client struct {
-	docker        *client.Client
-	mode          Mode
-	detectedMode  Mode
-	logger        *slog.Logger
-	host          string
-	cleanupOnStop bool // If true, only list running containers; if false, include stopped
+	docker         *client.Client
+	mode           Mode
+	detectedMode   Mode
+	logger         *slog.Logger
+	host           string
+	cleanupOnStop  bool          // If true, only list running containers; if false, include stopped
+	connectTimeout time.Duration // Max time to retry the initial connect before failing hard; 0 = fail immediately
 }
 
 // NewClient creates a new Docker client with the given options.
@@ -119,8 +121,12 @@ func NewClient(ctx context.Context, opts ...Option) (*Client, error) {
 	}
 	c.docker = dockerClient
 
-	// Detect or verify mode
-	if err := c.initializeMode(ctx); err != nil {
+	// Detect or verify mode, retrying the initial connection for up to
+	// connectTimeout. This tolerates a dependency that isn't ready the instant
+	// dnsweaver starts (e.g. a label-driven socket proxy that authorizes this
+	// container a few seconds after it comes up, #125) while still failing hard
+	// if the endpoint never becomes usable.
+	if err := c.connectWithRetry(ctx); err != nil {
 		dockerClient.Close()
 		return nil, err
 	}
@@ -131,6 +137,71 @@ func NewClient(ctx context.Context, opts ...Option) (*Client, error) {
 	)
 
 	return c, nil
+}
+
+// connectWithRetry runs initializeMode, retrying with capped exponential
+// backoff until it succeeds or connectTimeout elapses. A connectTimeout of 0
+// means fail immediately on the first error (strict fail-fast). Configuration
+// errors that can't be fixed by waiting (e.g. Swarm mode forced but this node
+// is not a manager) fail immediately regardless of the timeout.
+func (c *Client) connectWithRetry(ctx context.Context) error {
+	err := c.initializeMode(ctx)
+	if err == nil {
+		return nil
+	}
+	// Never retry deterministic misconfiguration — waiting won't fix it.
+	if c.connectTimeout <= 0 || isTerminalModeErr(err) {
+		return err
+	}
+
+	deadline := time.Now().Add(c.connectTimeout)
+	backoff := 500 * time.Millisecond
+	const maxBackoff = 5 * time.Second
+
+	for {
+		wait := backoff
+		if remaining := time.Until(deadline); remaining < wait {
+			wait = remaining
+		}
+		if wait <= 0 {
+			return fmt.Errorf("connecting to docker after %s: %w", c.connectTimeout, err)
+		}
+
+		c.logger.Info("waiting for docker endpoint to become available",
+			slog.String("host", c.host),
+			slog.String("error", err.Error()),
+			slog.Duration("retry_in", wait),
+		)
+
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("connecting to docker: %w", ctx.Err())
+		case <-timer.C:
+		}
+
+		err = c.initializeMode(ctx)
+		if err == nil {
+			return nil
+		}
+		if isTerminalModeErr(err) {
+			return err
+		}
+		if backoff < maxBackoff {
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+		}
+	}
+}
+
+// isTerminalModeErr reports whether an initializeMode error is a deterministic
+// misconfiguration that retrying cannot resolve, so we should fail immediately
+// instead of waiting out the connect timeout.
+func isTerminalModeErr(err error) bool {
+	return errors.Is(err, ErrNotManager) || errors.Is(err, ErrSwarmNotActive)
 }
 
 // initializeMode detects or verifies the Docker mode based on configuration.

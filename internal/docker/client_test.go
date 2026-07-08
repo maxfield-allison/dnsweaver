@@ -7,6 +7,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/docker/docker/client"
 )
 
 // TestModeConstants verifies mode constants are correctly defined.
@@ -176,6 +179,109 @@ func TestWithHost(t *testing.T) {
 
 	if c.host != host {
 		t.Errorf("WithHost did not set host correctly: expected %s, got %s", host, c.host)
+	}
+}
+
+// TestWithConnectTimeout verifies the connect timeout option and that
+// non-positive values leave the default (zero) in place.
+func TestWithConnectTimeout(t *testing.T) {
+	c := &Client{}
+	WithConnectTimeout(30 * time.Second)(c)
+	if c.connectTimeout != 30*time.Second {
+		t.Errorf("WithConnectTimeout = %v, want %v", c.connectTimeout, 30*time.Second)
+	}
+
+	// Zero and negative values must not overwrite an existing value.
+	c.connectTimeout = 10 * time.Second
+	WithConnectTimeout(0)(c)
+	WithConnectTimeout(-5 * time.Second)(c)
+	if c.connectTimeout != 10*time.Second {
+		t.Errorf("WithConnectTimeout with non-positive value changed timeout to %v", c.connectTimeout)
+	}
+}
+
+// TestIsTerminalModeErr verifies which mode errors are treated as
+// non-retryable misconfiguration.
+func TestIsTerminalModeErr(t *testing.T) {
+	if !isTerminalModeErr(ErrNotManager) {
+		t.Error("ErrNotManager should be terminal")
+	}
+	if !isTerminalModeErr(ErrSwarmNotActive) {
+		t.Error("ErrSwarmNotActive should be terminal")
+	}
+	if isTerminalModeErr(errors.New("connection refused")) {
+		t.Error("a generic connectivity error should not be terminal")
+	}
+}
+
+// newDeadClient returns a Client whose Docker API points at a closed local
+// port, so initializeMode fails fast with a connection error (not a terminal
+// mode error). Used to exercise connectWithRetry deterministically.
+func newDeadClient(t *testing.T, connectTimeout time.Duration) *Client {
+	t.Helper()
+	dc, err := client.NewClientWithOpts(client.WithHost("tcp://127.0.0.1:1"))
+	if err != nil {
+		t.Fatalf("building docker client: %v", err)
+	}
+	t.Cleanup(func() { _ = dc.Close() })
+	return &Client{
+		docker:         dc,
+		mode:           ModeAuto,
+		logger:         slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})),
+		connectTimeout: connectTimeout,
+	}
+}
+
+// TestConnectWithRetry_FailFast verifies that a zero timeout fails immediately.
+func TestConnectWithRetry_FailFast(t *testing.T) {
+	c := newDeadClient(t, 0)
+	start := time.Now()
+	err := c.connectWithRetry(context.Background())
+	if err == nil {
+		t.Fatal("expected error connecting to a dead endpoint")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("fail-fast took %v, expected near-immediate", elapsed)
+	}
+}
+
+// TestConnectWithRetry_DeadlineExceeded verifies that a bounded timeout retries
+// and then fails hard once the deadline elapses.
+func TestConnectWithRetry_DeadlineExceeded(t *testing.T) {
+	c := newDeadClient(t, 700*time.Millisecond)
+	start := time.Now()
+	err := c.connectWithRetry(context.Background())
+	if err == nil {
+		t.Fatal("expected error after deadline")
+	}
+	elapsed := time.Since(start)
+	if elapsed < 500*time.Millisecond {
+		t.Errorf("returned too early (%v); should have retried until the deadline", elapsed)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("took too long (%v); deadline was not honored", elapsed)
+	}
+}
+
+// TestConnectWithRetry_ContextCancel verifies that cancelling the context
+// aborts the retry loop promptly.
+func TestConnectWithRetry_ContextCancel(t *testing.T) {
+	c := newDeadClient(t, 30*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		cancel()
+	}()
+	start := time.Now()
+	err := c.connectWithRetry(ctx)
+	if err == nil {
+		t.Fatal("expected error when context is cancelled")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Errorf("cancellation not honored promptly, took %v", elapsed)
 	}
 }
 

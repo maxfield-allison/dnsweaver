@@ -161,6 +161,22 @@ intentionally skipped. Two supported ways forward:
    unprivileged dnsweaver user read the root-owned socket. Simpler, but grants
    the container's user root-group membership, so prefer the proxy where you can.
 
+#### Startup timing with label-driven proxies
+
+Some proxies (e.g. [`wollomatic/socket-proxy`](https://github.com/wollomatic/socket-proxy))
+build their allow-list *per container* from Docker labels and only authorize
+dnsweaver a few seconds **after** its container starts. During that brief window
+every request is blocked (`403`/`405`), so dnsweaver's first Docker call can
+fail.
+
+dnsweaver handles this by retrying the initial Docker connection for up to
+`DNSWEAVER_DOCKER_CONNECT_TIMEOUT` (default `30s`) before failing hard. You'll
+see `waiting for docker endpoint to become available` at INFO level until the
+proxy authorizes it. Set `DNSWEAVER_DOCKER_CONNECT_TIMEOUT=0` for strict
+fail-fast (exit on the first error) if you prefer to rely on the container
+restart policy instead.
+
+
 ## Event Processing
 
 When a container/service starts:

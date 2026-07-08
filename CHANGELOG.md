@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Bounded Docker startup connection retry** (`DNSWEAVER_DOCKER_CONNECT_TIMEOUT`,
+  default `30s`). dnsweaver now retries the initial Docker connection with capped
+  backoff before failing hard, instead of exiting on the first error. This fixes
+  a startup race with label-driven socket proxies (e.g. `wollomatic/socket-proxy`)
+  that only authorize dnsweaver's container a few seconds after it starts — the
+  first `Info`/`ping` call would hit `403`/`405` and the process would exit. It
+  logs `waiting for docker endpoint to become available` at INFO until connected.
+  Set `DNSWEAVER_DOCKER_CONNECT_TIMEOUT=0` for strict fail-fast. Deterministic
+  misconfiguration (Swarm forced but node is not a manager) still fails
+  immediately. ([GitHub #125](https://github.com/maxfield-allison/dnsweaver/issues/125))
+
 ### Security
 - Bumped the Go toolchain to **1.26.5** to pick up the `crypto/tls` fix for
   [GO-2026-5856](https://pkg.go.dev/vuln/GO-2026-5856) (Encrypted Client Hello

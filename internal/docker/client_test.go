@@ -263,7 +263,7 @@ func TestConnectWithRetry_DeadlineExceeded(t *testing.T) {
 	}
 }
 
-// TestConnectWithRetry_ContextCancel verifies that cancelling the context
+// TestConnectWithRetry_ContextCancel verifies that canceling the context
 // aborts the retry loop promptly.
 func TestConnectWithRetry_ContextCancel(t *testing.T) {
 	c := newDeadClient(t, 30*time.Second)
@@ -275,7 +275,7 @@ func TestConnectWithRetry_ContextCancel(t *testing.T) {
 	start := time.Now()
 	err := c.connectWithRetry(ctx)
 	if err == nil {
-		t.Fatal("expected error when context is cancelled")
+		t.Fatal("expected error when context is canceled")
 	}
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("expected context.Canceled, got %v", err)

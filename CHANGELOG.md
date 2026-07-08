@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Bumped the Go toolchain to **1.26.5** to pick up the `crypto/tls` fix for
+  [GO-2026-5856](https://pkg.go.dev/vuln/GO-2026-5856) (Encrypted Client Hello
+  privacy leak). `go.mod`, the Dockerfile `GO_VERSION`, and the GitLab CI base
+  image are bumped in lock-step.
+
 ### Changed
 - Deprecation notices for the legacy TLS aliases (`INSECURE_SKIP_VERIFY`,
   `DNSWEAVER_PROXMOX_VERIFY_TLS`) no longer claim removal "in v2.0" — the

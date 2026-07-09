@@ -232,6 +232,27 @@ For production deployments, avoid passing credentials as plain environment varia
 
 See [Secrets Management](configuration/secrets.md) for more details.
 
+## How It Works
+
+Once dnsweaver is running, DNS records track the lifecycle of your workloads
+automatically:
+
+```mermaid
+sequenceDiagram
+    participant C as Container / Resource
+    participant D as dnsweaver
+    participant P as DNS provider
+    C->>D: starts with a hostname label / annotation
+    D->>D: extract hostname, match domain patterns
+    D->>P: create record (A / CNAME / ...)
+    Note over D,P: record stays in sync while the workload runs
+    C->>D: stops or is deleted
+    D->>P: delete record (ownership-tracked)
+```
+
+Records that dnsweaver created are tracked so it only ever modifies or removes
+its own entries — DNS you manage by hand is never touched.
+
 ## Verify It's Working
 
 === "Docker"

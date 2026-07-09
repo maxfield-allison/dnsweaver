@@ -69,11 +69,29 @@ dnsweaver watches Docker events, Kubernetes resources, and Proxmox VE clusters t
 
 ```mermaid
 flowchart LR
-    A["Docker / Swarm"] --> B["dnsweaver"]
-    D["Kubernetes"] --> B
-    P["Proxmox VE"] --> B
-    I["Incus"] --> B
-    B --> C["DNS Providers<br/>(create / update / delete)"]
+    subgraph sources["Sources"]
+        direction TB
+        A["Docker / Swarm<br/>Traefik · Caddy · nginx labels"]
+        D["Kubernetes<br/>Ingress · HTTPRoute · Service"]
+        P["Proxmox VE · Incus<br/>VMs · LXC"]
+    end
+
+    subgraph engine["dnsweaver"]
+        direction TB
+        W["Watch<br/>events"] --> M["Match hostname<br/>to domain patterns"] --> R["Reconcile<br/>desired vs. live"]
+    end
+
+    subgraph providers["DNS providers · split-horizon"]
+        direction TB
+        INT["Internal<br/>Technitium · Pi-hole · AdGuard"]
+        EXT["External<br/>Cloudflare · OVH · RFC 2136"]
+    end
+
+    A --> W
+    D --> W
+    P --> W
+    R -->|create / update / delete| INT
+    R -->|create / update / delete| EXT
 ```
 
 === "Docker / Swarm"

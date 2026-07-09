@@ -2,6 +2,21 @@
 
 dnsweaver supports flexible domain matching with glob patterns, regex, and exclusions.
 
+Each provider instance is evaluated **independently**: a hostname is first tested
+against the instance's `DOMAINS` patterns, then filtered by its
+`EXCLUDE_DOMAINS`. Because instances are independent, the same hostname can land
+in several providers at once — this is what makes split-horizon DNS work.
+
+```mermaid
+flowchart TD
+    H["Hostname from source<br/>e.g. app.example.com"] --> L{"Matches instance's<br/>DOMAINS pattern?"}
+    L -->|no| SKIP["Skip for this instance"]
+    L -->|yes| X{"Matches instance's<br/>EXCLUDE_DOMAINS?"}
+    X -->|yes| SKIP
+    X -->|no| CREATE["Create / update record<br/>in this provider"]
+    CREATE --> MULTI["Repeat for every instance<br/>(split-horizon)"]
+```
+
 ## Glob Patterns
 
 The default and simplest way to match domains:

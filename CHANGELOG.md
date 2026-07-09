@@ -7,23 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- **Bounded Docker startup connection retry** (`DNSWEAVER_DOCKER_CONNECT_TIMEOUT`,
-  default `30s`). dnsweaver now retries the initial Docker connection with capped
-  backoff before failing hard, instead of exiting on the first error. This fixes
-  a startup race with label-driven socket proxies (e.g. `wollomatic/socket-proxy`)
-  that only authorize dnsweaver's container a few seconds after it starts — the
-  first `Info`/`ping` call would hit `403`/`405` and the process would exit. It
-  logs `waiting for docker endpoint to become available` at INFO until connected.
-  Set `DNSWEAVER_DOCKER_CONNECT_TIMEOUT=0` for strict fail-fast. Deterministic
-  misconfiguration (Swarm forced but node is not a manager) still fails
-  immediately. ([GitHub #125](https://github.com/maxfield-allison/dnsweaver/issues/125))
+## [2.4.0] - 2026-07-08
 
-### Security
-- Bumped the Go toolchain to **1.26.5** to pick up the `crypto/tls` fix for
-  [GO-2026-5856](https://pkg.go.dev/vuln/GO-2026-5856) (Encrypted Client Hello
-  privacy leak). `go.mod`, the Dockerfile `GO_VERSION`, and the GitLab CI base
-  image are bumped in lock-step.
+Minor release focused on Docker connectivity robustness: an opt-in for reading
+root-owned sockets (Synology), a bounded startup connection retry for label-driven
+socket proxies, and a Go toolchain security bump.
 
 ### Added
 - **`DNSWEAVER_DOCKER_GID` escape hatch** for reading a Docker socket whose group
@@ -36,12 +24,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   supplementary group is added, so the application never runs as root. A loud
   startup warning is emitted for the GID-0 case.
   ([GitHub #79](https://github.com/maxfield-allison/dnsweaver/issues/79))
+- **Bounded Docker startup connection retry** (`DNSWEAVER_DOCKER_CONNECT_TIMEOUT`,
+  default `30s`). dnsweaver now retries the initial Docker connection with capped
+  backoff before failing hard, instead of exiting on the first error. This fixes
+  a startup race with label-driven socket proxies (e.g. `wollomatic/socket-proxy`)
+  that only authorize dnsweaver's container a few seconds after it starts — the
+  first `Info`/`ping` call would hit `403`/`405` and the process would exit. It
+  logs `waiting for docker endpoint to become available` at INFO until connected.
+  Set `DNSWEAVER_DOCKER_CONNECT_TIMEOUT=0` for strict fail-fast. Deterministic
+  misconfiguration (Swarm forced but node is not a manager) still fails
+  immediately. ([GitHub #125](https://github.com/maxfield-allison/dnsweaver/issues/125))
 
 ### Changed
 - Deprecation notices for the legacy TLS aliases (`INSECURE_SKIP_VERIFY`,
   `DNSWEAVER_PROXMOX_VERIFY_TLS`) no longer claim removal "in v2.0" — the
   project is already past v2.0 and the aliases still ship. The operator-facing
   log warnings now say "a future major release."
+
+### Security
+- Bumped the Go toolchain to **1.26.5** to pick up the `crypto/tls` fix for
+  [GO-2026-5856](https://pkg.go.dev/vuln/GO-2026-5856) (Encrypted Client Hello
+  privacy leak). `go.mod`, the Dockerfile `GO_VERSION`, and the GitLab CI base
+  image are bumped in lock-step.
 
 ### Documentation
 - Made the **Docker socket proxy** the recommended standalone deployment path,
@@ -50,8 +54,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a Synology-specific section covering the root-owned socket case. Documented
   socket permissions, the non-root privilege drop, and `DNSWEAVER_DOCKER_GID`.
   ([GitHub #79](https://github.com/maxfield-allison/dnsweaver/issues/79))
-
-### Documentation
 - Documented the Cloudflare per-host **`proxied` override** in the native Label
   Reference (`dnsweaver.proxied` and `dnsweaver.records.<name>.proxied`, plus
   `dnsweaver.records.<name>.meta.<key>`), with a worked example on the native

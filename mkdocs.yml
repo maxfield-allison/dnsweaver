@@ -133,6 +133,7 @@ nav:
       - Pi-hole: providers/pihole.md
       - AdGuard Home: providers/adguard.md
       - OPNsense: providers/opnsense.md
+      - pfSense: providers/pfsense.md
       - dnsmasq: providers/dnsmasq.md
       - Webhook: providers/webhook.md
   - Sources:

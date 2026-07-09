@@ -19,6 +19,7 @@ import (
 	"github.com/maxfield-allison/dnsweaver/providers/dnsmasq"
 	"github.com/maxfield-allison/dnsweaver/providers/opnsense"
 	"github.com/maxfield-allison/dnsweaver/providers/ovh"
+	"github.com/maxfield-allison/dnsweaver/providers/pfsense"
 	"github.com/maxfield-allison/dnsweaver/providers/pihole"
 	"github.com/maxfield-allison/dnsweaver/providers/powerdns"
 	"github.com/maxfield-allison/dnsweaver/providers/rfc2136"
@@ -317,6 +318,9 @@ func registerProviderFactories(registry *provider.Registry) {
 
 	// Register OPNsense provider factory (Unbound/Dnsmasq host overrides via REST API)
 	registry.RegisterFactory("opnsense", opnsense.Factory())
+
+	// Register pfSense provider factory (Unbound/Dnsmasq host overrides via REST API)
+	registry.RegisterFactory("pfsense", pfsense.Factory())
 }
 
 // initializeProviders initializes all configured providers using the manager.

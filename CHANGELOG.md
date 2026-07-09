@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-07-09
+
+### Added
+- **pfSense provider** (`DNSWEAVER_{NAME}_TYPE=pfsense`) managing host overrides on
+  pfSense's DNS Resolver (Unbound, default) or DNS Forwarder (Dnsmasq), selected with
+  `ENGINE`. pfSense ships no REST API in its base system and Netgate offers no official
+  one, so the provider targets the community
+  [pfSense-pkg-RESTAPI](https://pfrest.org) v2 package (the de facto standard, CE and
+  Plus). Ownership is tracked via a `dnsweaver:{instance}` marker in the host override
+  description (host overrides carry no TXT), so operator-managed rows are never touched.
+  A/AAAA in v1; dual-stack names merge into a single Unbound override (the DNS
+  Forwarder's one-IP-per-override limit is surfaced as a clear error). REST-only
+  transport keeps `config.xml`, HA (CARP/XMLRPC) sync, and backups consistent.
+  ([GitHub #114](https://github.com/maxfield-allison/dnsweaver/issues/114))
+
 ## [2.4.0] - 2026-07-08
 
 Minor release focused on Docker connectivity robustness: an opt-in for reading

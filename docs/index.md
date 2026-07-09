@@ -19,7 +19,7 @@ dnsweaver watches Docker events, Kubernetes resources, and Proxmox VE clusters t
 
     ---
 
-    Route different domains to different DNS providers. Ten providers: Technitium, Cloudflare, OVHcloud, AdGuard Home, RFC 2136, PowerDNS, OPNsense, Pi-hole, dnsmasq, and webhook.
+    Route different domains to different DNS providers. Eleven providers: Technitium, Cloudflare, OVHcloud, AdGuard Home, RFC 2136, PowerDNS, OPNsense, pfSense, Pi-hole, dnsmasq, and webhook.
 
     [:octicons-arrow-right-24: Providers](providers/index.md)
 

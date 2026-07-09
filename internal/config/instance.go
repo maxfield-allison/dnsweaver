@@ -271,8 +271,8 @@ var providerConfigFields = []struct {
 	{"USERNAME", false},             // AdGuard Home specific
 	{"PASSWORD", true},              // Pi-hole and AdGuard Home specific
 	{"API_SECRET", true},            // OPNsense specific: paired with API_KEY for basic auth
-	{"ENGINE", false},               // OPNsense specific: unbound|dnsmasq resolver selection
-	{"RECONFIGURE_MODE", false},     // OPNsense specific: per_write|never
+	{"ENGINE", false},               // OPNsense/pfSense: unbound|dnsmasq resolver selection
+	{"RECONFIGURE_MODE", false},     // OPNsense/pfSense: per_write|never
 	{"INSECURE_SKIP_VERIFY", false}, // DEPRECATED: alias for TLS_SKIP_VERIFY
 	// Unified TLS fields — consumed by pkg/provider/extractTLSConfig and
 	// passed to every HTTP-based provider via FactoryConfig.HTTP.TLS.

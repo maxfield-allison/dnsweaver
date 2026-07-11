@@ -132,3 +132,63 @@ func TestAdapterStateFilter(t *testing.T) {
 		t.Fatalf("expected only stopped instance b, got %+v", workloads)
 	}
 }
+
+// TestAdapterComposeLabels verifies that incus-compose "user.label.*" config
+// keys are surfaced both verbatim and under their stripped form, and that the
+// stripped alias never overwrites an existing label.
+func TestAdapterComposeLabels(t *testing.T) {
+	client := newAdapterTestServer(t, []map[string]any{
+		{
+			"name":    "app",
+			"type":    "container",
+			"status":  "Running",
+			"project": "default",
+			"config": map[string]string{
+				"user.label.traefik.http.routers.app.rule": "Host(`app.example.com`)",
+				"user.label.dnsweaver.hostname":            "app.example.net",
+				"user.label.incus-compose.service":         "app",
+				// Pre-existing stripped key must win over the compose alias.
+				"dnsweaver.enabled":            "true",
+				"user.label.dnsweaver.enabled": "false",
+			},
+			"state": map[string]any{
+				"network": map[string]any{
+					"eth0": map[string]any{
+						"addresses": []map[string]any{
+							{"family": "inet", "address": "10.0.0.9", "scope": "global"},
+						},
+					},
+				},
+			},
+		},
+	})
+
+	workloads, err := NewWorkloadListerAdapter(client, AdapterConfig{}, nil).
+		ListWorkloads(context.Background())
+	if err != nil {
+		t.Fatalf("ListWorkloads: %v", err)
+	}
+	if len(workloads) != 1 {
+		t.Fatalf("expected 1 workload, got %d", len(workloads))
+	}
+	labels := workloads[0].Labels
+
+	// Raw keys retained.
+	if labels["user.label.traefik.http.routers.app.rule"] != "Host(`app.example.com`)" {
+		t.Errorf("raw traefik label missing: %v", labels)
+	}
+	// Stripped aliases added.
+	if labels["traefik.http.routers.app.rule"] != "Host(`app.example.com`)" {
+		t.Errorf("stripped traefik label missing: %v", labels)
+	}
+	if labels["dnsweaver.hostname"] != "app.example.net" {
+		t.Errorf("stripped dnsweaver.hostname missing: %v", labels)
+	}
+	if labels["incus-compose.service"] != "app" {
+		t.Errorf("stripped incus-compose.service missing: %v", labels)
+	}
+	// Existing stripped key not overwritten by the compose alias.
+	if labels["dnsweaver.enabled"] != "true" {
+		t.Errorf("dnsweaver.enabled = %q, want true (must not be overwritten)", labels["dnsweaver.enabled"])
+	}
+}

@@ -14,6 +14,15 @@ const (
 	instanceTypeVM        = "virtual-machine"
 )
 
+// composeLabelPrefix is the config-key prefix that incus-compose
+// (https://github.com/lxc/incus-compose) uses to store Compose `labels:`
+// entries on an instance. For example, a Compose label
+// "traefik.http.routers.api.rule" is stored as the instance config key
+// "user.label.traefik.http.routers.api.rule". Stripping this prefix lets the
+// existing label-based sources (traefik, caddy, nginx-proxy, dnsweaver) match
+// incus-compose instances unchanged.
+const composeLabelPrefix = "user.label."
+
 // AdapterConfig holds filtering options for the WorkloadListerAdapter.
 type AdapterConfig struct {
 	// StateFilter restricts listing to instances in the given state. Typical
@@ -120,6 +129,21 @@ func toWorkload(inst Instance, ip string) workload.Workload {
 	labels := make(map[string]string, len(inst.Config))
 	for k, v := range inst.Config {
 		labels[k] = v
+	}
+
+	// Additionally surface incus-compose labels under their stripped form so the
+	// existing label-based sources match them. A key like
+	// "user.label.dnsweaver.hostname" is also exposed as "dnsweaver.hostname".
+	// The raw "user.label.*" key is retained for transparency, and the stripped
+	// alias never overwrites a label that is already present.
+	for k, v := range inst.Config {
+		stripped, ok := strings.CutPrefix(k, composeLabelPrefix)
+		if !ok || stripped == "" {
+			continue
+		}
+		if _, exists := labels[stripped]; !exists {
+			labels[stripped] = v
+		}
 	}
 
 	return workload.Workload{

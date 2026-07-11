@@ -42,6 +42,14 @@ const sourceName = "incus"
 // overrides the derived hostname with an explicit value.
 const hostnameLabel = "user.dnsweaver.hostname"
 
+// composeHostnameLabel is the incus-compose form of the hostname override.
+// incus-compose (https://github.com/lxc/incus-compose) stores Compose labels as
+// "user.label.<key>" config keys, which the Incus adapter surfaces de-prefixed.
+// A Compose "dnsweaver.hostname" label therefore appears as "dnsweaver.hostname"
+// — matching the native dnsweaver source's label. Checked after the native
+// "user.dnsweaver.hostname" key.
+const composeHostnameLabel = "dnsweaver.hostname"
+
 // TargetMode controls how the Incus source builds DNS record targets.
 type TargetMode string
 
@@ -203,11 +211,15 @@ func (s *Incus) Extract(_ context.Context, w workload.Workload) ([]source.Hostna
 
 // resolveHostname determines the FQDN for an Incus workload.
 //
-// Precedence: explicit "user.dnsweaver.hostname" label > FQDN instance name >
-// "<name>.<domain>". Returns an error (logged as debug, not surfaced to the
-// caller) when no hostname can be determined.
+// Precedence: explicit "user.dnsweaver.hostname" label > incus-compose
+// "dnsweaver.hostname" label > FQDN instance name > "<name>.<domain>". Returns
+// an error (logged as debug, not surfaced to the caller) when no hostname can
+// be determined.
 func (s *Incus) resolveHostname(w workload.Workload) (string, error) {
 	if override := strings.TrimSpace(w.GetLabel(hostnameLabel)); override != "" {
+		return override, nil
+	}
+	if override := strings.TrimSpace(w.GetLabel(composeHostnameLabel)); override != "" {
 		return override, nil
 	}
 	if strings.Contains(w.Name, ".") {

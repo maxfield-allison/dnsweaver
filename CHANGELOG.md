@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **incus-compose label support** for the Incus source. [incus-compose](https://github.com/lxc/incus-compose)
+  stores Compose `labels:` entries as `user.label.<key>` instance config keys.
+  The Incus adapter now surfaces each such key under its stripped `<key>` form
+  (in addition to the verbatim key), so the existing `traefik`, `caddy`,
+  `nginx-proxy`, and `dnsweaver` sources consume incus-compose labels with no
+  extra configuration. The Incus source's own hostname override also honors the
+  de-prefixed `dnsweaver.hostname` label. The raw `user.label.*` key is always
+  retained, and a stripped alias never overwrites an existing label.
+  ([GitHub #131](https://github.com/maxfield-allison/dnsweaver/issues/131))
+
 ## [2.5.0] - 2026-07-09
 
 ### Added

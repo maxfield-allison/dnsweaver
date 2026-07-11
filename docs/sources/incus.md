@@ -69,14 +69,60 @@ DNSWEAVER_SOURCES=incus
 The source determines the DNS hostname for each instance using this logic, in order of precedence:
 
 1. **`user.dnsweaver.hostname` config key** — set on the instance, its value is used verbatim as the hostname (e.g. `incus config set web user.dnsweaver.hostname=app.example.net`)
-2. **Instance name contains a dot** — used directly as an FQDN (e.g., `db.home.example.com`)
-3. **Domain suffix configured** — appended to the instance name (e.g., `web` + `home.example.com` → `web.home.example.com`)
-4. **None of the above** — the instance is skipped; a debug log entry is emitted
+2. **`dnsweaver.hostname` label** — the [incus-compose](#incus-compose-labels) form of the override; used verbatim when the native `user.dnsweaver.hostname` key is not set
+3. **Instance name contains a dot** — used directly as an FQDN (e.g., `db.home.example.com`)
+4. **Domain suffix configured** — appended to the instance name (e.g., `web` + `home.example.com` → `web.home.example.com`)
+5. **None of the above** — the instance is skipped; a debug log entry is emitted
 
 !!! warning "Domain suffix is strongly recommended"
     Without a domain suffix, only instances whose names already contain a dot (or
     that set `user.dnsweaver.hostname`) will produce DNS records. Set
     `DNSWEAVER_INCUS_DOMAIN_SUFFIX` to ensure all instances are registered.
+
+## incus-compose Labels
+
+[incus-compose](https://github.com/lxc/incus-compose) runs Docker Compose files
+against Incus. Since v1.0.0-rc.2 it stores each Compose `labels:` entry as an
+instance config key prefixed `user.label.` — for example, a Compose label
+`traefik.http.routers.app.rule` becomes the instance config key
+`user.label.traefik.http.routers.app.rule`.
+
+dnsweaver's Incus adapter surfaces every instance config key as a workload
+label, and **additionally** exposes each `user.label.<key>` under its stripped
+`<key>` form. The raw `user.label.*` key is always retained for transparency,
+and a stripped alias never overwrites a label that is already present.
+
+This means the existing label-based sources consume incus-compose labels with
+no extra configuration — just enable the source that matches your labels
+alongside `incus`:
+
+| Compose label | Stored as | Read by source |
+| :------------ | :-------- | :------------- |
+| `dnsweaver.hostname=app.example.com` | `user.label.dnsweaver.hostname` | `dnsweaver` (or the Incus source's own override) |
+| `traefik.http.routers.app.rule=Host(...)` | `user.label.traefik.http.routers.app.rule` | `traefik` |
+| `caddy=app.example.com` | `user.label.caddy` | `caddy` |
+
+Example — a Compose service whose Traefik router labels drive DNS:
+
+```yaml
+services:
+  app:
+    image: docker.io/nginx:alpine
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.app.rule: "Host(`app.example.com`)"
+```
+
+```bash
+DNSWEAVER_SOURCES=traefik,incus
+DNSWEAVER_INCUS_SOCKET_PATH=/var/lib/incus/unix.socket
+```
+
+!!! note "Two always-present labels"
+    incus-compose always adds `user.label.incus-compose.project` and
+    `user.label.incus-compose.service` (the Compose project and service names).
+    These are surfaced de-prefixed as `incus-compose.project` /
+    `incus-compose.service` and can be read by any source or used for debugging.
 
 ### Per-instance hostname override
 

@@ -111,6 +111,40 @@ func TestExtract_HostnameLabelOverride(t *testing.T) {
 	}
 }
 
+// TestExtract_ComposeHostnameLabel verifies the incus-compose "dnsweaver.hostname"
+// label (de-prefixed from "user.label.dnsweaver.hostname") overrides the derived
+// hostname.
+func TestExtract_ComposeHostnameLabel(t *testing.T) {
+	src := New(WithDomain("home.example.com"))
+	w := incusWorkload("web", "10.0.0.5", map[string]string{
+		composeHostnameLabel: "compose.example.net",
+	})
+	got, err := src.Extract(context.Background(), w)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "compose.example.net" {
+		t.Fatalf("expected compose override hostname, got %+v", got)
+	}
+}
+
+// TestExtract_NativeHostnameLabelWins verifies the native "user.dnsweaver.hostname"
+// key takes precedence over the incus-compose "dnsweaver.hostname" label.
+func TestExtract_NativeHostnameLabelWins(t *testing.T) {
+	src := New(WithDomain("home.example.com"))
+	w := incusWorkload("web", "10.0.0.5", map[string]string{
+		hostnameLabel:        "native.example.net",
+		composeHostnameLabel: "compose.example.net",
+	})
+	got, err := src.Extract(context.Background(), w)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "native.example.net" {
+		t.Fatalf("expected native override to win, got %+v", got)
+	}
+}
+
 func TestExtract_InstanceTargetMode_NoRecordHints(t *testing.T) {
 	src := New(WithDomain("home.example.com"), WithTargetMode(TargetModeInstance))
 	w := incusWorkload("web", "10.0.0.5", nil)

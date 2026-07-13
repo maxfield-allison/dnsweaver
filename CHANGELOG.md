@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Automatic target IP detection** for provider instances. Set
+  `DNSWEAVER_{NAME}_TARGET_MODE` to resolve a record's target at runtime instead
+  of hardcoding it: `public` discovers the host's public IP via HTTP echo
+  endpoints (with fallback and a configurable endpoint list), and
+  `interface:<name>` reads the primary IP of a named network interface. The
+  resolver is family-aware (A→IPv4, AAAA→IPv6; CNAME is rejected), keeps the last
+  known-good value on failure (no DNS churn), and re-resolves every
+  `DNSWEAVER_{NAME}_TARGET_REFRESH_INTERVAL` (default 5m), triggering a reconcile
+  when the value changes. `DNSWEAVER_{NAME}_TARGET` becomes an optional fallback
+  when a mode is set. Both modes work in-container with no extra mounts.
+  ([GitHub #130](https://github.com/maxfield-allison/dnsweaver/issues/130))
 - **incus-compose label support** for the Incus source. [incus-compose](https://github.com/lxc/incus-compose)
   stores Compose `labels:` entries as `user.label.<key>` instance config keys.
   The Incus adapter now surfaces each such key under its stripped `<key>` form

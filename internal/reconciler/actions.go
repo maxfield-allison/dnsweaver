@@ -114,7 +114,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 	// Determine effective record type, target, and TTL
 	// RecordHints override provider defaults when present
 	recordType := inst.RecordType
-	target := inst.Target
+	target := inst.EffectiveTarget()
 	ttl := inst.TTL
 	var srvData *provider.SRVData
 	var metadata map[string]string

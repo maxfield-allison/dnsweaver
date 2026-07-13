@@ -132,7 +132,10 @@ Replace `{NAME}` with your instance name. For example, instance `internal-dns` u
 |----------|----------|-------------|
 | `DNSWEAVER_{NAME}_TYPE` | Yes | Provider type: `technitium`, `cloudflare`, `ovh`, `rfc2136`, `powerdns`, `pihole`, `dnsmasq`, `adguard`, `webhook` |
 | `DNSWEAVER_{NAME}_RECORD_TYPE` | No | Record type: `A`, `AAAA`, `CNAME` (default: `A`) |
-| `DNSWEAVER_{NAME}_TARGET` | Yes | Record target (IPv4, IPv6, or hostname) |
+| `DNSWEAVER_{NAME}_TARGET` | Cond. | Record target (IPv4, IPv6, or hostname). Required unless `TARGET_MODE` is set, in which case it is an optional fallback. |
+| `DNSWEAVER_{NAME}_TARGET_MODE` | No | Resolve the target dynamically instead of using a literal `TARGET`. One of `public` or `interface:<name>`. See [Dynamic Targets](#dynamic-targets). |
+| `DNSWEAVER_{NAME}_TARGET_REFRESH_INTERVAL` | No | How often to re-resolve a dynamic target (Go duration, e.g. `5m`). Default: `5m`. Only used with `TARGET_MODE`. |
+| `DNSWEAVER_{NAME}_TARGET_PUBLIC_ENDPOINTS` | No | Comma-separated override of the public-IP echo endpoints used by `TARGET_MODE=public`. |
 | `DNSWEAVER_{NAME}_DOMAINS` | Yes | Glob patterns for matching hostnames |
 | `DNSWEAVER_{NAME}_DOMAINS_REGEX` | No | Regex patterns (alternative to glob) |
 | `DNSWEAVER_{NAME}_EXCLUDE_DOMAINS` | No | Glob patterns to exclude |
@@ -147,6 +150,49 @@ Replace `{NAME}` with your instance name. For example, instance `internal-dns` u
 | `DNSWEAVER_{NAME}_TLS_MIN_VERSION` | No | Minimum TLS protocol version: `1.2` (default) or `1.3`. |
 | `DNSWEAVER_{NAME}_TLS_SKIP_VERIFY` | No | Skip TLS certificate verification (`true`/`false`, default: `false`). **Warning:** disables MITM protection — prefer `TLS_CA_FILE`. |
 | `DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY` | No | **Deprecated** — alias of `TLS_SKIP_VERIFY`. Will be removed in a future major release. |
+
+### Dynamic Targets
+
+By default `DNSWEAVER_{NAME}_TARGET` is a literal IP or hostname. Setting
+`DNSWEAVER_{NAME}_TARGET_MODE` instead resolves the target at runtime and keeps
+it up to date, which is useful when the target is the machine's own address and
+changes over time (dynamic public IP, VPN address, or a specific interface).
+
+Supported modes:
+
+| Mode | Resolves to |
+|------|-------------|
+| `public` | The host's public IP, discovered via HTTP echo endpoints (`checkip.amazonaws.com`, `api.ipify.org`, `ipinfo.io/ip`, `ifconfig.me`) with fallback. Doubles as a dynamic-DNS setup. |
+| `interface:<name>` | The primary global IP of the named local network interface (e.g. `interface:eth0`). No external calls. |
+
+Behavior:
+
+- **Family-aware.** An `A` record resolves an IPv4 address; an `AAAA` record
+  resolves an IPv6 address. `CNAME` + a dynamic mode is a configuration error.
+- **`TARGET` becomes an optional fallback.** If set, it is used until the first
+  successful resolution.
+- **Last known-good.** If a resolution fails (e.g. an echo endpoint is briefly
+  down), dnsweaver keeps the previous value and logs a warning rather than
+  dropping the record, so transient failures do not churn DNS.
+- **Refresh.** The target is re-resolved every
+  `DNSWEAVER_{NAME}_TARGET_REFRESH_INTERVAL` (default `5m`). A change triggers a
+  reconcile so records update promptly.
+
+```bash
+# Point all matched records at this host's current public IP, refreshed every 5m
+DNSWEAVER_PUBLIC_DNS_TYPE=cloudflare
+DNSWEAVER_PUBLIC_DNS_RECORD_TYPE=A
+DNSWEAVER_PUBLIC_DNS_TARGET_MODE=public
+DNSWEAVER_PUBLIC_DNS_DOMAINS=*.example.com
+
+# Or use a specific interface's IP
+DNSWEAVER_LAN_DNS_TARGET_MODE=interface:eth0
+```
+
+!!! note "Containers"
+    Both `public` and `interface:<name>` work inside a container with no extra
+    mounts. `interface:<name>` reads the interface visible to the container's
+    network namespace, so use the interface name as seen inside the container.
 
 ### TLS Certificate File Permissions
 

@@ -128,7 +128,7 @@ func (r *Reconciler) deleteOrphanForProvider(ctx context.Context, hostname strin
 			Provider:   inst.Name(),
 			Hostname:   hostname,
 			RecordType: string(inst.RecordType),
-			Target:     inst.Target,
+			Target:     inst.EffectiveTarget(),
 			Status:     StatusSkipped,
 			Error:      "additive mode - deletions disabled",
 		}
@@ -189,7 +189,7 @@ func (r *Reconciler) deleteAuthoritativeForProvider(ctx context.Context, hostnam
 				Provider:   inst.Name(),
 				Hostname:   hostname,
 				RecordType: string(inst.RecordType),
-				Target:     inst.Target,
+				Target:     inst.EffectiveTarget(),
 				Status:     StatusFailed,
 				Error:      "failed to list records: " + err.Error(),
 			}}
@@ -305,7 +305,7 @@ func (r *Reconciler) deleteManagedForProvider(ctx context.Context, hostname stri
 				Provider:   inst.Name(),
 				Hostname:   hostname,
 				RecordType: string(inst.RecordType),
-				Target:     inst.Target,
+				Target:     inst.EffectiveTarget(),
 				Status:     StatusSkipped,
 				Error:      "failed to check ownership: " + err.Error(),
 			}}
@@ -322,7 +322,7 @@ func (r *Reconciler) deleteManagedForProvider(ctx context.Context, hostname stri
 			Provider:   inst.Name(),
 			Hostname:   hostname,
 			RecordType: string(inst.RecordType),
-			Target:     inst.Target,
+			Target:     inst.EffectiveTarget(),
 			Status:     StatusSkipped,
 			Error:      "no ownership record - may be manually created",
 		}}
@@ -351,7 +351,7 @@ func (r *Reconciler) deleteManagedForProvider(ctx context.Context, hostname stri
 				Provider:   inst.Name(),
 				Hostname:   hostname,
 				RecordType: string(inst.RecordType),
-				Target:     inst.Target,
+				Target:     inst.EffectiveTarget(),
 				Status:     StatusFailed,
 				Error:      "failed to list records: " + err.Error(),
 			}}
@@ -455,6 +455,11 @@ func (r *Reconciler) deleteManagedForProvider(ctx context.Context, hostname stri
 // instance would be incorrectly identified as owned and deleted. This is a narrow risk
 // that requires exact target match within dnsweaver's managed domain patterns.
 func (r *Reconciler) deleteTargetMatchForProvider(ctx context.Context, hostname string, inst *provider.ProviderInstance, cache *recordCache) []Action {
+	// effTarget is the instance's current target (dynamic if a target resolver
+	// is active, otherwise the static config value). Target-match ownership must
+	// compare against the value records were actually written with.
+	effTarget := inst.EffectiveTarget()
+
 	// Get actual records from cache or provider
 	var allRecords []provider.Record
 	if cache != nil {
@@ -477,7 +482,7 @@ func (r *Reconciler) deleteTargetMatchForProvider(ctx context.Context, hostname 
 				Provider:   inst.Name(),
 				Hostname:   hostname,
 				RecordType: string(inst.RecordType),
-				Target:     inst.Target,
+				Target:     effTarget,
 				Status:     StatusFailed,
 				Error:      "failed to list records: " + err.Error(),
 			}}
@@ -492,7 +497,7 @@ func (r *Reconciler) deleteTargetMatchForProvider(ctx context.Context, hostname 
 	// Filter to records matching this instance's configured type and target
 	var matched []provider.Record
 	for _, record := range allRecords {
-		if record.Type == inst.RecordType && record.Target == inst.Target {
+		if record.Type == inst.RecordType && record.Target == effTarget {
 			matched = append(matched, record)
 		}
 	}
@@ -502,7 +507,7 @@ func (r *Reconciler) deleteTargetMatchForProvider(ctx context.Context, hostname 
 			slog.String("hostname", hostname),
 			slog.String("provider", inst.Name()),
 			slog.String("expected_type", string(inst.RecordType)),
-			slog.String("expected_target", inst.Target),
+			slog.String("expected_target", effTarget),
 			slog.Int("total_records", len(allRecords)),
 		)
 		return []Action{{
@@ -510,7 +515,7 @@ func (r *Reconciler) deleteTargetMatchForProvider(ctx context.Context, hostname 
 			Provider:   inst.Name(),
 			Hostname:   hostname,
 			RecordType: string(inst.RecordType),
-			Target:     inst.Target,
+			Target:     effTarget,
 			Status:     StatusSkipped,
 			Error:      "no target-matched records found",
 		}}
@@ -589,7 +594,7 @@ func (r *Reconciler) deleteCacheOnlyForProvider(ctx context.Context, hostname st
 				Provider:   inst.Name(),
 				Hostname:   hostname,
 				RecordType: string(inst.RecordType),
-				Target:     inst.Target,
+				Target:     inst.EffectiveTarget(),
 				Status:     StatusFailed,
 				Error:      "failed to list records: " + err.Error(),
 			}}
@@ -671,7 +676,7 @@ func (r *Reconciler) deleteRecord(ctx context.Context, hostname string) []Action
 			Provider:   inst.Name(),
 			Hostname:   hostname,
 			RecordType: string(inst.RecordType),
-			Target:     inst.Target,
+			Target:     inst.EffectiveTarget(),
 		}
 
 		if r.isDryRun() {

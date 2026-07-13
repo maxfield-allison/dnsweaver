@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/provider"
 )
@@ -22,7 +23,24 @@ type ProviderInstanceConfig struct {
 	RecordType provider.RecordType
 
 	// Target is the IPv4 (for A), IPv6 (for AAAA), or hostname (for CNAME) target.
+	// When TargetMode is set, Target is optional and acts as the fallback used
+	// until the first successful dynamic resolution.
 	Target string
+
+	// TargetMode enables dynamic target resolution instead of a literal Target.
+	// Empty means Target is used verbatim. Recognized values: "public"
+	// (auto-detect the host's public IP) and "interface:<name>" (read a named
+	// NIC's primary IP). Parsed by internal/target.
+	TargetMode string
+
+	// TargetRefreshInterval is how often a dynamic target is re-resolved.
+	// Zero means the default (see DefaultTargetRefreshInterval). Ignored when
+	// TargetMode is empty.
+	TargetRefreshInterval time.Duration
+
+	// TargetPublicEndpoints optionally overrides the public-IP echo endpoints
+	// used by TargetMode=public. Empty uses the built-in defaults.
+	TargetPublicEndpoints []string
 
 	// TTL for DNS records.
 	TTL int
@@ -122,10 +140,33 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 		errs = append(errs, configErrFull(prefix+"RECORD_TYPE", fmt.Sprintf("invalid value %q", recordTypeStr), "Must be one of: A, AAAA, CNAME", prefix+"RECORD_TYPE=A"))
 	}
 
-	// TARGET is required
+	// TARGET_MODE (optional): enables dynamic target resolution. When set,
+	// TARGET becomes an optional fallback rather than required.
+	cfg.TargetMode = strings.TrimSpace(getEnv(prefix + "TARGET_MODE"))
+
+	// TARGET is required unless a dynamic TARGET_MODE is configured, in which
+	// case it is an optional fallback used until the first resolution succeeds.
 	cfg.Target = getEnv(prefix + "TARGET")
-	if cfg.Target == "" {
-		errs = append(errs, configErrFull(prefix+"TARGET", "required but not set", fmt.Sprintf("Provider %q needs a target IP or hostname for DNS records", instanceName), prefix+"TARGET=10.0.0.1"))
+	if cfg.Target == "" && cfg.TargetMode == "" {
+		errs = append(errs, configErrFull(prefix+"TARGET", "required but not set", fmt.Sprintf("Provider %q needs a target IP or hostname for DNS records (or set %sTARGET_MODE for dynamic resolution)", instanceName, prefix), prefix+"TARGET=10.0.0.1"))
+	}
+
+	// TARGET_REFRESH_INTERVAL (optional): how often to re-resolve a dynamic
+	// target. Only meaningful when TARGET_MODE is set.
+	if refreshStr := getEnv(prefix + "TARGET_REFRESH_INTERVAL"); refreshStr != "" {
+		d, err := time.ParseDuration(refreshStr)
+		if err != nil {
+			errs = append(errs, configErrFull(prefix+"TARGET_REFRESH_INTERVAL", fmt.Sprintf("invalid duration %q", refreshStr), "Use a Go duration such as 5m, 30s, or 1h", prefix+"TARGET_REFRESH_INTERVAL=5m"))
+		} else if d < time.Second {
+			errs = append(errs, configErrFull(prefix+"TARGET_REFRESH_INTERVAL", "must be at least 1s", "Refreshing more than once per second is not useful", prefix+"TARGET_REFRESH_INTERVAL=5m"))
+		} else {
+			cfg.TargetRefreshInterval = d
+		}
+	}
+
+	// TARGET_PUBLIC_ENDPOINTS (optional): override the public-IP echo endpoints.
+	if eps := getEnv(prefix + "TARGET_PUBLIC_ENDPOINTS"); eps != "" {
+		cfg.TargetPublicEndpoints = splitPatterns(eps)
 	}
 
 	// TTL (optional, defaults to global default)

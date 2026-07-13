@@ -480,6 +480,11 @@ func run() error {
 		)
 	}
 
+	// Build dynamic target refreshers for provider instances configured with
+	// DNSWEAVER_{NAME}_TARGET_MODE (#130). Not started until the reconcile
+	// trigger is wired and providers are ready (below).
+	targetRefreshers := buildTargetRefreshers(cfg, providerRegistry, triggerReconcile, logger)
+
 	// Start health server with provider manager status (#10, #125)
 	healthServer := health.New(cfg.HealthPort(),
 		health.WithLogger(logger),
@@ -553,6 +558,10 @@ func run() error {
 			return fmt.Errorf("starting file watcher: %w", err)
 		}
 	}
+
+	// Start dynamic target refreshers. Their initial resolution is synchronous,
+	// so dynamic targets are set before the first reconcile runs.
+	startTargetRefreshers(ctx, targetRefreshers)
 
 	// Run initial reconciliation
 	logger.Info("running initial reconciliation")
@@ -630,6 +639,10 @@ func run() error {
 	if fileWatcher != nil {
 		fileWatcher.Stop()
 		logger.Debug("file watcher stopped")
+	}
+	stopTargetRefreshers(targetRefreshers)
+	if len(targetRefreshers) > 0 {
+		logger.Debug("target refreshers stopped")
 	}
 
 	// Step 3: Cancel context to stop periodic reconciliation goroutine

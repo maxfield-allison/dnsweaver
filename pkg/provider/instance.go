@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/maxfield-allison/dnsweaver/internal/matcher"
@@ -62,7 +63,19 @@ type ProviderInstance struct {
 	// Target is the value for DNS records:
 	// - For A records: an IP address (e.g., "192.0.2.10")
 	// - For CNAME records: a target hostname (e.g., "example.com")
+	//
+	// Target holds the statically configured value. When a dynamic target
+	// resolver is active (DNSWEAVER_{NAME}_TARGET_MODE), the resolved value is
+	// stored separately via SetDynamicTarget and takes precedence; read the
+	// effective value with EffectiveTarget(). Target itself remains the
+	// last-resort fallback used until the first successful resolution.
 	Target string
+
+	// dynamicTarget holds a resolver-provided target that overrides the static
+	// Target. It is read on the reconcile hot path and written by the target
+	// refresh goroutine, so access is lock-free via atomic. A nil pointer means
+	// no dynamic target has been resolved yet (fall back to Target).
+	dynamicTarget atomic.Pointer[string]
 
 	// TTL is the time-to-live for DNS records in seconds.
 	TTL int
@@ -96,6 +109,28 @@ type ProviderInstance struct {
 // Name returns the provider instance name (delegates to Provider).
 func (pi *ProviderInstance) Name() string {
 	return pi.Provider.Name()
+}
+
+// EffectiveTarget returns the target to use for DNS records: the dynamically
+// resolved target if one has been set (see SetDynamicTarget), otherwise the
+// statically configured Target. Safe for concurrent use.
+func (pi *ProviderInstance) EffectiveTarget() string {
+	if v := pi.dynamicTarget.Load(); v != nil {
+		return *v
+	}
+	return pi.Target
+}
+
+// SetDynamicTarget stores a resolver-provided target that overrides the static
+// Target. Callers (the target refresh loop) should only pass non-empty,
+// validated values; passing "" clears the override and falls back to Target.
+// Safe for concurrent use.
+func (pi *ProviderInstance) SetDynamicTarget(target string) {
+	if target == "" {
+		pi.dynamicTarget.Store(nil)
+		return
+	}
+	pi.dynamicTarget.Store(&target)
 }
 
 // Type returns the provider type (delegates to Provider).
@@ -156,7 +191,7 @@ func sliceContainsString(haystack []string, needle string) bool {
 // CreateRecord creates a DNS record for the given hostname using this instance's
 // record type and target configuration.
 func (pi *ProviderInstance) CreateRecord(ctx context.Context, hostname string) error {
-	return pi.CreateRecordWithValues(ctx, hostname, pi.RecordType, pi.Target, pi.TTL, nil, nil)
+	return pi.CreateRecordWithValues(ctx, hostname, pi.RecordType, pi.EffectiveTarget(), pi.TTL, nil, nil)
 }
 
 // CreateRecordWithValues creates a DNS record with explicit type, target, TTL, optional SRV data,
@@ -192,7 +227,7 @@ func (pi *ProviderInstance) DeleteRecord(ctx context.Context, hostname string) e
 	record := Record{
 		Hostname: hostname,
 		Type:     pi.RecordType,
-		Target:   pi.Target,
+		Target:   pi.EffectiveTarget(),
 	}
 
 	start := time.Now()

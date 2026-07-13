@@ -459,6 +459,18 @@ func (c *Config) IncusTargetMode() string {
 	return c.Global.IncusTargetMode
 }
 
+// IncusTrustToken returns the one-time Incus trust token used to enroll a
+// client certificate. Empty when not configured.
+func (c *Config) IncusTrustToken() string {
+	return c.Global.IncusTrustToken
+}
+
+// IncusCertStore returns the writable directory where an enrolled Incus client
+// keypair is persisted. Empty when not configured.
+func (c *Config) IncusCertStore() string {
+	return c.Global.IncusCertStore
+}
+
 // IncusTLS returns the unified TLS configuration for the remote Incus API
 // client. Returns nil when no DNSWEAVER_INCUS_TLS_* env vars are set — in that
 // case the client uses stdlib defaults (system roots, verification on, TLS 1.2

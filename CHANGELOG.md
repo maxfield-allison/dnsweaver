@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Incus trust-token authentication.** dnsweaver can enroll its own client
+  certificate against the Incus API using a one-time trust token instead of a
+  pre-provisioned certificate. Set `DNSWEAVER_INCUS_TRUST_TOKEN` and a writable
+  `DNSWEAVER_INCUS_CERT_STORE`: on first start dnsweaver generates an ECDSA
+  keypair + self-signed client certificate, registers it via `POST
+  /1.0/certificates`, and persists it (mode `0600`) for reuse. Because trust
+  tokens are single-use, subsequent starts reuse the persisted certificate and
+  ignore the token (idempotent). When `DNSWEAVER_INCUS_PROJECTS` is set the
+  certificate is registered restricted to those projects. Falls back to the
+  existing `DNSWEAVER_INCUS_TLS_CERT_FILE` / `_KEY_FILE` when no token is set.
+  Thanks to [@jochumdev](https://github.com/jochumdev) for the request and the
+  reference flow. ([GitHub #134](https://github.com/maxfield-allison/dnsweaver/issues/134))
 - **Automatic target IP detection** for provider instances. Set
   `DNSWEAVER_{NAME}_TARGET_MODE` to resolve a record's target at runtime instead
   of hardcoding it: `public` discovers the host's public IP via HTTP echo

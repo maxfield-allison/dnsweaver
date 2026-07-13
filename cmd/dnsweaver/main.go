@@ -27,6 +27,7 @@ import (
 	proxmoxclient "github.com/maxfield-allison/dnsweaver/internal/proxmox"
 	"github.com/maxfield-allison/dnsweaver/internal/reconciler"
 	"github.com/maxfield-allison/dnsweaver/internal/watcher"
+	"github.com/maxfield-allison/dnsweaver/pkg/httputil"
 	"github.com/maxfield-allison/dnsweaver/pkg/provider"
 	"github.com/maxfield-allison/dnsweaver/pkg/source"
 	"github.com/maxfield-allison/dnsweaver/pkg/workload"
@@ -313,10 +314,41 @@ func run() error {
 	// one client per project), or DNSWEAVER_INCUS_PROJECT (a single project).
 	var incusClients []*incusclient.Client
 	if cfg.UseIncus() {
+		incusTLS := cfg.IncusTLS()
+
+		// Resolve the client certificate: reuse a persisted keypair, enroll a
+		// new one via a trust token, or fall back to configured cert/key files
+		// (#134). Only applies to remote HTTPS endpoints; socket mode needs no
+		// client certificate.
+		if cfg.IncusURL() != "" {
+			var fallbackCert, fallbackKey string
+			if incusTLS != nil {
+				fallbackCert, fallbackKey = incusTLS.CertFile, incusTLS.KeyFile
+			}
+			cc, err := incusclient.EnsureClientCert(ctx, incusclient.EnrollConfig{
+				BaseURL:   cfg.IncusURL(),
+				Token:     cfg.IncusTrustToken(),
+				CertStore: cfg.IncusCertStore(),
+				Projects:  cfg.IncusProjects(),
+				TLS:       incusTLS,
+				Logger:    logger,
+			}, fallbackCert, fallbackKey)
+			if err != nil {
+				return fmt.Errorf("resolving incus client certificate: %w", err)
+			}
+			if cc.CertFile != "" || cc.KeyFile != "" {
+				if incusTLS == nil {
+					incusTLS = &httputil.TLSConfig{}
+				}
+				incusTLS.CertFile = cc.CertFile
+				incusTLS.KeyFile = cc.KeyFile
+			}
+		}
+
 		baseCfg := incusclient.ClientConfig{
 			BaseURL:    cfg.IncusURL(),
 			SocketPath: cfg.IncusSocketPath(),
-			TLS:        cfg.IncusTLS(),
+			TLS:        incusTLS,
 			Logger:     logger,
 		}
 

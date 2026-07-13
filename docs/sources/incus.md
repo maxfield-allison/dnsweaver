@@ -124,6 +124,8 @@ DNSWEAVER_INCUS_DOMAIN_SUFFIX=home.example.com
 | `DNSWEAVER_INCUS_TLS_CA_FILE` | No | — | Path to PEM CA bundle that issued the Incus server certificate (remote HTTPS). |
 | `DNSWEAVER_INCUS_TLS_CERT_FILE` | No | — | Client certificate for mutual TLS against the Incus API (pair with `TLS_KEY_FILE`). |
 | `DNSWEAVER_INCUS_TLS_KEY_FILE` | No | — | Client private key for mutual TLS. |
+| `DNSWEAVER_INCUS_TRUST_TOKEN` | No | — | One-time Incus trust token to enroll a client certificate. See [Trust-Token Authentication](#trust-token-authentication). |
+| `DNSWEAVER_INCUS_CERT_STORE` | No | — | Writable directory where the enrolled client keypair is persisted. Required with `TRUST_TOKEN`. |
 | `DNSWEAVER_INCUS_TLS_SERVER_NAME` | No | — | SNI / verification hostname override. |
 | `DNSWEAVER_INCUS_TLS_MIN_VERSION` | No | `1.2` | Minimum TLS protocol version (`1.2` or `1.3`). |
 | `DNSWEAVER_INCUS_TLS_SKIP_VERIFY` | No | `false` | Skip Incus TLS certificate verification. Prefer `TLS_CA_FILE`. |
@@ -289,6 +291,45 @@ DNSWEAVER_INCUS_TLS_CA_FILE=/run/secrets/incus_server_ca
     When using `DNSWEAVER_INCUS_SOCKET_PATH`, no TLS configuration is required —
     access is governed by Unix socket file permissions. Mount the socket into the
     container and ensure the dnsweaver process can read it.
+
+### Trust-Token Authentication
+
+Instead of pre-provisioning a client certificate, dnsweaver can enroll itself
+using an Incus [trust token](https://linuxcontainers.org/incus/docs/main/authentication/#adding-client-certificates-using-tokens).
+On first start it generates a client keypair, registers it with the token, and
+**persists it to a writable cert store** for reuse. Trust tokens are one-time
+use, so the cert store must survive restarts.
+
+```bash
+# On the Incus host: issue a one-time token for dnsweaver
+incus config trust add dnsweaver
+# (copy the printed token)
+```
+
+```bash
+# dnsweaver
+DNSWEAVER_INCUS_URL=https://incus-host.home.example.com:8443
+DNSWEAVER_INCUS_TRUST_TOKEN=<one-time token>
+DNSWEAVER_INCUS_CERT_STORE=/var/lib/dnsweaver/incus   # writable, persistent
+DNSWEAVER_INCUS_TLS_CA_FILE=/run/secrets/incus_server_ca   # optional
+```
+
+Behavior:
+
+- **First start:** generates an ECDSA keypair + self-signed client certificate,
+  `POST`s it to `/1.0/certificates` with the token, and writes `client.crt` /
+  `client.key` (mode `0600`) into the cert store.
+- **Subsequent starts:** reuses the persisted certificate; the (now-consumed)
+  token is ignored. Enrollment is idempotent.
+- **Restricted to projects:** when `DNSWEAVER_INCUS_PROJECTS` is set, the
+  certificate is registered restricted to those projects.
+- **Fallback:** if no token is set, dnsweaver uses
+  `DNSWEAVER_INCUS_TLS_CERT_FILE` / `DNSWEAVER_INCUS_TLS_KEY_FILE` as before.
+
+!!! warning "The cert store must be persistent"
+    Because trust tokens are single-use, a non-persistent cert store means every
+    restart needs a fresh token. Mount `DNSWEAVER_INCUS_CERT_STORE` on a durable
+    volume. The directory is created `0700` and the keypair written `0600`.
 
 ## Workload Metadata
 

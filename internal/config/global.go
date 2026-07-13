@@ -124,6 +124,13 @@ type GlobalConfig struct {
 	IncusTLSSkipVerify bool
 	IncusTLSMinVersion string
 
+	// Incus trust-token enrollment (#134). When IncusTrustToken is set and no
+	// persisted certificate exists in IncusCertStore, dnsweaver generates a
+	// client keypair, registers it with the token, and persists it to the
+	// cert store for reuse.
+	IncusTrustToken string
+	IncusCertStore  string
+
 	// Multi-instance coordination
 	InstanceID string // Unique identifier for this dnsweaver instance (for shared zone management)
 }
@@ -498,6 +505,10 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	if v := getEnv("DNSWEAVER_INCUS_TLS_SKIP_VERIFY"); v != "" {
 		cfg.IncusTLSSkipVerify = parseBool(v, false)
 	}
+
+	// Incus trust-token enrollment (#134).
+	cfg.IncusTrustToken = getEnv("DNSWEAVER_INCUS_TRUST_TOKEN")
+	cfg.IncusCertStore = getEnv("DNSWEAVER_INCUS_CERT_STORE")
 
 	return cfg, errs
 }

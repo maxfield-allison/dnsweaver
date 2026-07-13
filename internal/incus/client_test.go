@@ -111,6 +111,30 @@ func TestListInstancesHTTP(t *testing.T) {
 	}
 }
 
+// TestListInstancesAllProjects verifies the client requests all-projects mode
+// (and does not send a project filter) when AllProjects is set.
+func TestListInstancesAllProjects(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("all-projects") != "true" {
+			t.Errorf("expected all-projects=true, got %q", r.URL.RawQuery)
+		}
+		if r.URL.Query().Get("project") != "" {
+			t.Errorf("expected no project filter, got %q", r.URL.Query().Get("project"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"type":"sync","status_code":200,"metadata":[]}`))
+	}))
+	defer srv.Close()
+
+	client, err := NewClient(ClientConfig{BaseURL: srv.URL, Project: "ignored", AllProjects: true})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	if _, err := client.ListInstances(context.Background()); err != nil {
+		t.Fatalf("ListInstances: %v", err)
+	}
+}
+
 func TestListInstancesAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

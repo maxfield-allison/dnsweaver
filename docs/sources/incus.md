@@ -70,6 +70,43 @@ Design notes:
 | `dnsweaver_incus_events_processed_total{action}` | counter | Incus events processed, labeled by lifecycle action (e.g. `instance-started`). |
 | `dnsweaver_incus_watcher_reconnects_total` | counter | Number of times the event watcher reconnected after a stream error. |
 
+## Multiple Projects
+
+Incus organizes instances into [projects](https://linuxcontainers.org/incus/docs/main/projects/).
+By default the Incus source watches a single project. A single dnsweaver instance
+can watch many projects at once, so one deployment can serve an entire Incus
+cluster rather than running one dnsweaver per project.
+
+There are three modes, in order of precedence:
+
+| Mode | Configuration | Behavior |
+| :--- | :------------ | :------- |
+| **All projects** | `DNSWEAVER_INCUS_ALL_PROJECTS=true` | Watch every project the credentials can see, including projects created later. Lowest friction for large deployments. |
+| **Explicit list** | `DNSWEAVER_INCUS_PROJECTS=team-a,team-b` | Watch exactly the listed projects. Projects that do not exist yet are still watched and picked up the moment they appear. |
+| **Single project** | `DNSWEAVER_INCUS_PROJECT=team-a` | Watch one project (the original behavior). Empty = the Incus `default` project. |
+
+`DNSWEAVER_INCUS_PROJECTS` also accepts `*` or `all` as a shorthand that is
+equivalent to `DNSWEAVER_INCUS_ALL_PROJECTS=true`.
+
+Each instance's project is preserved in its [workload metadata](#workload-metadata),
+so records stay correctly attributed no matter how many projects are in scope.
+Both the periodic lister and the [event watcher](#event-driven-updates) honor the
+selected scope: all-projects mode uses one stream for the whole server, while an
+explicit list uses one stream per project.
+
+!!! warning "All-projects requires unrestricted credentials"
+    `DNSWEAVER_INCUS_ALL_PROJECTS=true` (and the `*` / `all` shorthand) use the
+    Incus API's all-projects mode, which requires **server-wide (unrestricted)**
+    credentials. A project-restricted certificate cannot list or watch other
+    projects — use `DNSWEAVER_INCUS_PROJECTS` with an explicit list in that case.
+
+```bash
+# Watch an entire Incus cluster with one dnsweaver instance
+DNSWEAVER_INCUS_URL=https://incus-host:8443
+DNSWEAVER_INCUS_ALL_PROJECTS=true
+DNSWEAVER_INCUS_DOMAIN_SUFFIX=home.example.com
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -79,6 +116,8 @@ Design notes:
 | `DNSWEAVER_INCUS_URL` | Alt | — | Remote Incus API base URL, e.g. `https://incus-host:8443`. Mutually exclusive with `DNSWEAVER_INCUS_SOCKET_PATH`. |
 | `DNSWEAVER_INCUS_SOCKET_PATH` | Alt | — | Path to the local Incus Unix socket, e.g. `/var/lib/incus/unix.socket`. Mutually exclusive with `DNSWEAVER_INCUS_URL`. |
 | `DNSWEAVER_INCUS_PROJECT` | No | _(all / default)_ | Restrict discovery to a single Incus project |
+| `DNSWEAVER_INCUS_PROJECTS` | No | — | Comma-separated list of Incus projects to watch, e.g. `team-a,team-b`. Use `*` or `all` as a shorthand for all projects. See [Multiple Projects](#multiple-projects). |
+| `DNSWEAVER_INCUS_ALL_PROJECTS` | No | `false` | Watch **every** Incus project via the API's all-projects mode. Requires server-wide (unrestricted) credentials. See [Multiple Projects](#multiple-projects). |
 | `DNSWEAVER_INCUS_STATE_FILTER` | No | `running` | Instance status filter (`running`, `stopped`, etc.) |
 | `DNSWEAVER_INCUS_DOMAIN_SUFFIX` | No | — | Domain suffix appended to instance names, e.g. `home.example.com` |
 | `DNSWEAVER_INCUS_TARGET_MODE` | No | `guest-ip` | Target resolution mode. `guest-ip` (default) emits an A record per instance IP. `instance` defers record type and target to the matching provider instance — useful for pointing all instances at a reverse proxy via CNAME. |

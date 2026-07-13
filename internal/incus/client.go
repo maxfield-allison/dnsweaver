@@ -59,8 +59,13 @@ type ClientConfig struct {
 	SocketPath string
 
 	// Project is the Incus project to query. Empty string uses the Incus
-	// default project ("default").
+	// default project ("default"). Ignored when AllProjects is true.
 	Project string
+
+	// AllProjects queries every project the client's credentials can see, via
+	// the API's all-projects mode, instead of a single project. When true,
+	// Project is ignored. Requires server-wide (unrestricted) credentials.
+	AllProjects bool
 
 	// TLS is the unified TLS configuration for remote HTTPS endpoints. Incus
 	// remote authentication uses a client certificate/key pair (CertFile and
@@ -76,10 +81,11 @@ type ClientConfig struct {
 
 // Client is an Incus REST API client.
 type Client struct {
-	baseURL string
-	project string
-	http    *http.Client
-	logger  *slog.Logger
+	baseURL     string
+	project     string
+	allProjects bool
+	http        *http.Client
+	logger      *slog.Logger
 }
 
 // NewClient creates a new Incus API client from the given config. Exactly one
@@ -128,10 +134,11 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	}
 
 	return &Client{
-		baseURL: baseURL,
-		project: cfg.Project,
-		http:    httpClient,
-		logger:  logger,
+		baseURL:     baseURL,
+		project:     cfg.Project,
+		allProjects: cfg.AllProjects,
+		http:        httpClient,
+		logger:      logger,
 	}, nil
 }
 
@@ -200,12 +207,16 @@ type InstanceAddress struct {
 }
 
 // ListInstances returns all instances (containers and VMs) in the configured
-// project, including their runtime network state. The state is required for
-// IP resolution, so recursion=2 is always requested.
+// project (or across all projects when AllProjects is set), including their
+// runtime network state. The state is required for IP resolution, so
+// recursion=2 is always requested.
 func (c *Client) ListInstances(ctx context.Context) ([]Instance, error) {
 	q := url.Values{}
 	q.Set("recursion", "2")
-	if c.project != "" {
+	switch {
+	case c.allProjects:
+		q.Set("all-projects", "true")
+	case c.project != "":
 		q.Set("project", c.project)
 	}
 

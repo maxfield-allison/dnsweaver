@@ -65,7 +65,8 @@ func (e Event) Action() string {
 }
 
 // eventsURL builds the WebSocket URL for the events endpoint, restricted to the
-// given event types and the client's configured project. The base URL scheme is
+// given event types and the client's configured project (or all projects when
+// AllProjects is set). The base URL scheme is
 // switched to ws/wss because coder/websocket dials WebSocket schemes; the custom
 // transport on the client's http.Client (unix socket dialer or TLS config) is
 // reused for the handshake, so socket and remote HTTPS endpoints both work.
@@ -83,7 +84,10 @@ func (c *Client) eventsURL(types []string) string {
 	if len(types) > 0 {
 		params = append(params, "type="+strings.Join(types, ","))
 	}
-	if c.project != "" {
+	switch {
+	case c.allProjects:
+		params = append(params, "all-projects=true")
+	case c.project != "":
 		params = append(params, "project="+c.project)
 	}
 	if len(params) > 0 {

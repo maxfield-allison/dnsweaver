@@ -67,6 +67,18 @@ func parseBool(s string, defaultValue bool) bool {
 	}
 }
 
+// splitCommaList splits a comma-separated string into a trimmed, non-empty
+// slice. Returns nil for an empty or all-whitespace input.
+func splitCommaList(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // normalizeInstanceName converts an instance name to environment variable format.
 // Example: "internal-dns" → "INTERNAL_DNS"
 func normalizeInstanceName(name string) string {

@@ -62,18 +62,21 @@ func TestEventAction(t *testing.T) {
 
 func TestEventsURL(t *testing.T) {
 	tests := []struct {
-		name    string
-		base    string
-		project string
-		want    string
+		name        string
+		base        string
+		project     string
+		allProjects bool
+		want        string
 	}{
-		{"socket", "http://incus", "", "ws://incus/1.0/events?type=lifecycle"},
-		{"https", "https://incus:8443", "", "wss://incus:8443/1.0/events?type=lifecycle"},
-		{"with project", "https://incus:8443", "prod", "wss://incus:8443/1.0/events?type=lifecycle&project=prod"},
+		{"socket", "http://incus", "", false, "ws://incus/1.0/events?type=lifecycle"},
+		{"https", "https://incus:8443", "", false, "wss://incus:8443/1.0/events?type=lifecycle"},
+		{"with project", "https://incus:8443", "prod", false, "wss://incus:8443/1.0/events?type=lifecycle&project=prod"},
+		{"all projects", "https://incus:8443", "", true, "wss://incus:8443/1.0/events?type=lifecycle&all-projects=true"},
+		{"all projects overrides project", "https://incus:8443", "prod", true, "wss://incus:8443/1.0/events?type=lifecycle&all-projects=true"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &Client{baseURL: tt.base, project: tt.project}
+			c := &Client{baseURL: tt.base, project: tt.project, allProjects: tt.allProjects}
 			got := c.eventsURL([]string{EventTypeLifecycle})
 			if got != tt.want {
 				t.Errorf("eventsURL() = %q, want %q", got, tt.want)

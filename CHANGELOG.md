@@ -27,6 +27,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `github.com/coder/websocket` dependency rather than the full Incus SDK.
   Thanks to [@jochumdev](https://github.com/jochumdev) for the request and
   guidance. ([GitHub #132](https://github.com/maxfield-allison/dnsweaver/issues/132))
+- **Multi-project support for the Incus source.** A single dnsweaver instance can
+  now watch many Incus projects, so one deployment can serve an entire cluster
+  instead of running one dnsweaver per project. Set
+  `DNSWEAVER_INCUS_ALL_PROJECTS=true` to watch every project (including ones
+  created later) via the API's all-projects mode, or
+  `DNSWEAVER_INCUS_PROJECTS=a,b,c` for an explicit list (projects that do not
+  exist yet are still watched and picked up when they appear). The existing
+  `DNSWEAVER_INCUS_PROJECT` single-project behavior is unchanged. All-projects
+  mode requires server-wide credentials. Both the lister and the event watcher
+  honor the selected scope. Thanks to
+  [@jochumdev](https://github.com/jochumdev) for the request.
+  ([GitHub #137](https://github.com/maxfield-allison/dnsweaver/issues/137))
 
 ## [2.5.0] - 2026-07-09
 

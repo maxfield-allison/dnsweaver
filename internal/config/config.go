@@ -12,6 +12,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/httputil"
@@ -408,6 +409,38 @@ func (c *Config) IncusSocketPath() string {
 // Incus default project.
 func (c *Config) IncusProject() string {
 	return c.Global.IncusProject
+}
+
+// IncusAllProjects reports whether dnsweaver should watch every Incus project
+// via the API's all-projects mode. True when DNSWEAVER_INCUS_ALL_PROJECTS is
+// set, or when DNSWEAVER_INCUS_PROJECTS contains a wildcard ("*" or "all").
+func (c *Config) IncusAllProjects() bool {
+	if c.Global.IncusAllProjects {
+		return true
+	}
+	for _, p := range c.Global.IncusProjects {
+		if p == "*" || strings.EqualFold(p, "all") {
+			return true
+		}
+	}
+	return false
+}
+
+// IncusProjects returns the explicit list of Incus projects to watch, in order,
+// with any wildcard entries ("*"/"all") removed. Empty when no explicit list is
+// configured or when all-projects mode is active. See IncusAllProjects.
+func (c *Config) IncusProjects() []string {
+	if c.IncusAllProjects() {
+		return nil
+	}
+	out := make([]string, 0, len(c.Global.IncusProjects))
+	for _, p := range c.Global.IncusProjects {
+		if p == "*" || strings.EqualFold(p, "all") {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // IncusStateFilter returns the instance state filter (default: "running").

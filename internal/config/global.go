@@ -105,12 +105,14 @@ type GlobalConfig struct {
 	ProxmoxTLSMinVersion string
 
 	// Incus settings
-	IncusURL          string // Remote Incus API base URL (e.g., https://incus.example.com:8443)
-	IncusSocketPath   string // Local Incus Unix socket path (e.g., /var/lib/incus/unix.socket)
-	IncusProject      string // Incus project to query (default: "default")
-	IncusStateFilter  string // Filter by instance status (default: "running")
-	IncusDomainSuffix string // Domain suffix to append to instance names (e.g., "home.example.com")
-	IncusTargetMode   string // Target resolution mode: "guest-ip" (default) or "instance"
+	IncusURL          string   // Remote Incus API base URL (e.g., https://incus.example.com:8443)
+	IncusSocketPath   string   // Local Incus Unix socket path (e.g., /var/lib/incus/unix.socket)
+	IncusProject      string   // Incus project to query (default: "default")
+	IncusProjects     []string // Explicit list of Incus projects to watch (DNSWEAVER_INCUS_PROJECTS)
+	IncusAllProjects  bool     // Watch all projects via all-projects=true (DNSWEAVER_INCUS_ALL_PROJECTS)
+	IncusStateFilter  string   // Filter by instance status (default: "running")
+	IncusDomainSuffix string   // Domain suffix to append to instance names (e.g., "home.example.com")
+	IncusTargetMode   string   // Target resolution mode: "guest-ip" (default) or "instance"
 
 	// Unified Incus TLS configuration for remote HTTPS endpoints. Populated from
 	// DNSWEAVER_INCUS_TLS_* env vars and consumed by internal/incus via httputil.TLSConfig.
@@ -459,6 +461,8 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	cfg.IncusURL = getEnv("DNSWEAVER_INCUS_URL")
 	cfg.IncusSocketPath = getEnv("DNSWEAVER_INCUS_SOCKET_PATH")
 	cfg.IncusProject = getEnv("DNSWEAVER_INCUS_PROJECT")
+	cfg.IncusProjects = splitCommaList(getEnv("DNSWEAVER_INCUS_PROJECTS"))
+	cfg.IncusAllProjects = parseBool(getEnv("DNSWEAVER_INCUS_ALL_PROJECTS"), false)
 	cfg.IncusStateFilter = getEnv("DNSWEAVER_INCUS_STATE_FILTER")
 	cfg.IncusDomainSuffix = getEnv("DNSWEAVER_INCUS_DOMAIN_SUFFIX")
 	cfg.IncusTargetMode = getEnv("DNSWEAVER_INCUS_TARGET_MODE")

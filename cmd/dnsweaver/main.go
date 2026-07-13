@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -306,27 +307,57 @@ func run() error {
 		)
 	}
 
-	// Initialize Incus lister when DNSWEAVER_INCUS_URL or _SOCKET_PATH is set.
-	var incusClient *incusclient.Client
+	// Initialize Incus lister(s) when DNSWEAVER_INCUS_URL or _SOCKET_PATH is set.
+	// Project scope is controlled by DNSWEAVER_INCUS_ALL_PROJECTS (watch every
+	// project via all-projects mode), DNSWEAVER_INCUS_PROJECTS (an explicit list,
+	// one client per project), or DNSWEAVER_INCUS_PROJECT (a single project).
+	var incusClients []*incusclient.Client
 	if cfg.UseIncus() {
-		var err error
-		incusClient, err = incusclient.NewClient(incusclient.ClientConfig{
+		baseCfg := incusclient.ClientConfig{
 			BaseURL:    cfg.IncusURL(),
 			SocketPath: cfg.IncusSocketPath(),
-			Project:    cfg.IncusProject(),
 			TLS:        cfg.IncusTLS(),
 			Logger:     logger,
-		})
-		if err != nil {
-			return fmt.Errorf("creating incus client: %w", err)
 		}
-		incusLister := incusclient.NewWorkloadListerAdapter(incusClient, incusclient.AdapterConfig{
-			StateFilter: cfg.IncusStateFilter(),
-		}, logger)
-		listers = append(listers, incusLister)
+
+		var clientCfgs []incusclient.ClientConfig
+		var scope string
+		switch {
+		case cfg.IncusAllProjects():
+			c := baseCfg
+			c.AllProjects = true
+			clientCfgs = append(clientCfgs, c)
+			scope = "all-projects"
+		case len(cfg.IncusProjects()) > 0:
+			for _, p := range cfg.IncusProjects() {
+				c := baseCfg
+				c.Project = p
+				clientCfgs = append(clientCfgs, c)
+			}
+			scope = strings.Join(cfg.IncusProjects(), ",")
+		default:
+			c := baseCfg
+			c.Project = cfg.IncusProject()
+			clientCfgs = append(clientCfgs, c)
+			if scope = cfg.IncusProject(); scope == "" {
+				scope = "default"
+			}
+		}
+
+		for _, cc := range clientCfgs {
+			incusClient, err := incusclient.NewClient(cc)
+			if err != nil {
+				return fmt.Errorf("creating incus client: %w", err)
+			}
+			incusClients = append(incusClients, incusClient)
+			incusLister := incusclient.NewWorkloadListerAdapter(incusClient, incusclient.AdapterConfig{
+				StateFilter: cfg.IncusStateFilter(),
+			}, logger)
+			listers = append(listers, incusLister)
+		}
 		logger.Info("incus lister configured",
 			slog.String("endpoint", incusEndpoint(cfg)),
-			slog.String("project", cfg.IncusProject()),
+			slog.String("projects", scope),
 		)
 	}
 
@@ -421,11 +452,15 @@ func run() error {
 		)
 	}
 
-	// Initialize Incus event watcher for near-instant DNS updates (#132)
-	var incusWatcher *incusclient.WorkloadWatcher
-	if incusClient != nil {
-		incusWatcher = incusclient.NewWatcher(incusClient, triggerReconcile,
-			incusclient.WithWatcherLogger(logger),
+	// Initialize Incus event watcher(s) for near-instant DNS updates (#132).
+	// One watcher per Incus client (one per project, or a single all-projects
+	// watcher).
+	var incusWatchers []*incusclient.WorkloadWatcher
+	for _, incusClient := range incusClients {
+		incusWatchers = append(incusWatchers,
+			incusclient.NewWatcher(incusClient, triggerReconcile,
+				incusclient.WithWatcherLogger(logger),
+			),
 		)
 	}
 
@@ -507,7 +542,7 @@ func run() error {
 		}
 	}
 
-	if incusWatcher != nil {
+	for _, incusWatcher := range incusWatchers {
 		if err := incusWatcher.Start(ctx); err != nil {
 			return fmt.Errorf("starting incus watcher: %w", err)
 		}
@@ -586,9 +621,11 @@ func run() error {
 		k8sWatcher.Stop()
 		logger.Debug("kubernetes watcher stopped")
 	}
-	if incusWatcher != nil {
+	for _, incusWatcher := range incusWatchers {
 		incusWatcher.Stop()
-		logger.Debug("incus watcher stopped")
+	}
+	if len(incusWatchers) > 0 {
+		logger.Debug("incus watchers stopped")
 	}
 	if fileWatcher != nil {
 		fileWatcher.Stop()

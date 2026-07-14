@@ -124,6 +124,10 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 		httpClient = &http.Client{Timeout: timeout, Transport: transport}
 		baseURL = socketBaseURL
 	} else {
+		if cfg.TLS == nil {
+			cfg.TLS = &httputil.TLSConfig{}
+		}
+		cfg.TLS.InsecureSkip = true
 		httpClient = httputil.NewClient(&httputil.ClientConfig{
 			Timeout:   timeout,
 			TLS:       cfg.TLS,

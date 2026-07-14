@@ -63,9 +63,10 @@ func ParseTargetMode(s string) (TargetMode, error) {
 
 // Proxmox implements the source.Source interface for Proxmox VE workloads.
 type Proxmox struct {
-	domain     string
-	targetMode TargetMode
-	logger     *slog.Logger
+	domain            string
+	targetMode        TargetMode
+	hostnameTagPrefix string
+	logger            *slog.Logger
 }
 
 // Option is a functional option for configuring Proxmox.
@@ -87,6 +88,16 @@ func WithLogger(logger *slog.Logger) Option {
 func WithDomain(domain string) Option {
 	return func(p *Proxmox) {
 		p.domain = strings.TrimPrefix(strings.TrimSpace(domain), ".")
+	}
+}
+
+// WithHostnameTagPrefix sets an optional tag prefix used to derive an explicit
+// hostname from Proxmox tags. Tags matching "<prefix>+<hostname>" are treated
+// as hostname overrides. Explicit FQDN values are used verbatim, and bare
+// hostnames are appended with the configured domain suffix when present.
+func WithHostnameTagPrefix(prefix string) Option {
+	return func(p *Proxmox) {
+		p.hostnameTagPrefix = strings.TrimSpace(prefix)
 	}
 }
 
@@ -162,7 +173,7 @@ func (p *Proxmox) Extract(_ context.Context, w workload.Workload) ([]source.Host
 		return nil, nil
 	}
 
-	hostname, err := p.resolveHostname(w.Name)
+	hostname, err := p.resolveHostname(w)
 	if err != nil {
 		p.logger.Debug("could not determine hostname for proxmox workload; skipping",
 			slog.String("workload", w.Name),
@@ -194,13 +205,63 @@ func (p *Proxmox) Extract(_ context.Context, w workload.Workload) ([]source.Host
 
 // resolveHostname determines the FQDN for a given VM name.
 // Returns an error (logged as debug, not returned to caller) if no hostname can be determined.
-func (p *Proxmox) resolveHostname(name string) (string, error) {
-	if strings.Contains(name, ".") {
+func (p *Proxmox) resolveHostname(w workload.Workload) (string, error) {
+	if tagHostname := p.resolveHostnameFromTags(w); tagHostname != "" {
+		return tagHostname, nil
+	}
+	if strings.Contains(w.Name, ".") {
 		// VM name already looks like an FQDN — use it directly.
-		return name, nil
+		return w.Name, nil
 	}
 	if p.domain != "" {
-		return name + "." + p.domain, nil
+		return w.Name + "." + p.domain, nil
 	}
-	return "", fmt.Errorf("VM name %q is not an FQDN and no domain suffix is configured", name)
+	return "", fmt.Errorf("VM name %q is not an FQDN and no domain suffix is configured", w.Name)
+}
+
+func (p *Proxmox) resolveHostnameFromTags(w workload.Workload) string {
+	if p.hostnameTagPrefix == "" {
+		return ""
+	}
+
+	tags := w.Metadata["tags"]
+	if tags == "" {
+		return ""
+	}
+
+	prefix := p.hostnameTagPrefix + "+"
+	var firstMatch string
+	for _, tag := range strings.Split(tags, ";") {
+		tag = strings.TrimSpace(tag)
+		if !strings.HasPrefix(tag, prefix) {
+			continue
+		}
+		override := strings.TrimSpace(strings.TrimPrefix(tag, prefix))
+		if override == "" {
+			continue
+		}
+		if firstMatch == "" {
+			firstMatch = override
+			continue
+		}
+		if p.logger != nil {
+			p.logger.Debug("multiple hostname override tags found; using first match",
+				"tags", tags,
+				"prefix", p.hostnameTagPrefix,
+				"first", firstMatch,
+				"next", override)
+		}
+		break
+	}
+
+	if firstMatch == "" {
+		return ""
+	}
+	if strings.Contains(firstMatch, ".") {
+		return firstMatch
+	}
+	if p.domain != "" {
+		return firstMatch + "." + p.domain
+	}
+	return firstMatch
 }

@@ -43,6 +43,7 @@ flowchart LR
 | `DNSWEAVER_PROXMOX_VERIFY_TLS` | No | `true` | **Deprecated** inverted-polarity alias of `TLS_SKIP_VERIFY` (will be removed in a future major release). |
 | `DNSWEAVER_PROXMOX_NODE_FILTER` | No | _(all nodes)_ | Restrict discovery to a single PVE node name |
 | `DNSWEAVER_PROXMOX_TAG_FILTER` | No | _(all tags)_ | Only include resources with this tag (prefix match) |
+| `DNSWEAVER_PROXMOX_HOSTNAME_TAG_PREFIX` | No | — | Optional tag prefix in the form `<prefix>+<hostname>` used to override the discovered hostname. The first matching tag wins if multiple tags share the prefix. |
 | `DNSWEAVER_PROXMOX_STATE_FILTER` | No | `running` | PVE resource status filter (`running`, `stopped`, etc.) |
 | `DNSWEAVER_PROXMOX_DOMAIN_SUFFIX` | No | — | Domain suffix appended to VM names, e.g. `home.example.com` |
 | `DNSWEAVER_PROXMOX_TARGET_MODE` | No | `guest-ip` | Target resolution mode. `guest-ip` (default) emits an A record per VM IP. `instance` defers record type and target to the matching provider instance — useful for pointing all VMs at a reverse proxy via CNAME. |
@@ -67,6 +68,15 @@ The source determines the DNS hostname for each workload using this logic:
 1. **VM name contains a dot** — used directly as an FQDN (e.g., `webserver.home.example.com`)
 2. **Domain suffix configured** — appended to the VM name (e.g., `webserver` + `home.example.com` → `webserver.home.example.com`)
 3. **Neither condition** — the workload is skipped; a debug log entry is emitted
+
+When `DNSWEAVER_PROXMOX_HOSTNAME_TAG_PREFIX` is configured, the source uses the first
+matching `<prefix>+<hostname>` tag it finds and ignores any later matches.
+
+!!! note "Proxmox tag restrictions"
+    Proxmox normalizes tag values, and stricter datacenter `tag-style` /
+    `allowed-characters` settings may reject `.` or `+`. If you plan to use
+    dotted FQDN overrides with `DNSWEAVER_PROXMOX_HOSTNAME_TAG_PREFIX`, ensure
+    your PVE tag style allows those characters.
 
 !!! warning "Domain suffix is strongly recommended"
     Without a domain suffix, only VMs whose names already contain a dot will

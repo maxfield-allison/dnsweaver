@@ -293,9 +293,10 @@ func TestManager_AllProviderStatuses(t *testing.T) {
 	// Find each status
 	var goodStatus, badStatus *ProviderStatus
 	for i := range statuses {
-		if statuses[i].Name == "good-provider" {
+		switch statuses[i].Name {
+		case "good-provider":
 			goodStatus = &statuses[i]
-		} else if statuses[i].Name == "bad-provider" {
+		case "bad-provider":
 			badStatus = &statuses[i]
 		}
 	}

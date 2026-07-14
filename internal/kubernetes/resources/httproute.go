@@ -41,7 +41,7 @@ func ConvertHTTPRoute(obj *unstructured.Unstructured) workload.Workload {
 		Kind:        workload.KindHTTPRoute,
 		Hostnames:   hostnames,
 		Metadata: map[string]string{
-			"resourceVersion": obj.GetResourceVersion(),
+			metaKeyResourceVersion: obj.GetResourceVersion(),
 		},
 	}
 }

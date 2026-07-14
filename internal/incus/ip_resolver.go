@@ -5,6 +5,11 @@ import (
 	"sort"
 )
 
+const (
+	addressFamilyInet  = "inet"
+	addressScopeGlobal = "global"
+)
+
 // ResolveIP returns the primary global-scope IPv4 address for an instance,
 // read from its runtime network state.
 //
@@ -32,12 +37,12 @@ func ResolveIP(inst Instance) string {
 			continue
 		}
 		for _, addr := range inst.State.Network[name].Addresses {
-			if addr.Family != "inet" {
+			if addr.Family != addressFamilyInet {
 				continue
 			}
 			// Incus reports scope as "global", "link", or "local". Treat an
 			// empty scope as acceptable for forward compatibility.
-			if addr.Scope != "" && addr.Scope != "global" {
+			if addr.Scope != "" && addr.Scope != addressScopeGlobal {
 				continue
 			}
 			if isNonRoutableIP(addr.Address) {

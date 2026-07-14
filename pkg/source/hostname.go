@@ -14,6 +14,10 @@ const (
 
 	// MaxLabelLength is the maximum length of a single label (63 chars).
 	MaxLabelLength = 63
+
+	// recordTypeSRV is the RecordHints.Type value that selects RFC 2782 SRV
+	// hostname validation instead of RFC 1123.
+	recordTypeSRV = "SRV"
 )
 
 // Common hostname validation errors.
@@ -322,7 +326,7 @@ func (h Hostname) String() string {
 // For all other records, uses RFC 1123 validation.
 // Returns nil if valid, or a HostnameValidationError with details.
 func (h Hostname) Validate() error {
-	if h.RecordHints != nil && h.RecordHints.Type == "SRV" {
+	if h.RecordHints != nil && h.RecordHints.Type == recordTypeSRV {
 		return ValidateSRVHostname(h.Name)
 	}
 	return ValidateHostname(h.Name)
@@ -332,7 +336,7 @@ func (h Hostname) Validate() error {
 // For SRV records (RecordHints.Type == "SRV"), uses RFC 2782 validation.
 // For all other records, uses RFC 1123 validation.
 func (h Hostname) IsValid() bool {
-	if h.RecordHints != nil && h.RecordHints.Type == "SRV" {
+	if h.RecordHints != nil && h.RecordHints.Type == recordTypeSRV {
 		return ValidateSRVHostname(h.Name) == nil
 	}
 	return ValidateHostname(h.Name) == nil

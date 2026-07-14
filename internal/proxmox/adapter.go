@@ -12,6 +12,16 @@ import (
 const (
 	resourceTypeLXC = "lxc"
 	tagLabelValue   = "true"
+
+	stateRunning = "running"
+)
+
+// Metadata/log field keys shared between logging and the toWorkload metadata map.
+const (
+	metaKeyNode   = "node"
+	metaKeyVMID   = "vmid"
+	metaKeyTags   = "tags"
+	metaKeyStatus = "status"
 )
 
 // AdapterConfig holds filtering options for the WorkloadListerAdapter.
@@ -44,7 +54,7 @@ type WorkloadListerAdapter struct {
 func NewWorkloadListerAdapter(c *Client, cfg AdapterConfig, logger *slog.Logger) *WorkloadListerAdapter {
 	stateFilter := cfg.StateFilter
 	if stateFilter == "" {
-		stateFilter = "running"
+		stateFilter = stateRunning
 	}
 	return &WorkloadListerAdapter{
 		client: c,
@@ -76,8 +86,8 @@ func (a *WorkloadListerAdapter) ListWorkloads(ctx context.Context) ([]workload.W
 		ip, err := ResolveIP(ctx, a.client, r, a.logger)
 		if err != nil {
 			a.logger.Warn("could not resolve IP for proxmox resource",
-				slog.String("node", r.Node),
-				slog.Int("vmid", r.VMID),
+				slog.String(metaKeyNode, r.Node),
+				slog.Int(metaKeyVMID, r.VMID),
 				slog.String("name", r.Name),
 				slog.String("error", err.Error()),
 			)
@@ -120,10 +130,10 @@ func toWorkload(r ClusterResource, ip string) workload.Workload {
 	}
 
 	meta := map[string]string{
-		"node":   r.Node,
-		"vmid":   fmt.Sprintf("%d", r.VMID),
-		"tags":   r.Tags,
-		"status": r.Status,
+		metaKeyNode:   r.Node,
+		metaKeyVMID:   fmt.Sprintf("%d", r.VMID),
+		metaKeyTags:   r.Tags,
+		metaKeyStatus: r.Status,
 	}
 	if ip != "" {
 		meta["ip"] = ip

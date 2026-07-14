@@ -8,6 +8,10 @@ import (
 	"github.com/miekg/dns"
 )
 
+// algDisplaySHA256 is the human-readable name returned by AlgorithmName for
+// dns.HmacSHA256.
+const algDisplaySHA256 = "HMAC-SHA256"
+
 // TSIG represents a Transaction Signature key for RFC 2845 authentication.
 type TSIG struct {
 	// Name is the key name (must end with a dot, e.g., "dnsweaver.").
@@ -83,11 +87,11 @@ func normalizeAlgorithm(alg string) string {
 	normalized := strings.ToLower(strings.TrimSpace(alg))
 
 	switch normalized {
-	case "hmac-md5", "md5":
+	case AlgNameMD5, "md5":
 		return dns.HmacMD5
-	case "hmac-sha256", "sha256":
+	case AlgNameSHA256, algNameShortSHA256:
 		return dns.HmacSHA256
-	case "hmac-sha512", "sha512":
+	case AlgNameSHA512, "sha512":
 		return dns.HmacSHA512
 	default:
 		// Return as-is for already normalized values or unknown
@@ -111,7 +115,7 @@ func AlgorithmName(alg string) string {
 	case dns.HmacMD5:
 		return "HMAC-MD5"
 	case dns.HmacSHA256:
-		return "HMAC-SHA256"
+		return algDisplaySHA256
 	case dns.HmacSHA512:
 		return "HMAC-SHA512"
 	default:
@@ -122,8 +126,8 @@ func AlgorithmName(alg string) string {
 // SupportedAlgorithms returns a list of supported TSIG algorithms.
 func SupportedAlgorithms() []string {
 	return []string{
-		"hmac-sha256 (recommended)",
-		"hmac-sha512",
-		"hmac-md5 (legacy)",
+		AlgNameSHA256 + " (recommended)",
+		AlgNameSHA512,
+		AlgNameMD5 + " (legacy)",
 	}
 }

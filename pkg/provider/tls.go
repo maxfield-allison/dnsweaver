@@ -2,6 +2,7 @@ package provider
 
 import (
 	"log/slog"
+	"strings"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/httputil"
 )
@@ -75,8 +76,8 @@ func extractTLSConfig(cfgMap map[string]string, logger *slog.Logger, instance st
 // parseBoolish accepts the same truthy values as internal/config.parseBool so
 // the registry does not need to import internal packages.
 func parseBoolish(s string) bool {
-	switch s {
-	case "true", "TRUE", "True", "1", "yes", "YES", "Yes", "on", "ON", "On":
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "true", "1", "yes", "on":
 		return true
 	default:
 		return false

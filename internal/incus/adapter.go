@@ -14,6 +14,16 @@ const (
 	instanceTypeVM        = "virtual-machine"
 )
 
+// Metadata/log field keys shared between logging and the toWorkload metadata map.
+const (
+	metaKeyProject = "project"
+	metaKeyType    = "type"
+	metaKeyStatus  = "status"
+
+	// defaultProject is used when an instance has no explicit project set.
+	defaultProject = "default"
+)
+
 // composeLabelPrefix is the config-key prefix that incus-compose
 // (https://github.com/lxc/incus-compose) uses to store Compose `labels:`
 // entries on an instance. For example, a Compose label
@@ -77,8 +87,8 @@ func (a *WorkloadListerAdapter) ListWorkloads(ctx context.Context) ([]workload.W
 		if ip == "" {
 			a.logger.Debug("no routable IPv4 resolved for incus instance",
 				slog.String("name", inst.Name),
-				slog.String("project", inst.Project),
-				slog.String("type", inst.Type),
+				slog.String(metaKeyProject, inst.Project),
+				slog.String(metaKeyType, inst.Type),
 			)
 		}
 
@@ -112,13 +122,13 @@ func toWorkload(inst Instance, ip string) workload.Workload {
 
 	project := inst.Project
 	if project == "" {
-		project = "default"
+		project = defaultProject
 	}
 
 	meta := map[string]string{
-		"project": project,
-		"type":    inst.Type,
-		"status":  inst.Status,
+		metaKeyProject: project,
+		metaKeyType:    inst.Type,
+		metaKeyStatus:  inst.Status,
 	}
 	if ip != "" {
 		meta["ip"] = ip

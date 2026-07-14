@@ -31,6 +31,10 @@ var (
 	ErrConnectionTimeout = errors.New("ssh connection timed out")
 )
 
+// hostKeyCallbackIgnore is the HostKeyCallback sentinel value that disables
+// known_hosts verification.
+const hostKeyCallbackIgnore = "ignore"
+
 // Client manages SSH connections with connection pooling and automatic reconnection.
 type Client struct {
 	config *Config
@@ -289,7 +293,7 @@ func (c *Client) buildHostKeyCallback() (ssh.HostKeyCallback, error) {
 
 	// An explicit known_hosts file path enables verification regardless of the
 	// StrictHostKeyChecking flag. "ignore" is a sentinel handled below.
-	if path != "" && path != "ignore" {
+	if path != "" && path != hostKeyCallbackIgnore {
 		cb, err := knownHostsCallback(path, c.logger)
 		if err != nil {
 			return nil, err
@@ -303,7 +307,7 @@ func (c *Client) buildHostKeyCallback() (ssh.HostKeyCallback, error) {
 
 	// Strict checking requires a known_hosts file; without one we cannot verify.
 	if c.config.StrictHostKeyChecking {
-		if path == "ignore" {
+		if path == hostKeyCallbackIgnore {
 			return nil, errors.New("strict host key checking enabled but HOST_KEY_CALLBACK is set to 'ignore' - these settings conflict")
 		}
 		return nil, errors.New("strict host key checking enabled but no known_hosts file configured - set HOST_KEY_CALLBACK to a known_hosts file path")

@@ -20,6 +20,13 @@ import (
 const (
 	errRecordAlreadyExists = "record already exists"
 	errRecordTypeConflict  = "record type conflict"
+	errNoMatchingProvider  = "no matching provider"
+)
+
+// Reconciliation-level outcome labels used for the reconciliations_total metric.
+const (
+	reconciliationStatusSuccess = "success"
+	reconciliationStatusError   = "error"
 )
 
 // Config holds reconciler configuration options.
@@ -590,9 +597,9 @@ func (r *Reconciler) RecoverOwnership(ctx context.Context) error {
 // recordMetrics records Prometheus metrics from a reconciliation result.
 func (r *Reconciler) recordMetrics(result *Result) {
 	// Record reconciliation outcome
-	status := "success"
+	status := reconciliationStatusSuccess
 	if result.HasErrors() {
-		status = "error"
+		status = reconciliationStatusError
 	}
 	metrics.ReconciliationsTotal.WithLabelValues(status).Inc()
 
@@ -607,16 +614,20 @@ func (r *Reconciler) recordMetrics(result *Result) {
 	for _, action := range result.Actions {
 		switch action.Type {
 		case ActionCreate:
-			if action.Status == StatusSuccess {
+			switch action.Status {
+			case StatusSuccess:
 				metrics.RecordsCreatedTotal.WithLabelValues(action.Provider).Inc()
-			} else if action.Status == StatusFailed {
+			case StatusFailed:
 				metrics.RecordsFailedTotal.WithLabelValues(action.Provider, "create").Inc()
+			default:
 			}
 		case ActionDelete:
-			if action.Status == StatusSuccess {
+			switch action.Status {
+			case StatusSuccess:
 				metrics.RecordsDeletedTotal.WithLabelValues(action.Provider).Inc()
-			} else if action.Status == StatusFailed {
+			case StatusFailed:
 				metrics.RecordsFailedTotal.WithLabelValues(action.Provider, "delete").Inc()
+			default:
 			}
 		case ActionUpdate:
 			// Update actions are currently not emitted, but handle for completeness
@@ -629,7 +640,7 @@ func (r *Reconciler) recordMetrics(result *Result) {
 				reason = action.Error
 			}
 			// Normalize common skip reasons
-			if reason == "no matching provider" {
+			if reason == errNoMatchingProvider {
 				reason = "no_provider"
 			}
 			metrics.RecordsSkippedTotal.WithLabelValues(reason).Inc()

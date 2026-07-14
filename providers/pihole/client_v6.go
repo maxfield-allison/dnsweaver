@@ -104,7 +104,7 @@ func (c *V6APIClient) authenticate(ctx context.Context) error {
 		Password: c.password,
 	}
 
-	body, err := json.Marshal(payload)
+	body, err := json.Marshal(payload) // #nosec G117 -- password sent directly to Pi-hole's own auth endpoint, not logged
 	if err != nil {
 		return fmt.Errorf("marshaling auth request: %w", err)
 	}

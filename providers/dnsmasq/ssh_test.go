@@ -85,7 +85,7 @@ func TestIsConnectionError(t *testing.T) {
 func TestNew_SSHEnabled_FailFastOnUnreachable(t *testing.T) {
 	// Bind a port, then close it so connections are actively refused. This
 	// guarantees a fast, deterministic failure instead of a 30s dial timeout.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserving port: %v", err)
 	}

@@ -9,6 +9,12 @@ import (
 	"strings"
 )
 
+const (
+	resourceTypeQEMU = "qemu"
+
+	ipAddressTypeIPv4 = "ipv4"
+)
+
 // ResolveIP returns the primary IPv4 address for a Proxmox resource.
 //
 // For LXC containers (type "lxc"), it reads the net0 config field and parses
@@ -22,9 +28,9 @@ import (
 // Returns an empty string if no IP address can be determined.
 func ResolveIP(ctx context.Context, client *Client, resource ClusterResource, logger *slog.Logger) (string, error) {
 	switch resource.Type {
-	case "lxc":
+	case resourceTypeLXC:
 		return resolveLXCIP(ctx, client, resource)
-	case "qemu":
+	case resourceTypeQEMU:
 		return resolveVMIP(ctx, client, resource, logger)
 	default:
 		return "", fmt.Errorf("proxmox: unsupported resource type %q", resource.Type)
@@ -94,7 +100,7 @@ func resolveVMIP(ctx context.Context, client *Client, resource ClusterResource, 
 			continue
 		}
 		for _, addr := range iface.IPAddresses {
-			if addr.IPAddressType == "ipv4" && !isNonRoutableIP(addr.IPAddress) {
+			if addr.IPAddressType == ipAddressTypeIPv4 && !isNonRoutableIP(addr.IPAddress) {
 				return addr.IPAddress, nil
 			}
 		}

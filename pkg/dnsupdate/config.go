@@ -40,6 +40,9 @@ const (
 	AlgNameSHA256 = "hmac-sha256"
 	AlgNameSHA512 = "hmac-sha512"
 	AlgNameMD5    = "hmac-md5"
+
+	// algNameShortSHA256 is the short-form alias accepted alongside AlgNameSHA256.
+	algNameShortSHA256 = "sha256"
 )
 
 // Config holds RFC 2136 Dynamic DNS client configuration.
@@ -160,7 +163,7 @@ func (c *Config) GetTSIGAlgorithm() string {
 	switch alg {
 	case AlgNameMD5, "md5", "hmac-md5.sig-alg.reg.int.":
 		return TSIGAlgorithmMD5
-	case AlgNameSHA256, "sha256":
+	case AlgNameSHA256, algNameShortSHA256:
 		return TSIGAlgorithmSHA256
 	case AlgNameSHA512, "sha512":
 		return TSIGAlgorithmSHA512

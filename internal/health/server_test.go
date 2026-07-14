@@ -13,7 +13,7 @@ import (
 func TestServer_handleHealth(t *testing.T) {
 	s := New(0)
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 
 	s.handleHealth(w, req)
@@ -35,7 +35,7 @@ func TestServer_handleHealth(t *testing.T) {
 func TestServer_handleReady_NoCheckers(t *testing.T) {
 	s := New(0)
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
 	s.handleReady(w, req)
@@ -64,7 +64,7 @@ func TestServer_handleReady_AllHealthy(t *testing.T) {
 		return nil
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
 	s.handleReady(w, req)
@@ -103,7 +103,7 @@ func TestServer_handleReady_SomeUnhealthy(t *testing.T) {
 		return errors.New("connection refused")
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
 	s.handleReady(w, req)
@@ -153,7 +153,7 @@ func TestServer_handleReady_Timeout(t *testing.T) {
 		}
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
 	s.handleReady(w, req)
@@ -194,7 +194,7 @@ func TestServer_handleReady_Degraded(t *testing.T) {
 		return true, "some providers are initializing"
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
 	s.handleReady(w, req)
@@ -230,7 +230,7 @@ func TestServer_handleReady_NoDegraded(t *testing.T) {
 		return false, "" // No pending providers
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
 	s.handleReady(w, req)
@@ -262,7 +262,7 @@ func TestServer_handleReady_DegradedWithUnhealthyChecker(t *testing.T) {
 		return true, "providers pending"
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
 
 	s.handleReady(w, req)
@@ -307,7 +307,7 @@ func TestServer_handleReady_ShuttingDown(t *testing.T) {
 	})
 
 	// Before shutdown — should be ready
-	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	rr := httptest.NewRecorder()
 	s.handleReady(rr, req)
 
@@ -319,7 +319,7 @@ func TestServer_handleReady_ShuttingDown(t *testing.T) {
 	s.SetShuttingDown()
 
 	// After shutdown — should be 503
-	req = httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	rr = httptest.NewRecorder()
 	s.handleReady(rr, req)
 

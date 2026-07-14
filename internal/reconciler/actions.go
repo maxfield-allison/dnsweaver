@@ -58,7 +58,7 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname *source.Hostname
 			Type:     ActionSkip,
 			Status:   StatusSkipped,
 			Hostname: hostname.Name,
-			Error:    "no matching provider",
+			Error:    errNoMatchingProvider,
 		})
 		return actions
 	}

@@ -155,7 +155,7 @@ func TestListInstancesAPIError(t *testing.T) {
 
 func TestListInstancesSocket(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "incus.sock")
-	ln, err := net.Listen("unix", socketPath)
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", socketPath)
 	if err != nil {
 		t.Fatalf("listen unix: %v", err)
 	}

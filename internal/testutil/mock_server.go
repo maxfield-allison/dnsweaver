@@ -84,7 +84,7 @@ func NewMockServer(t *testing.T) *MockServer {
 		http.NotFound(w, r)
 	}))
 
-	t.Cleanup(m.Server.Close)
+	t.Cleanup(m.Close)
 	return m
 }
 
@@ -165,7 +165,7 @@ func ErrorResponse(status int, message string) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
+		_ = json.NewEncoder(w).Encode(map[string]string{keyError: message})
 	}
 }
 

@@ -18,6 +18,10 @@ const (
 	AnnotationDNSWeaverHostnames = "dnsweaver.dev/hostnames"
 )
 
+// metaKeyResourceVersion is the Workload.Metadata key used to record the
+// Kubernetes resourceVersion of the source object.
+const metaKeyResourceVersion = "resourceVersion"
+
 // ConvertService converts a core/v1 Service to a workload.Workload.
 //
 // Hostnames are extracted from well-known annotations:
@@ -58,8 +62,8 @@ func ConvertService(svc *corev1.Service) workload.Workload {
 	}
 
 	meta := map[string]string{
-		"resourceVersion": svc.ResourceVersion,
-		"type":            string(svc.Spec.Type),
+		metaKeyResourceVersion: svc.ResourceVersion,
+		"type":                 string(svc.Spec.Type),
 	}
 	if svc.Spec.ClusterIP != "" {
 		meta["clusterIP"] = svc.Spec.ClusterIP

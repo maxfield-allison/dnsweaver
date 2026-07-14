@@ -117,7 +117,7 @@ func (c *APIClient) Ping(ctx context.Context) error {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := httputil.ReadBody(resp, 0)
-		return fmt.Errorf("Pi-hole returned status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("pi-hole returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	return nil

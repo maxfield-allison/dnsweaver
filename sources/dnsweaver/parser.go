@@ -55,6 +55,9 @@ const (
 	// boolTrue and boolFalse are canonical boolean strings for metadata values.
 	boolTrue  = "true"
 	boolFalse = "false"
+
+	// recordTypeSRV is the named-record Type value that triggers SRV field parsing.
+	recordTypeSRV = "SRV"
 )
 
 // namedRecordRegex matches dnsweaver.records.<name>.<field> labels.
@@ -170,7 +173,7 @@ func (p *Parser) ExtractHostnames(labels map[string]string) []Extraction {
 			if proxied, ok := labels[ProxiedLabel]; ok && proxied != "" {
 				proxied = strings.TrimSpace(strings.ToLower(proxied))
 				if proxied == boolTrue || proxied == boolFalse {
-					extraction.Metadata = map[string]string{"proxied": proxied}
+					extraction.Metadata = map[string]string{FieldProxied: proxied}
 				} else {
 					p.logger.Warn("invalid proxied value for simple hostname (must be true/false)",
 						slog.String("hostname", hostname),
@@ -202,7 +205,7 @@ func (p *Parser) ExtractHostnames(labels map[string]string) []Extraction {
 		if proxied, ok := labels[ProxiedLabel]; ok && proxied != "" {
 			proxied = strings.TrimSpace(strings.ToLower(proxied))
 			if proxied == boolTrue || proxied == boolFalse {
-				sharedMeta = map[string]string{"proxied": proxied}
+				sharedMeta = map[string]string{FieldProxied: proxied}
 			}
 		}
 
@@ -291,7 +294,7 @@ func (p *Parser) ExtractHostnames(labels map[string]string) []Extraction {
 		}
 
 		// Parse SRV fields if type is SRV or if port is specified
-		if extraction.Type == "SRV" || fields[FieldPort] != "" {
+		if extraction.Type == recordTypeSRV || fields[FieldPort] != "" {
 			srv := &SRVData{}
 			hasSRVData := false
 
@@ -343,7 +346,7 @@ func (p *Parser) ExtractHostnames(labels map[string]string) []Extraction {
 				if extraction.Metadata == nil {
 					extraction.Metadata = make(map[string]string)
 				}
-				extraction.Metadata["proxied"] = proxied
+				extraction.Metadata[FieldProxied] = proxied
 			} else {
 				p.logger.Warn("invalid proxied value (must be true/false)",
 					slog.String("record", name),

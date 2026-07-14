@@ -1,5 +1,13 @@
 package testutil
 
+// Common JSON field names/values reused across the response builders below.
+const (
+	keyError = "error"
+	keyName  = "name"
+	keyType  = "type"
+	keyTTL   = "ttl"
+)
+
 // TechnitiumSuccess wraps a response payload in the Technitium success envelope.
 func TechnitiumSuccess(response any) map[string]any {
 	return map[string]any{
@@ -11,7 +19,7 @@ func TechnitiumSuccess(response any) map[string]any {
 // TechnitiumError returns a Technitium API error response.
 func TechnitiumError(message string) map[string]any {
 	return map[string]any{
-		"status":       "error",
+		"status":       keyError,
 		"errorMessage": message,
 	}
 }
@@ -19,8 +27,8 @@ func TechnitiumError(message string) map[string]any {
 // TechnitiumZoneInfo returns a zone info block for Technitium responses.
 func TechnitiumZoneInfo(zone string) map[string]any {
 	return map[string]any{
-		"name":     zone,
-		"type":     "Primary",
+		keyName:    zone,
+		keyType:    "Primary",
 		"disabled": false,
 	}
 }
@@ -29,9 +37,9 @@ func TechnitiumZoneInfo(zone string) map[string]any {
 // recordType should be "A", "AAAA", "CNAME", "TXT", or "SRV".
 func TechnitiumRecord(name, recordType string, ttl int, rData map[string]any) map[string]any {
 	return map[string]any{
-		"name":     name,
-		"type":     recordType,
-		"ttl":      ttl,
+		keyName:    name,
+		keyType:    recordType,
+		keyTTL:     ttl,
 		"disabled": false,
 		"rData":    rData,
 	}
@@ -73,10 +81,10 @@ func CloudflareError(code int, message string) map[string]any {
 func CloudflareRecord(id, recordType, name, content string, ttl int, proxied bool) map[string]any {
 	return map[string]any{
 		"id":      id,
-		"type":    recordType,
-		"name":    name,
+		keyType:   recordType,
+		keyName:   name,
 		"content": content,
-		"ttl":     ttl,
+		keyTTL:    ttl,
 		"proxied": proxied,
 	}
 }
@@ -130,9 +138,9 @@ func PiholeV6DNSConfig(hosts, cnameRecords []string) map[string]any {
 func WebhookRecord(hostname, recordType, value string, ttl int) map[string]any {
 	return map[string]any{
 		"hostname": hostname,
-		"type":     recordType,
+		keyType:    recordType,
 		"value":    value,
-		"ttl":      ttl,
+		keyTTL:     ttl,
 	}
 }
 
@@ -141,16 +149,16 @@ func WebhookRecordWithID(id, hostname, recordType, value string, ttl int) map[st
 	return map[string]any{
 		"id":       id,
 		"hostname": hostname,
-		"type":     recordType,
+		keyType:    recordType,
 		"value":    value,
-		"ttl":      ttl,
+		keyTTL:     ttl,
 	}
 }
 
 // WebhookError returns a webhook error response.
 func WebhookError(errMsg, message string) map[string]any {
 	return map[string]any{
-		"error":   errMsg,
+		keyError:  errMsg,
 		"message": message,
 	}
 }

@@ -11,6 +11,13 @@ const (
 	Namespace = "dnsweaver"
 )
 
+// Prometheus label names shared across multiple metric vectors below.
+const (
+	labelStatus    = "status"
+	labelProvider  = "provider"
+	labelOperation = "operation"
+)
+
 // Build info metric - set via SetBuildInfo on startup.
 var BuildInfo = promauto.NewGaugeVec(
 	prometheus.GaugeOpts{
@@ -30,7 +37,7 @@ var (
 			Name:      "reconciliations_total",
 			Help:      "Total number of reconciliation runs.",
 		},
-		[]string{"status"}, // "success", "error"
+		[]string{labelStatus}, // "success", "error"
 	)
 
 	// ReconciliationDuration tracks reconciliation duration in seconds.
@@ -71,7 +78,7 @@ var (
 			Name:      "records_created_total",
 			Help:      "Total number of DNS records created.",
 		},
-		[]string{"provider"},
+		[]string{labelProvider},
 	)
 
 	// RecordsDeletedTotal counts DNS records deleted.
@@ -81,7 +88,7 @@ var (
 			Name:      "records_deleted_total",
 			Help:      "Total number of DNS records deleted.",
 		},
-		[]string{"provider"},
+		[]string{labelProvider},
 	)
 
 	// RecordsSkippedTotal counts skipped record operations.
@@ -101,7 +108,7 @@ var (
 			Name:      "records_failed_total",
 			Help:      "Total number of failed record operations.",
 		},
-		[]string{"provider", "operation"}, // operation: "create", "delete"
+		[]string{labelProvider, labelOperation}, // operation: "create", "delete"
 	)
 )
 
@@ -114,7 +121,7 @@ var (
 			Name:      "provider_api_requests_total",
 			Help:      "Total number of API requests to DNS providers.",
 		},
-		[]string{"provider", "operation", "status"}, // operation: "ping", "list", "create", "delete"; status: "success", "error"
+		[]string{labelProvider, labelOperation, labelStatus}, // operation: "ping", "list", "create", "delete"; status: "success", "error"
 	)
 
 	// ProviderAPIDuration tracks provider API request duration.
@@ -125,7 +132,7 @@ var (
 			Help:      "Duration of provider API requests in seconds.",
 			Buckets:   prometheus.DefBuckets,
 		},
-		[]string{"provider", "operation"},
+		[]string{labelProvider, labelOperation},
 	)
 
 	// ProviderHealthy tracks provider health status (1=healthy, 0=unhealthy).
@@ -135,7 +142,7 @@ var (
 			Name:      "provider_healthy",
 			Help:      "Provider health status (1=healthy, 0=unhealthy).",
 		},
-		[]string{"provider"},
+		[]string{labelProvider},
 	)
 
 	// ProviderAvailable tracks provider availability status (1=ready, 0=pending initialization).
@@ -156,7 +163,7 @@ var (
 			Name:      "provider_init_retries_total",
 			Help:      "Total number of provider initialization retry attempts.",
 		},
-		[]string{"provider", "status"}, // status: "success", "failed"
+		[]string{labelProvider, labelStatus}, // status: "success", "failed"
 	)
 
 	// ProvidersReady tracks the number of ready providers.

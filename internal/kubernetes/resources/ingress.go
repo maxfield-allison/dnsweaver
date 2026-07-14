@@ -43,7 +43,7 @@ func ConvertIngress(ing *networkingv1.Ingress) workload.Workload {
 		Kind:        workload.KindIngress,
 		Hostnames:   hostnames,
 		Metadata: map[string]string{
-			"resourceVersion": ing.ResourceVersion,
+			metaKeyResourceVersion: ing.ResourceVersion,
 		},
 	}
 }

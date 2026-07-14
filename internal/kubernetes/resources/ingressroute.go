@@ -65,7 +65,7 @@ func ConvertIngressRoute(obj *unstructured.Unstructured) workload.Workload {
 		Kind:        workload.KindIngressRoute,
 		Hostnames:   hostnames,
 		Metadata: map[string]string{
-			"resourceVersion": obj.GetResourceVersion(),
+			metaKeyResourceVersion: obj.GetResourceVersion(),
 		},
 	}
 }

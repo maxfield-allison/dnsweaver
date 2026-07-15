@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Incus server certificate pinning** (`DNSWEAVER_INCUS_TLS_PIN_SHA256`). Pin
+  the Incus server's leaf certificate to a SHA-256 fingerprint to verify a
+  self-signed server without a CA file and without disabling verification. This
+  fixes remote HTTPS connections against Incus's default certificate, which
+  carries only loopback SANs (`127.0.0.1`, `::1`) and so fails hostname
+  verification against a LAN address. Trust-token enrollment now sets this pin
+  automatically from the fingerprint embedded in the token (persisted as
+  `server.fingerprint` in the cert store) so token onboarding over a remote
+  address works out of the box. The pin is also usable standalone with a
+  pre-provisioned certificate for a fully stateless setup. Thanks to
+  [@jochumdev](https://github.com/jochumdev) for the report and repro.
+  ([GitHub #146](https://github.com/maxfield-allison/dnsweaver/pull/146))
 - **Incus trust-token authentication.** dnsweaver can enroll its own client
   certificate against the Incus API using a one-time trust token instead of a
   pre-provisioned certificate. Set `DNSWEAVER_INCUS_TRUST_TOKEN` and a writable

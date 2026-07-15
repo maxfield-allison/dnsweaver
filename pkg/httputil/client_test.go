@@ -2,7 +2,9 @@ package httputil
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -323,5 +325,65 @@ func TestSanitizeURL_NilURL(t *testing.T) {
 	result := sanitizeURL(nil)
 	if result != "" {
 		t.Errorf("nil URL should return empty string, got %q", result)
+	}
+}
+
+func TestTLSConfig_PinnedSHA256(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	sum := sha256.Sum256(srv.Certificate().Raw)
+	goodPin := hex.EncodeToString(sum[:])
+
+	get := func(cfg *tls.Config) error {
+		client := &http.Client{Transport: &http.Transport{TLSClientConfig: cfg}}
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		return resp.Body.Close()
+	}
+
+	// Correct pin: connection succeeds against the self-signed server with no
+	// CA and no InsecureSkip.
+	okCfg, err := TLSConfig{PinnedSHA256: goodPin}.Build()
+	if err != nil {
+		t.Fatalf("Build with pin: %v", err)
+	}
+	if err := get(okCfg); err != nil {
+		t.Fatalf("pinned request failed: %v", err)
+	}
+
+	// Colon-separated, uppercase pin normalizes to the same result.
+	mixedCfg, err := TLSConfig{PinnedSHA256: strings.ToUpper(goodPin)}.Build()
+	if err != nil {
+		t.Fatalf("Build with upper pin: %v", err)
+	}
+	if err := get(mixedCfg); err != nil {
+		t.Fatalf("uppercase pin request failed: %v", err)
+	}
+
+	// Wrong pin: connection is rejected.
+	badCfg, err := TLSConfig{PinnedSHA256: "00" + goodPin[2:]}.Build()
+	if err != nil {
+		t.Fatalf("Build with bad pin: %v", err)
+	}
+	if err := get(badCfg); err == nil {
+		t.Fatal("expected wrong pin to reject the connection")
+	}
+
+	// Explicit InsecureSkip takes precedence over the pin.
+	skipCfg, err := TLSConfig{InsecureSkip: true, PinnedSHA256: "00" + goodPin[2:]}.Build()
+	if err != nil {
+		t.Fatalf("Build skip+pin: %v", err)
+	}
+	if skipCfg.VerifyConnection != nil {
+		t.Error("explicit InsecureSkip should bypass pin (no VerifyConnection)")
 	}
 }

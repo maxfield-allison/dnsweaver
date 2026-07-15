@@ -483,6 +483,7 @@ func (c *Config) IncusTLS() *httputil.TLSConfig {
 		KeyFile:      g.IncusTLSKeyFile,
 		ServerName:   g.IncusTLSServerName,
 		InsecureSkip: g.IncusTLSSkipVerify,
+		PinnedSHA256: g.IncusTLSPinSHA256,
 	}
 	if g.IncusTLSMinVersion != "" {
 		if parsed, err := httputil.ParseTLSMinVersion(g.IncusTLSMinVersion); err == nil {

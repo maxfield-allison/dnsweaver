@@ -303,6 +303,7 @@ full setup including the required PVE role privileges.
 | `DNSWEAVER_PROXMOX_VERIFY_TLS` | No | `true` | **Deprecated** — inverted-polarity alias of `TLS_SKIP_VERIFY`. Will be removed in a future major release. |
 | `DNSWEAVER_PROXMOX_NODE_FILTER` | No | *(all)* | Restrict discovery to a single PVE node name |
 | `DNSWEAVER_PROXMOX_TAG_FILTER` | No | *(all)* | Only include resources with this tag (prefix match) |
+| `DNSWEAVER_PROXMOX_HOSTNAME_TAG_PREFIX` | No | — | Optional tag prefix in the form `<prefix>+<hostname>` used to override the discovered hostname |
 | `DNSWEAVER_PROXMOX_STATE_FILTER` | No | `running` | Resource status filter (`running`, `stopped`, etc.) |
 | `DNSWEAVER_PROXMOX_DOMAIN_SUFFIX` | No | — | Domain suffix appended to VM names |
 

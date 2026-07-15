@@ -345,6 +345,12 @@ func (c *Config) ProxmoxDomainSuffix() string {
 	return c.Global.ProxmoxDomainSuffix
 }
 
+// ProxmoxHostnameTagPrefix returns the optional tag prefix used to derive an
+// explicit hostname from Proxmox tags.
+func (c *Config) ProxmoxHostnameTagPrefix() string {
+	return c.Global.ProxmoxHostnameTagPrefix
+}
+
 // ProxmoxTargetMode returns the configured target resolution mode
 // ("guest-ip" or "instance"). Empty string means use the default.
 func (c *Config) ProxmoxTargetMode() string {

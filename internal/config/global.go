@@ -85,15 +85,16 @@ type GlobalConfig struct {
 	Source string // traefik, labels, or custom source name
 
 	// Proxmox VE settings
-	ProxmoxURL          string // PVE API base URL (e.g., https://pve-00:8006)
-	ProxmoxTokenID      string // PVE API token ID (e.g., user@pam!dnsweaver)
-	ProxmoxTokenSecret  string // PVE API token secret (UUID); supports _FILE suffix
-	ProxmoxNodeFilter   string // Optional: limit to a specific node (empty = all nodes)
-	ProxmoxTagFilter    string // Optional: prefix match on PVE tags to filter workloads
-	ProxmoxStateFilter  string // Filter by PVE resource status (default: "running")
-	ProxmoxDomainSuffix string // Domain suffix to append to VM names (e.g., "home.example.com")
-	ProxmoxVerifyTLS    bool   // Verify TLS certificate on PVE API endpoint (DEPRECATED in v1.5: prefer ProxmoxTLSSkipVerify)
-	ProxmoxTargetMode   string // Target resolution mode: "guest-ip" (default) or "instance"
+	ProxmoxURL               string // PVE API base URL (e.g., https://pve-00:8006)
+	ProxmoxTokenID           string // PVE API token ID (e.g., user@pam!dnsweaver)
+	ProxmoxTokenSecret       string // PVE API token secret (UUID); supports _FILE suffix
+	ProxmoxNodeFilter        string // Optional: limit to a specific node (empty = all nodes)
+	ProxmoxTagFilter         string // Optional: prefix match on PVE tags to filter workloads
+	ProxmoxStateFilter       string // Filter by PVE resource status (default: "running")
+	ProxmoxDomainSuffix      string // Domain suffix to append to VM names (e.g., "home.example.com")
+	ProxmoxHostnameTagPrefix string // Optional: tag prefix for hostname override tags (e.g. "dnsweaver")
+	ProxmoxVerifyTLS         bool   // Verify TLS certificate on PVE API endpoint (DEPRECATED in v1.5: prefer ProxmoxTLSSkipVerify)
+	ProxmoxTargetMode        string // Target resolution mode: "guest-ip" (default) or "instance"
 
 	// Unified PVE TLS configuration (v1.5+). Populated from DNSWEAVER_PROXMOX_TLS_*
 	// env vars and consumed by internal/proxmox via httputil.TLSConfig.
@@ -422,6 +423,7 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	cfg.ProxmoxTagFilter = getEnv("DNSWEAVER_PROXMOX_TAG_FILTER")
 	cfg.ProxmoxStateFilter = getEnv("DNSWEAVER_PROXMOX_STATE_FILTER")
 	cfg.ProxmoxDomainSuffix = getEnv("DNSWEAVER_PROXMOX_DOMAIN_SUFFIX")
+	cfg.ProxmoxHostnameTagPrefix = getEnv("DNSWEAVER_PROXMOX_HOSTNAME_TAG_PREFIX")
 	cfg.ProxmoxTargetMode = getEnv("DNSWEAVER_PROXMOX_TARGET_MODE")
 	if cfg.ProxmoxTargetMode != "" {
 		switch strings.ToLower(strings.TrimSpace(cfg.ProxmoxTargetMode)) {

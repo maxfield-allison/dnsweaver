@@ -74,6 +74,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   honor the selected scope. Thanks to
   [@jochumdev](https://github.com/jochumdev) for the request.
   ([GitHub #137](https://github.com/maxfield-allison/dnsweaver/issues/137))
+- **Proxmox hostname override tags.** The Proxmox source now supports an
+  optional `DNSWEAVER_PROXMOX_HOSTNAME_TAG_PREFIX` value to derive hostnames from
+  tags using `<prefix>+<hostname>` syntax. Explicit FQDN overrides are accepted
+  directly, and plain hostnames are combined with `DNSWEAVER_PROXMOX_DOMAIN_SUFFIX` when present.
 
 ## [2.5.0] - 2026-07-09
 

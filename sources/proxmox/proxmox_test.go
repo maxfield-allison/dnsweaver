@@ -90,6 +90,63 @@ func TestExtract_WithDomain(t *testing.T) {
 	}
 }
 
+func TestExtract_WithHostnameTagPrefixOverrideFQDN(t *testing.T) {
+	src := New(WithDomain("home.example.com"), WithHostnameTagPrefix("dnsweaver"))
+	w := workload.Workload{
+		Platform: workload.PlatformProxmox,
+		Name:     "webserver",
+		Metadata: map[string]string{"ip": "10.1.20.5", "node": "pve-00", "vmid": "100", "tags": "dnsweaver+webapp.home.example.com;other:keep"},
+	}
+	hostnames, err := src.Extract(context.Background(), w)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(hostnames) != 1 {
+		t.Fatalf("expected 1 hostname, got %d", len(hostnames))
+	}
+	if hostnames[0].Name != "webapp.home.example.com" {
+		t.Errorf("expected Name=%q, got %q", "webapp.home.example.com", hostnames[0].Name)
+	}
+}
+
+func TestExtract_WithHostnameTagPrefixOverridePlainName(t *testing.T) {
+	src := New(WithDomain("home.example.com"), WithHostnameTagPrefix("dnsweaver"))
+	w := workload.Workload{
+		Platform: workload.PlatformProxmox,
+		Name:     "webserver",
+		Metadata: map[string]string{"ip": "10.1.20.5", "node": "pve-00", "vmid": "100", "tags": "dnsweaver+webapp;other:keep"},
+	}
+	hostnames, err := src.Extract(context.Background(), w)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(hostnames) != 1 {
+		t.Fatalf("expected 1 hostname, got %d", len(hostnames))
+	}
+	if hostnames[0].Name != "webapp.home.example.com" {
+		t.Errorf("expected Name=%q, got %q", "webapp.home.example.com", hostnames[0].Name)
+	}
+}
+
+func TestExtract_WithHostnameTagPrefixMissingFallsBack(t *testing.T) {
+	src := New(WithDomain("home.example.com"), WithHostnameTagPrefix("dnsweaver"))
+	w := workload.Workload{
+		Platform: workload.PlatformProxmox,
+		Name:     "webserver",
+		Metadata: map[string]string{"ip": "10.1.20.5", "node": "pve-00", "vmid": "100", "tags": "other:keep;foo:bar"},
+	}
+	hostnames, err := src.Extract(context.Background(), w)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(hostnames) != 1 {
+		t.Fatalf("expected 1 hostname, got %d", len(hostnames))
+	}
+	if hostnames[0].Name != "webserver.home.example.com" {
+		t.Errorf("expected Name=%q, got %q", "webserver.home.example.com", hostnames[0].Name)
+	}
+}
+
 func TestExtract_NameIsFQDN(t *testing.T) {
 	src := New() // no domain — VM name is already FQDN
 	w := workload.Workload{

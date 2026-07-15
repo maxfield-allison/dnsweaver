@@ -2,8 +2,10 @@
 package httputil
 
 import (
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -64,6 +66,15 @@ type TLSConfig struct {
 	// is enabled.
 	InsecureSkip bool
 
+	// PinnedSHA256 pins the server's leaf certificate to a specific SHA-256
+	// fingerprint (hex, colons and case optional). When set, the server's
+	// presented leaf certificate is verified against this fingerprint instead
+	// of the default chain/hostname check. This is used to trust a self-signed
+	// server whose certificate cannot be validated by hostname (e.g. Incus,
+	// whose default certificate only carries loopback SANs) while remaining
+	// cryptographically anchored. An explicit InsecureSkip takes precedence.
+	PinnedSHA256 string
+
 	// MinVersion is the minimum TLS protocol version. Defaults to
 	// DefaultTLSMinVersion (TLS 1.2) when zero. Accepts tls.VersionTLS12
 	// and tls.VersionTLS13.
@@ -78,6 +89,7 @@ func (t TLSConfig) IsZero() bool {
 		t.KeyFile == "" &&
 		t.ServerName == "" &&
 		!t.InsecureSkip &&
+		t.PinnedSHA256 == "" &&
 		t.MinVersion == 0
 }
 
@@ -137,7 +149,39 @@ func (t TLSConfig) Build() (*tls.Config, error) {
 		out.Certificates = []tls.Certificate{cert}
 	}
 
+	// Certificate pinning. When a leaf fingerprint is pinned and the operator
+	// has not explicitly disabled verification, replace the default
+	// chain/hostname check with an exact match against the pinned SHA-256.
+	// This trusts a specific self-signed server (e.g. Incus, whose default
+	// certificate only has loopback SANs) without weakening to a blanket skip.
+	if t.PinnedSHA256 != "" && !t.InsecureSkip {
+		pin := normalizeFingerprint(t.PinnedSHA256)
+		// The default verifier is disabled because it would reject the
+		// self-signed / hostname-mismatched certificate before VerifyConnection
+		// runs; the pin below is the replacement, not a downgrade.
+		out.InsecureSkipVerify = true //nolint:gosec // verification replaced by the certificate pin in VerifyConnection
+		out.VerifyConnection = func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) == 0 {
+				return errors.New("tls: server presented no certificate for pinned verification")
+			}
+			sum := sha256.Sum256(cs.PeerCertificates[0].Raw)
+			got := hex.EncodeToString(sum[:])
+			if !strings.EqualFold(got, pin) {
+				return fmt.Errorf("tls: server certificate SHA-256 %s does not match pinned fingerprint %s", got, pin)
+			}
+			return nil
+		}
+	}
+
 	return out, nil
+}
+
+// normalizeFingerprint lowercases a hex certificate fingerprint and strips
+// colon and whitespace separators so pins may be supplied in any common form
+// ("AA:BB:...", "aabb...", with or without spaces).
+func normalizeFingerprint(fp string) string {
+	replacer := strings.NewReplacer(":", "", " ", "", "\t", "", "\n", "")
+	return strings.ToLower(replacer.Replace(fp))
 }
 
 // permissionHint augments a file-access error with the uid/gid the process is

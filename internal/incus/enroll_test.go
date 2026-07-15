@@ -2,8 +2,11 @@ package incus
 
 import (
 	"context"
+	"crypto/sha256"
 	gotls "crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"net/http"
@@ -19,6 +22,110 @@ import (
 // self-signed cert used by httptest.NewTLSServer.
 func tlsSkip() *httputil.TLSConfig {
 	return &httputil.TLSConfig{InsecureSkip: true}
+}
+
+// makeToken builds a base64-encoded Incus trust token carrying the given
+// fingerprint, mirroring the real token structure.
+func makeToken(t *testing.T, fingerprint string) string {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{
+		"client_name": "dnsweaver",
+		"fingerprint": fingerprint,
+		"secret":      "deadbeef",
+	})
+	if err != nil {
+		t.Fatalf("marshal token: %v", err)
+	}
+	return base64.StdEncoding.EncodeToString(raw)
+}
+
+// certFingerprint returns the hex SHA-256 of a certificate's DER bytes.
+func certFingerprint(cert *x509.Certificate) string {
+	sum := sha256.Sum256(cert.Raw)
+	return hex.EncodeToString(sum[:])
+}
+
+func TestTokenFingerprint(t *testing.T) {
+	fp := "823c4a64cc168708aa49ed9dc0ec755ff414bb91e75049a7eb991cba3d9249fe"
+	if got := tokenFingerprint(makeToken(t, fp)); got != fp {
+		t.Errorf("tokenFingerprint = %q, want %q", got, fp)
+	}
+	if got := tokenFingerprint("not-base64-json"); got != "" {
+		t.Errorf("invalid token = %q, want empty", got)
+	}
+	if got := tokenFingerprint(""); got != "" {
+		t.Errorf("empty token = %q, want empty", got)
+	}
+}
+
+// TestEnsureClientCert_PinnedEnrollment proves enrollment succeeds against a
+// self-signed server WITHOUT InsecureSkip, verified purely by the token's
+// pinned fingerprint, and that the pin is persisted and reused.
+func TestEnsureClientCert_PinnedEnrollment(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"type":"sync","status_code":200,"metadata":{}}`))
+	}))
+	srv.TLS = &gotls.Config{ClientAuth: gotls.RequireAnyClientCert} //nolint:gosec // test server
+	srv.StartTLS()
+	defer srv.Close()
+
+	// Pin the real server certificate via the token. No CA, no InsecureSkip.
+	fp := certFingerprint(srv.Certificate())
+	store := t.TempDir()
+	cc, err := EnsureClientCert(context.Background(), EnrollConfig{
+		BaseURL:   srv.URL,
+		Token:     makeToken(t, fp),
+		CertStore: store,
+		TLS:       nil, // no CA, no skip: only the pin can make this pass
+	}, "", "")
+	if err != nil {
+		t.Fatalf("pinned EnsureClientCert: %v", err)
+	}
+	if cc.PinnedSHA256 != fp {
+		t.Errorf("PinnedSHA256 = %q, want %q", cc.PinnedSHA256, fp)
+	}
+	// Fingerprint persisted for restarts.
+	if got := loadPersistedFingerprint(store); got != fp {
+		t.Errorf("persisted fingerprint = %q, want %q", got, fp)
+	}
+	// Reuse path returns the persisted pin without a token.
+	cc2, err := EnsureClientCert(context.Background(), EnrollConfig{
+		BaseURL:   srv.URL,
+		CertStore: store,
+	}, "", "")
+	if err != nil {
+		t.Fatalf("reuse EnsureClientCert: %v", err)
+	}
+	if cc2.PinnedSHA256 != fp {
+		t.Errorf("reuse PinnedSHA256 = %q, want %q", cc2.PinnedSHA256, fp)
+	}
+}
+
+// TestEnsureClientCert_PinnedEnrollmentWrongFingerprint proves a mismatched pin
+// rejects the connection (no silent trust).
+func TestEnsureClientCert_PinnedEnrollmentWrongFingerprint(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"type":"sync"}`))
+	}))
+	srv.TLS = &gotls.Config{ClientAuth: gotls.RequireAnyClientCert} //nolint:gosec // test server
+	srv.StartTLS()
+	defer srv.Close()
+
+	store := t.TempDir()
+	_, err := EnsureClientCert(context.Background(), EnrollConfig{
+		BaseURL:   srv.URL,
+		Token:     makeToken(t, "00"+certFingerprint(srv.Certificate())[2:]), // corrupt first byte
+		CertStore: store,
+		TLS:       nil,
+	}, "", "")
+	if err == nil {
+		t.Fatal("expected enrollment to fail on fingerprint mismatch")
+	}
+	if fileExists(filepath.Join(store, certFileName)) {
+		t.Error("certificate must not be persisted on failed enrollment")
+	}
 }
 
 func TestGenerateClientCert(t *testing.T) {

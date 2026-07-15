@@ -122,6 +122,7 @@ type GlobalConfig struct {
 	IncusTLSKeyFile    string
 	IncusTLSServerName string
 	IncusTLSSkipVerify bool
+	IncusTLSPinSHA256  string
 	IncusTLSMinVersion string
 
 	// Incus trust-token enrollment (#134). When IncusTrustToken is set and no
@@ -502,6 +503,7 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	cfg.IncusTLSKeyFile = getEnv("DNSWEAVER_INCUS_TLS_KEY_FILE")
 	cfg.IncusTLSServerName = getEnv("DNSWEAVER_INCUS_TLS_SERVER_NAME")
 	cfg.IncusTLSMinVersion = getEnv("DNSWEAVER_INCUS_TLS_MIN_VERSION")
+	cfg.IncusTLSPinSHA256 = getEnv("DNSWEAVER_INCUS_TLS_PIN_SHA256")
 	if v := getEnv("DNSWEAVER_INCUS_TLS_SKIP_VERIFY"); v != "" {
 		cfg.IncusTLSSkipVerify = parseBool(v, false)
 	}

@@ -343,6 +343,15 @@ func run() error {
 				incusTLS.CertFile = cc.CertFile
 				incusTLS.KeyFile = cc.KeyFile
 			}
+			// Pin the server's leaf certificate (from the trust token or the
+			// persisted store) so ongoing lister/watcher connections verify
+			// without a CA file, matching the enrollment handshake (#146).
+			if cc.PinnedSHA256 != "" {
+				if incusTLS == nil {
+					incusTLS = &httputil.TLSConfig{}
+				}
+				incusTLS.PinnedSHA256 = cc.PinnedSHA256
+			}
 		}
 
 		baseCfg := incusclient.ClientConfig{

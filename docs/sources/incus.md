@@ -128,7 +128,8 @@ DNSWEAVER_INCUS_DOMAIN_SUFFIX=home.example.com
 | `DNSWEAVER_INCUS_CERT_STORE` | No | — | Writable directory where the enrolled client keypair is persisted. Required with `TRUST_TOKEN`. |
 | `DNSWEAVER_INCUS_TLS_SERVER_NAME` | No | — | SNI / verification hostname override. |
 | `DNSWEAVER_INCUS_TLS_MIN_VERSION` | No | `1.2` | Minimum TLS protocol version (`1.2` or `1.3`). |
-| `DNSWEAVER_INCUS_TLS_SKIP_VERIFY` | No | `false` | Skip Incus TLS certificate verification. Prefer `TLS_CA_FILE`. |
+| `DNSWEAVER_INCUS_TLS_SKIP_VERIFY` | No | `false` | Skip Incus TLS certificate verification. Prefer `TLS_CA_FILE` or `TLS_PIN_SHA256`. Logs a warning when enabled. |
+| `DNSWEAVER_INCUS_TLS_PIN_SHA256` | No | — | Pin the Incus server's leaf certificate to this SHA-256 fingerprint (hex, colons optional). Verifies a self-signed server without a CA file. See [Server verification](#server-verification). |
 
 !!! warning "Pick exactly one endpoint"
     Set **either** `DNSWEAVER_INCUS_URL` (remote HTTPS) **or**
@@ -292,13 +293,61 @@ DNSWEAVER_INCUS_TLS_CA_FILE=/run/secrets/incus_server_ca
     access is governed by Unix socket file permissions. Mount the socket into the
     container and ensure the dnsweaver process can read it.
 
+### Server verification
+
+Incus's default server certificate only carries loopback Subject Alternative
+Names (`127.0.0.1`, `::1`). Verifying it by hostname against a LAN address
+therefore fails with `x509: certificate is valid for 127.0.0.1, ::1, not <ip>`.
+There are three ways to make a remote HTTPS connection verify:
+
+1. **CA file** (`DNSWEAVER_INCUS_TLS_CA_FILE`): supply the PEM that issued the
+   server certificate. Standard chain verification applies. Best when you run
+   your own CA.
+2. **Fingerprint pin** (`DNSWEAVER_INCUS_TLS_PIN_SHA256`): pin the server's
+   leaf certificate SHA-256. No CA file needed, still cryptographically
+   anchored. Get the fingerprint from the Incus host with
+   `incus config trust list` or
+   `openssl s_client -connect host:8443 </dev/null | openssl x509 -fingerprint -sha256 -noout`.
+   Trust-token enrollment sets this pin automatically from the token.
+3. **Skip verification** (`DNSWEAVER_INCUS_TLS_SKIP_VERIFY=true`): opt-in,
+   for throwaway dev boxes only. Logs a warning, and leaves the connection open
+   to MITM. Prefer one of the above for anything you keep.
+
+!!! tip "Recommended: pre-provisioned certificate, no persistent state"
+    The stateless default is to generate the client certificate once,
+    out-of-band, and mount it read-only from your platform's secret store
+    (Kubernetes Secret, Docker/Swarm secret, or a mounted file):
+
+    ```bash
+    # once, on the Incus host
+    incus remote generate-certificate    # writes client.crt / client.key
+    incus config trust add-certificate client.crt
+    ```
+
+    ```bash
+    DNSWEAVER_INCUS_URL=https://incus-host:8443
+    DNSWEAVER_INCUS_TLS_CERT_FILE=/run/secrets/incus_client_cert
+    DNSWEAVER_INCUS_TLS_KEY_FILE=/run/secrets/incus_client_key
+    DNSWEAVER_INCUS_TLS_PIN_SHA256=<server leaf fingerprint>   # or TLS_CA_FILE
+    ```
+
+    Nothing is generated at runtime, so the pod needs no writable volume. This
+    works identically on Kubernetes, Docker, and Incus, and is the recommended
+    setup for HA (every replica mounts the same certificate).
+
 ### Trust-Token Authentication
 
 Instead of pre-provisioning a client certificate, dnsweaver can enroll itself
 using an Incus [trust token](https://linuxcontainers.org/incus/docs/main/authentication/#adding-client-certificates-using-tokens).
-On first start it generates a client keypair, registers it with the token, and
-**persists it to a writable cert store** for reuse. Trust tokens are one-time
-use, so the cert store must survive restarts.
+This is the easy opt-in path: hand dnsweaver a token and it does the rest. It
+trades the stateless property for convenience, so it requires a writable cert
+store (see the warning below). If you want to stay stateless, use the
+pre-provisioned certificate approach under [Server verification](#server-verification)
+instead.
+
+On first start dnsweaver generates a client keypair, registers it with the
+token, and **persists it to a writable cert store** for reuse. Trust tokens are
+one-time use, so the cert store must survive restarts.
 
 ```bash
 # On the Incus host: issue a one-time token for dnsweaver
@@ -317,10 +366,15 @@ DNSWEAVER_INCUS_TLS_CA_FILE=/run/secrets/incus_server_ca   # optional
 Behavior:
 
 - **First start:** generates an ECDSA keypair + self-signed client certificate,
-  `POST`s it to `/1.0/certificates` with the token, and writes `client.crt` /
-  `client.key` (mode `0600`) into the cert store.
-- **Subsequent starts:** reuses the persisted certificate; the (now-consumed)
-  token is ignored. Enrollment is idempotent.
+  presents it in the TLS handshake to `/1.0/certificates` with the token, and
+  writes `client.crt` / `client.key` (mode `0600`) into the cert store.
+- **Server pinning:** the trust token embeds the server's certificate
+  fingerprint. dnsweaver pins it automatically for both enrollment and ongoing
+  connections, and persists it as `server.fingerprint` in the cert store. This
+  is why token enrollment works against Incus's loopback-only default
+  certificate with no CA file.
+- **Subsequent starts:** reuses the persisted certificate and pinned
+  fingerprint; the (now-consumed) token is ignored. Enrollment is idempotent.
 - **Restricted to projects:** when `DNSWEAVER_INCUS_PROJECTS` is set, the
   certificate is registered restricted to those projects.
 - **Fallback:** if no token is set, dnsweaver uses

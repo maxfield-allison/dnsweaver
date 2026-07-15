@@ -27,6 +27,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -41,10 +42,12 @@ import (
 	"github.com/maxfield-allison/dnsweaver/pkg/httputil"
 )
 
-// Cert store filenames for the persisted client keypair.
+// Cert store filenames for the persisted client keypair and pinned server
+// fingerprint.
 const (
-	certFileName = "client.crt"
-	keyFileName  = "client.key"
+	certFileName        = "client.crt"
+	keyFileName         = "client.key"
+	fingerprintFileName = "server.fingerprint"
 
 	// defaultCertName is the certificate name registered in the Incus trust
 	// store, and the CommonName of the generated certificate, when unset.
@@ -85,6 +88,12 @@ type EnrollConfig struct {
 type ClientCert struct {
 	CertFile string
 	KeyFile  string
+
+	// PinnedSHA256 is the server leaf certificate fingerprint (hex) the client
+	// should pin for ongoing connections. Populated from the trust token during
+	// enrollment and from the persisted store on reuse. Empty when no pin is
+	// available (e.g. fallback cert/key files, or a token without a fingerprint).
+	PinnedSHA256 string
 }
 
 // certificatesPost is the /1.0/certificates request body. Mirrors the subset of
@@ -125,7 +134,11 @@ func EnsureClientCert(ctx context.Context, cfg EnrollConfig, fallbackCert, fallb
 			logger.Info("using persisted incus client certificate",
 				slog.String("cert_store", cfg.CertStore),
 			)
-			return ClientCert{CertFile: certPath, KeyFile: keyPath}, nil
+			return ClientCert{
+				CertFile:     certPath,
+				KeyFile:      keyPath,
+				PinnedSHA256: loadPersistedFingerprint(cfg.CertStore),
+			}, nil
 		}
 	}
 
@@ -164,6 +177,13 @@ func enroll(ctx context.Context, cfg EnrollConfig, logger *slog.Logger) (ClientC
 		return ClientCert{}, fmt.Errorf("incus: loading generated keypair: %w", err)
 	}
 
+	// The trust token embeds the server's certificate fingerprint. Pinning to
+	// it lets enrollment (and later connections) verify the server without a CA
+	// file and without a blanket InsecureSkip, even though Incus's default
+	// certificate carries only loopback SANs and so fails hostname verification
+	// against a remote address.
+	fingerprint := tokenFingerprint(cfg.Token)
+
 	name := cfg.Name
 	if name == "" {
 		name = defaultCertName
@@ -180,7 +200,7 @@ func enroll(ctx context.Context, cfg EnrollConfig, logger *slog.Logger) (ClientC
 		return ClientCert{}, fmt.Errorf("incus: encoding certificate request: %w", err)
 	}
 
-	client, err := enrollmentClient(cfg.TLS, clientCert)
+	client, err := enrollmentClient(cfg.TLS, clientCert, fingerprint)
 	if err != nil {
 		return ClientCert{}, fmt.Errorf("incus: building enrollment client: %w", err)
 	}
@@ -215,13 +235,22 @@ func enroll(ctx context.Context, cfg EnrollConfig, logger *slog.Logger) (ClientC
 	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
 		return ClientCert{}, fmt.Errorf("incus: writing certificate to cert store: %w", err)
 	}
+	// Persist the pinned fingerprint so restarts (when the one-time token is
+	// already consumed) can still verify the server without a CA file.
+	if fingerprint != "" {
+		fpPath := filepath.Join(cfg.CertStore, fingerprintFileName)
+		if err := os.WriteFile(fpPath, []byte(fingerprint+"\n"), 0o600); err != nil {
+			return ClientCert{}, fmt.Errorf("incus: writing server fingerprint to cert store: %w", err)
+		}
+	}
 
 	logger.Info("enrolled and persisted incus client certificate via trust token",
 		slog.String("name", name),
 		slog.String("cert_store", cfg.CertStore),
 		slog.Bool("restricted", len(cfg.Projects) > 0),
+		slog.Bool("server_pinned", fingerprint != ""),
 	)
-	return ClientCert{CertFile: certPath, KeyFile: keyPath}, nil
+	return ClientCert{CertFile: certPath, KeyFile: keyPath, PinnedSHA256: fingerprint}, nil
 }
 
 // generateClientCert returns a fresh ECDSA P-384 keypair and self-signed X.509
@@ -269,20 +298,25 @@ func generateClientCert(commonName string) (certPEM, keyPEM, certDER []byte, err
 // handshake. Server verification honors the operator's TLS settings (CAFile,
 // ServerName, InsecureSkip) from cfg; any CertFile/KeyFile on cfg is ignored
 // because the enrollment cert is the freshly generated one, not a persisted
-// pair. When no TLS config is supplied a default is used.
-func enrollmentClient(cfg *httputil.TLSConfig, clientCert tls.Certificate) (*http.Client, error) {
-	var tlsConf *tls.Config
+// pair. When pin is non-empty it is applied as a leaf-certificate fingerprint
+// pin so the server verifies without a CA file. When no TLS config is supplied
+// a default is used.
+func enrollmentClient(cfg *httputil.TLSConfig, clientCert tls.Certificate, pin string) (*http.Client, error) {
+	var serverConf httputil.TLSConfig
 	if cfg != nil {
-		serverConf := *cfg
-		// The generated keypair is presented explicitly below; drop any
-		// file-based client cert so Build() doesn't try to load one.
-		serverConf.CertFile = ""
-		serverConf.KeyFile = ""
-		built, err := serverConf.Build()
-		if err != nil {
-			return nil, err
-		}
-		tlsConf = built
+		serverConf = *cfg
+	}
+	// The generated keypair is presented explicitly below; drop any
+	// file-based client cert so Build() doesn't try to load one.
+	serverConf.CertFile = ""
+	serverConf.KeyFile = ""
+	if pin != "" {
+		serverConf.PinnedSHA256 = pin
+	}
+
+	tlsConf, err := serverConf.Build()
+	if err != nil {
+		return nil, err
 	}
 	if tlsConf == nil {
 		tlsConf = &tls.Config{MinVersion: httputil.DefaultTLSMinVersion} //nolint:gosec // DefaultTLSMinVersion is TLS 1.2
@@ -295,6 +329,39 @@ func enrollmentClient(cfg *httputil.TLSConfig, clientCert tls.Certificate) (*htt
 			TLSClientConfig: tlsConf,
 		},
 	}, nil
+}
+
+// tokenFingerprint decodes an Incus trust token and returns the embedded server
+// certificate fingerprint (hex SHA-256). Incus trust tokens are base64-encoded
+// JSON that includes a "fingerprint" field. Returns "" when the token cannot be
+// decoded or carries no fingerprint, in which case enrollment falls back to the
+// operator's CA/ServerName/InsecureSkip settings.
+func tokenFingerprint(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	raw, err := base64.StdEncoding.DecodeString(token)
+	if err != nil {
+		return ""
+	}
+	var payload struct {
+		Fingerprint string `json:"fingerprint"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(payload.Fingerprint)
+}
+
+// loadPersistedFingerprint reads a previously persisted server fingerprint from
+// the cert store. Returns "" when absent or unreadable.
+func loadPersistedFingerprint(certStore string) string {
+	data, err := os.ReadFile(filepath.Join(certStore, fingerprintFileName))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
 }
 
 // decodeAPIError extracts a useful message from an Incus error response.

@@ -80,7 +80,7 @@ lint:
   extends: .go-base
   stage: test
   script:
-    - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+    - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
     - golangci-lint run --config .golangci.yml --timeout 5m
   rules: *rules-code-changes
   allow_failure: true
@@ -161,7 +161,7 @@ security:gitleaks:
         -o .gitleaks.toml
     - gitleaks detect --source . --config .gitleaks.toml --verbose --no-git
   rules: *rules-code-changes
-  allow_failure: false  # Block on secrets detection
+  allow_failure: false # Block on secrets detection
 
 # Container image vulnerability scan (runs after Docker build)
 # Must be in docker stage — needs: can't reference jobs from later stages
@@ -181,15 +181,15 @@ security:container-scan:
     - echo "Scanning $IMAGE:$TAG-amd64"
     # Block on CRITICAL/HIGH (must fix before release)
     - trivy image --exit-code 1 --severity CRITICAL,HIGH
-        --ignore-unfixed
-        --ignorefile .trivyignore
-        --format table
-        "$IMAGE:$TAG-amd64"
+      --ignore-unfixed
+      --ignorefile .trivyignore
+      --format table
+      "$IMAGE:$TAG-amd64"
     # Warn on MEDIUM/LOW (track, don't block)
     - trivy image --exit-code 0 --severity MEDIUM,LOW
-        --ignorefile .trivyignore
-        --format table
-        "$IMAGE:$TAG-amd64"
+      --ignorefile .trivyignore
+      --format table
+      "$IMAGE:$TAG-amd64"
   rules: *rules-docker
   allow_failure: false
 
@@ -472,4 +472,3 @@ github:dockerhub-description:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       changes: ["docker/DOCKERHUB.md"]
   tags: [docker]
-

@@ -25,6 +25,8 @@ vendor/
 # Build artifacts
 /bin/
 /dist/
+.gocache/
+.gopath/
 
 # Environment files (may contain secrets)
 .env

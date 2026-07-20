@@ -351,6 +351,17 @@ func (c *Config) ProxmoxHostnameTagPrefix() string {
 	return c.Global.ProxmoxHostnameTagPrefix
 }
 
+// ProxmoxInterfaceTagPrefix returns the optional tag prefix used to derive an
+// interface name preference from Proxmox tags.
+func (c *Config) ProxmoxInterfaceTagPrefix() string {
+	return c.Global.ProxmoxInterfaceTagPrefix
+}
+
+// ProxmoxAllowedInterfaces returns the optional allow-list of guest interface names.
+func (c *Config) ProxmoxAllowedInterfaces() []string {
+	return c.Global.ProxmoxAllowedInterfaces
+}
+
 // ProxmoxTargetMode returns the configured target resolution mode
 // ("guest-ip" or "instance"). Empty string means use the default.
 func (c *Config) ProxmoxTargetMode() string {

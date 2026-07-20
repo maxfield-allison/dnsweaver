@@ -9,17 +9,11 @@ import (
 	"strings"
 )
 
-const (
-	resourceTypeQEMU = "qemu"
-
-	ipAddressTypeIPv4 = "ipv4"
-)
-
 // ResolveIP returns the primary IPv4 address for a Proxmox resource.
 //
 // For LXC containers (type "lxc"), it reads the net0 config field and parses
 // the ip= component. For QEMU VMs (type "qemu"), it queries the qemu-guest-agent
-// and returns the first non-loopback IPv4 address found on any interface.
+// and returns the first non-loopback IPv4 address found on a selected interface.
 //
 // If the VM has no guest agent running, the function logs a warning and returns
 // an empty string (no error), since this is a common condition in homelabs
@@ -31,7 +25,20 @@ func ResolveIP(ctx context.Context, client *Client, resource ClusterResource, lo
 	case resourceTypeLXC:
 		return resolveLXCIP(ctx, client, resource)
 	case resourceTypeQEMU:
-		return resolveVMIP(ctx, client, resource, logger)
+		return resolveVMIP(ctx, client, resource, logger, "", nil)
+	default:
+		return "", fmt.Errorf("proxmox: unsupported resource type %q", resource.Type)
+	}
+}
+
+// ResolveIPWithInterfacePreferences resolves the primary IPv4 address for a Proxmox resource
+// using the supplied interface preference and allow-list.
+func ResolveIPWithInterfacePreferences(ctx context.Context, client *Client, resource ClusterResource, logger *slog.Logger, interfacePreference string, allowedInterfaces []string) (string, error) {
+	switch resource.Type {
+	case resourceTypeLXC:
+		return resolveLXCIP(ctx, client, resource)
+	case resourceTypeQEMU:
+		return resolveVMIP(ctx, client, resource, logger, interfacePreference, allowedInterfaces)
 	default:
 		return "", fmt.Errorf("proxmox: unsupported resource type %q", resource.Type)
 	}
@@ -79,8 +86,8 @@ func parseLXCNet0IP(net0 string) string {
 }
 
 // resolveVMIP queries the qemu-guest-agent for the VM's network interfaces and
-// returns the first non-loopback IPv4 address found.
-func resolveVMIP(ctx context.Context, client *Client, resource ClusterResource, logger *slog.Logger) (string, error) {
+// returns the first non-loopback IPv4 address found on the preferred interface.
+func resolveVMIP(ctx context.Context, client *Client, resource ClusterResource, logger *slog.Logger, interfacePreference string, allowedInterfaces []string) (string, error) {
 	ifaces, err := client.GetVMAgentNetworks(ctx, resource.Node, resource.VMID)
 	if err != nil {
 		var agentErr *ErrAgentNotRunning
@@ -95,18 +102,77 @@ func resolveVMIP(ctx context.Context, client *Client, resource ClusterResource, 
 		return "", fmt.Errorf("querying guest agent for VM %d on %s: %w", resource.VMID, resource.Node, err)
 	}
 
+	filterByInterface := interfacePreference != "" || len(allowedInterfaces) > 0
+	if filterByInterface {
+		selected := selectInterfaceForIP(ifaces, interfacePreference, allowedInterfaces)
+		if selected != "" {
+			for _, iface := range ifaces {
+				if iface.Name != selected {
+					continue
+				}
+				for _, addr := range iface.IPAddresses {
+					if addr.IPAddressType == ipVersionIPv4 && !isNonRoutableIP(addr.IPAddress) {
+						return addr.IPAddress, nil
+					}
+				}
+				break
+			}
+		}
+	}
+
 	for _, iface := range ifaces {
 		if isLoopback(iface.Name) {
 			continue
 		}
 		for _, addr := range iface.IPAddresses {
-			if addr.IPAddressType == ipAddressTypeIPv4 && !isNonRoutableIP(addr.IPAddress) {
+			if addr.IPAddressType == ipVersionIPv4 && !isNonRoutableIP(addr.IPAddress) {
 				return addr.IPAddress, nil
 			}
 		}
 	}
 
 	return "", nil
+}
+
+func selectInterfaceForIP(ifaces []AgentNetworkInterface, interfacePreference string, allowedInterfaces []string) string {
+	if interfacePreference != "" {
+		for _, iface := range ifaces {
+			if iface.Name == interfacePreference {
+				return iface.Name
+			}
+		}
+		return interfacePreference
+	}
+
+	if len(allowedInterfaces) == 0 {
+		return ""
+	}
+
+	for _, iface := range ifaces {
+		for _, allowed := range allowedInterfaces {
+			if strings.HasPrefix(iface.Name, allowed) {
+				return iface.Name
+			}
+		}
+	}
+	return ""
+}
+
+func parseInterfacePreferenceFromTags(tags string, prefix string) string {
+	if prefix == "" {
+		return ""
+	}
+	for _, tag := range strings.Split(tags, ";") {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		if !strings.HasPrefix(tag, prefix+"+") {
+			continue
+		}
+		return strings.TrimSpace(strings.TrimPrefix(tag, prefix+"+"))
+	}
+	return ""
 }
 
 // isLoopback returns true for known loopback interface names.

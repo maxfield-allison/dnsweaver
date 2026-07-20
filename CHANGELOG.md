@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- **Proxmox interface selection improvements.** `DNSWEAVER_PROXMOX_ALLOWED_INTERFACES`
+  now matches interface-name prefixes (so `eth` matches `eth0`), per-VM interface
+  tags from `DNSWEAVER_PROXMOX_INTERFACE_TAG_PREFIX` override the allow-list,
+  and if no allowed or tagged interface resolves, dnsweaver falls back to the
+  first non-loopback IPv4 address rather than skipping the VM.
 
 ## [2.6.0] - 2026-07-15
 

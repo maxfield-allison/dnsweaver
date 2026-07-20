@@ -296,9 +296,11 @@ func run() error {
 			return fmt.Errorf("creating proxmox client: %w", err)
 		}
 		proxmoxLister := proxmoxclient.NewWorkloadListerAdapter(pveClient, proxmoxclient.AdapterConfig{
-			NodeFilter:  cfg.ProxmoxNodeFilter(),
-			TagFilter:   cfg.ProxmoxTagFilter(),
-			StateFilter: cfg.ProxmoxStateFilter(),
+			NodeFilter:          cfg.ProxmoxNodeFilter(),
+			TagFilter:           cfg.ProxmoxTagFilter(),
+			StateFilter:         cfg.ProxmoxStateFilter(),
+			InterfacePreference: cfg.ProxmoxInterfaceTagPrefix(),
+			AllowedInterfaces:   cfg.ProxmoxAllowedInterfaces(),
 		}, logger)
 		listers = append(listers, proxmoxLister)
 		logger.Info("proxmox lister configured",

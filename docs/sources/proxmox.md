@@ -44,6 +44,8 @@ flowchart LR
 | `DNSWEAVER_PROXMOX_NODE_FILTER` | No | _(all nodes)_ | Restrict discovery to a single PVE node name |
 | `DNSWEAVER_PROXMOX_TAG_FILTER` | No | _(all tags)_ | Only include resources with this tag (prefix match) |
 | `DNSWEAVER_PROXMOX_HOSTNAME_TAG_PREFIX` | No | — | Optional tag prefix in the form `<prefix>+<hostname>` used to override the discovered hostname. The first matching tag wins if multiple tags share the prefix. |
+| `DNSWEAVER_PROXMOX_INTERFACE_TAG_PREFIX` | No | — | Optional tag prefix in the form `<prefix>+<interface>` that selects a specific guest interface for IP resolution. A matching tag overrides the allow-list and can target an interface even if it is not otherwise allowed. |
+| `DNSWEAVER_PROXMOX_ALLOWED_INTERFACES` | No | — | Comma-separated allow-list of guest interface prefixes to consider when resolving IPs (for example `eth,ens`). Prefix matching is used, so `eth` matches `eth0` and `eth1`. If no allow-listed or tagged interface yields a usable IPv4 address, dnsweaver falls back to the first non-loopback IPv4 address instead of skipping the VM. |
 | `DNSWEAVER_PROXMOX_STATE_FILTER` | No | `running` | PVE resource status filter (`running`, `stopped`, etc.) |
 | `DNSWEAVER_PROXMOX_DOMAIN_SUFFIX` | No | — | Domain suffix appended to VM names, e.g. `home.example.com` |
 | `DNSWEAVER_PROXMOX_TARGET_MODE` | No | `guest-ip` | Target resolution mode. `guest-ip` (default) emits an A record per VM IP. `instance` defers record type and target to the matching provider instance — useful for pointing all VMs at a reverse proxy via CNAME. |
@@ -93,6 +95,14 @@ IP resolution differs by resource type:
 | **LXC container** | `net0` config field (`ip=<address>/prefix`) | Reads directly from the PVE API; no agent required |
 
 VMs without a running guest agent are skipped (a debug log entry is emitted). To include VMs, install and enable `qemu-guest-agent` inside the guest.
+
+When interface selection is configured, dnsweaver resolves VM IPs in this order:
+
+1. A matching interface tag from `DNSWEAVER_PROXMOX_INTERFACE_TAG_PREFIX` (if present)
+2. The first interface whose name matches one of the prefixes in `DNSWEAVER_PROXMOX_ALLOWED_INTERFACES` (if configured)
+3. The first non-loopback IPv4 address found on any interface, as a fallback
+
+This keeps the behavior predictable for multi-interface VMs while still avoiding host-only adapters by default when you configure an allow-list.
 
 ## Target Mode
 

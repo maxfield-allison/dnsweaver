@@ -10,10 +10,12 @@ import (
 )
 
 const (
-	resourceTypeLXC = "lxc"
-	tagLabelValue   = "true"
+	resourceTypeLXC  = "lxc"
+	resourceTypeQEMU = "qemu"
+	tagLabelValue    = "true"
 
-	stateRunning = "running"
+	stateRunning  = "running"
+	ipVersionIPv4 = "ipv4"
 )
 
 // Metadata/log field keys shared between logging and the toWorkload metadata map.
@@ -38,6 +40,14 @@ type AdapterConfig struct {
 	// StateFilter restricts listing to resources in the given state.
 	// Typical values: "running", "stopped". Defaults to "running" if empty.
 	StateFilter string
+
+	// InterfacePreference selects a specific guest interface name to use for IP resolution.
+	// Empty string means no preference and the adapter will use the allow-list below.
+	InterfacePreference string
+
+	// AllowedInterfaces is a list of interface names that are allowed for IP resolution.
+	// If provided, the resolver will only consider those interfaces in order.
+	AllowedInterfaces []string
 }
 
 // WorkloadListerAdapter wraps a Proxmox Client to implement the workload.Lister interface.
@@ -59,9 +69,11 @@ func NewWorkloadListerAdapter(c *Client, cfg AdapterConfig, logger *slog.Logger)
 	return &WorkloadListerAdapter{
 		client: c,
 		cfg: AdapterConfig{
-			NodeFilter:  cfg.NodeFilter,
-			TagFilter:   cfg.TagFilter,
-			StateFilter: stateFilter,
+			NodeFilter:          cfg.NodeFilter,
+			TagFilter:           cfg.TagFilter,
+			StateFilter:         stateFilter,
+			InterfacePreference: cfg.InterfacePreference,
+			AllowedInterfaces:   cfg.AllowedInterfaces,
 		},
 		logger: logger,
 	}
@@ -83,7 +95,8 @@ func (a *WorkloadListerAdapter) ListWorkloads(ctx context.Context) ([]workload.W
 			continue
 		}
 
-		ip, err := ResolveIP(ctx, a.client, r, a.logger)
+		interfacePreference := parseInterfacePreferenceFromTags(r.Tags, a.cfg.InterfacePreference)
+		ip, err := ResolveIPWithInterfacePreferences(ctx, a.client, r, a.logger, interfacePreference, a.cfg.AllowedInterfaces)
 		if err != nil {
 			a.logger.Warn("could not resolve IP for proxmox resource",
 				slog.String(metaKeyNode, r.Node),

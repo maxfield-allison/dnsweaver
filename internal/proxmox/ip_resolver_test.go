@@ -62,6 +62,42 @@ func TestIsLoopback(t *testing.T) {
 	}
 }
 
+func TestParseInterfacePreferenceFromTags(t *testing.T) {
+	if got := parseInterfacePreferenceFromTags("dnsweaver+eth1;other:keep", "dnsweaver"); got != "eth1" {
+		t.Fatalf("parseInterfacePreferenceFromTags() = %q, want %q", got, "eth1")
+	}
+	if got := parseInterfacePreferenceFromTags("other;dnsweaver+eth0", "dnsweaver"); got != "eth0" {
+		t.Fatalf("parseInterfacePreferenceFromTags() = %q, want %q", got, "eth0")
+	}
+	if got := parseInterfacePreferenceFromTags("dnsweaver+", "dnsweaver"); got != "" {
+		t.Fatalf("parseInterfacePreferenceFromTags() = %q, want empty", got)
+	}
+	if got := parseInterfacePreferenceFromTags("+eth0", ""); got != "" {
+		t.Fatalf("parseInterfacePreferenceFromTags() = %q, want empty", got)
+	}
+}
+
+func TestSelectInterfaceForIP(t *testing.T) {
+	ifaces := []AgentNetworkInterface{
+		{Name: "lo", IPAddresses: []AgentIPAddress{{IPAddressType: "ipv4", IPAddress: "127.0.0.1"}}},
+		{Name: "eth0", IPAddresses: []AgentIPAddress{{IPAddressType: "ipv4", IPAddress: "10.0.0.10"}}},
+		{Name: "docker0", IPAddresses: []AgentIPAddress{{IPAddressType: "ipv4", IPAddress: "172.17.0.1"}}},
+	}
+
+	if got := selectInterfaceForIP(ifaces, "", []string{"eth0", "docker0"}); got != "eth0" {
+		t.Fatalf("selectInterfaceForIP() = %q, want %q", got, "eth0")
+	}
+	if got := selectInterfaceForIP(ifaces, "docker0", nil); got != "docker0" {
+		t.Fatalf("selectInterfaceForIP() = %q, want %q", got, "docker0")
+	}
+	if got := selectInterfaceForIP(ifaces, "eth1", nil); got != "eth1" {
+		t.Fatalf("selectInterfaceForIP() = %q, want %q", got, "eth1")
+	}
+	if got := selectInterfaceForIP(ifaces, "", []string{"eth"}); got != "eth0" {
+		t.Fatalf("selectInterfaceForIP() = %q, want %q", got, "eth0")
+	}
+}
+
 func TestIsNonRoutableIP(t *testing.T) {
 	tests := []struct {
 		name string

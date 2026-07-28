@@ -551,6 +551,13 @@ type ProviderInstanceConfig struct {
 	// Target is the IP or hostname target for records.
 	Target string
 
+	// TargetMode, when non-empty, signals that Target is resolved dynamically
+	// at runtime (DNSWEAVER_{NAME}_TARGET_MODE, e.g. "public" or
+	// "interface:<name>"). In that case Target is optional and acts only as a
+	// fallback until the first successful resolution, so Validate does not
+	// require it. Empty means Target is used verbatim and is required.
+	TargetMode string
+
 	// TTL is the record TTL in seconds.
 	TTL int
 
@@ -592,19 +599,27 @@ func (c *ProviderInstanceConfig) Validate() error {
 	if c.RecordType != RecordTypeA && c.RecordType != RecordTypeAAAA && c.RecordType != RecordTypeCNAME {
 		return ErrConfigInvalid("record_type", string(c.RecordType), "must be A, AAAA, or CNAME")
 	}
-	if c.Target == "" {
-		return ErrConfigMissing("target")
-	}
 
-	// Validate target matches record type
-	if c.RecordType == RecordTypeCNAME && isIPAddress(c.Target) {
-		return ErrConfigInvalid("target", c.Target, "CNAME records cannot point to IP addresses; use record_type=A or AAAA for IP targets")
-	}
-	if c.RecordType == RecordTypeA && !isIPv4Address(c.Target) {
-		return ErrConfigInvalid("target", c.Target, "A records must point to IPv4 addresses; use record_type=AAAA for IPv6 or CNAME for hostnames")
-	}
-	if c.RecordType == RecordTypeAAAA && !isIPv6Address(c.Target) {
-		return ErrConfigInvalid("target", c.Target, "AAAA records must point to IPv6 addresses; use record_type=A for IPv4 or CNAME for hostnames")
+	// Target is required unless a dynamic TargetMode is configured, in which
+	// case it is resolved at runtime and Target (when set) is only a fallback.
+	// When a fallback Target is provided alongside a mode we still type-check
+	// it below; when it is empty the runtime resolver is family-aware and
+	// validates its own output, so there is nothing to check here.
+	if c.Target == "" {
+		if c.TargetMode == "" {
+			return ErrConfigMissing("target")
+		}
+	} else {
+		// Validate target matches record type.
+		if c.RecordType == RecordTypeCNAME && isIPAddress(c.Target) {
+			return ErrConfigInvalid("target", c.Target, "CNAME records cannot point to IP addresses; use record_type=A or AAAA for IP targets")
+		}
+		if c.RecordType == RecordTypeA && !isIPv4Address(c.Target) {
+			return ErrConfigInvalid("target", c.Target, "A records must point to IPv4 addresses; use record_type=AAAA for IPv6 or CNAME for hostnames")
+		}
+		if c.RecordType == RecordTypeAAAA && !isIPv6Address(c.Target) {
+			return ErrConfigInvalid("target", c.Target, "AAAA records must point to IPv6 addresses; use record_type=A for IPv4 or CNAME for hostnames")
+		}
 	}
 
 	if c.TTL < 1 {

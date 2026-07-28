@@ -342,6 +342,7 @@ func TestProviderInstanceConfig_ToProviderConfig(t *testing.T) {
 		TypeName:       "technitium",
 		RecordType:     provider.RecordTypeA,
 		Target:         "10.0.0.1",
+		TargetMode:     "public",
 		TTL:            300,
 		Domains:        []string{"*.example.com"},
 		ExcludeDomains: []string{"admin.example.com"},
@@ -361,6 +362,9 @@ func TestProviderInstanceConfig_ToProviderConfig(t *testing.T) {
 	}
 	if provCfg.Target != cfg.Target {
 		t.Errorf("Target = %q, want %q", provCfg.Target, cfg.Target)
+	}
+	if provCfg.TargetMode != cfg.TargetMode {
+		t.Errorf("TargetMode = %q, want %q", provCfg.TargetMode, cfg.TargetMode)
 	}
 	if provCfg.TTL != cfg.TTL {
 		t.Errorf("TTL = %d, want %d", provCfg.TTL, cfg.TTL)

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-07-28
+
 ### Added
 - **Proxmox interface selection improvements.** `DNSWEAVER_PROXMOX_ALLOWED_INTERFACES`
   now matches interface-name prefixes (so `eth` matches `eth0`), per-VM interface
@@ -1387,7 +1389,8 @@ release workflow.
 - GitLab CI/CD pipeline with GitHub release automation
 - Docker Hub and GitHub Container Registry publishing
 
-[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v2.6.0...HEAD
+[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v2.7.0...HEAD
+[2.7.0]: https://github.com/maxfield-allison/dnsweaver/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/maxfield-allison/dnsweaver/compare/v2.5.0...v2.6.0
 [1.1.4]: https://github.com/maxfield-allison/dnsweaver/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/maxfield-allison/dnsweaver/compare/v1.1.2...v1.1.3

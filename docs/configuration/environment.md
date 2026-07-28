@@ -324,3 +324,25 @@ See the individual provider documentation for complete settings:
 - [Webhook](../providers/webhook.md)
 
 For Kubernetes source configuration, see [Kubernetes Source](../sources/kubernetes.md).
+
+## Troubleshooting
+
+### Misspelled `DNSWEAVER_` prefix
+
+Every dnsweaver variable begins with the exact prefix `DNSWEAVER_`. A variable
+whose prefix is misspelled (for example `DNSWEVAER_CLOUDFLARE_TARGET_MODE`, with
+the `V` and `A` transposed) is not recognized and is silently ignored, which
+usually surfaces later as a confusing "required but not set" error for the value
+you thought you had set.
+
+On startup dnsweaver scans the environment for prefixes that closely resemble
+`DNSWEAVER_` but are misspelled and logs a warning with the corrected name:
+
+```
+WARN environment variable has a misspelled DNSWEAVER prefix and will be ignored
+     variable=DNSWEVAER_CLOUDFLARE_TARGET_MODE
+     did_you_mean=DNSWEAVER_CLOUDFLARE_TARGET_MODE
+```
+
+If you see this warning, fix the spelling of the variable name. Correctly
+prefixed but otherwise unknown variables are not flagged.

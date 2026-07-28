@@ -61,6 +61,12 @@ func main() {
 		}
 	}
 
+	// Surface environment variables with a misspelled DNSWEAVER prefix (e.g.
+	// DNSWEVAER_...) before loading config. Such variables are silently ignored
+	// and otherwise show up only as a confusing "required but not set" error for
+	// the value the user thought they had set.
+	config.WarnOnMisspelledEnvPrefixes(slog.Default())
+
 	// Also check DNSWEAVER_VALIDATE_ONLY env var for container-based validation
 	if parseBoolEnv("DNSWEAVER_VALIDATE_ONLY") {
 		validateOnly = boolPtr(true)

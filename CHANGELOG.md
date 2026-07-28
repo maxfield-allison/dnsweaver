@@ -6,11 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
 - **Proxmox interface selection improvements.** `DNSWEAVER_PROXMOX_ALLOWED_INTERFACES`
   now matches interface-name prefixes (so `eth` matches `eth0`), per-VM interface
   tags from `DNSWEAVER_PROXMOX_INTERFACE_TAG_PREFIX` override the allow-list,
   and if no allowed or tagged interface resolves, dnsweaver falls back to the
   first non-loopback IPv4 address rather than skipping the VM.
+- **Misspelled environment-prefix detection.** On startup dnsweaver scans the
+  environment for variables whose prefix closely resembles `DNSWEAVER_` but is
+  misspelled (for example `DNSWEVAER_CLOUDFLARE_TARGET_MODE`, with the `V` and
+  `A` transposed) and logs a warning naming the corrected variable. Such
+  variables were previously ignored silently and typically surfaced later as a
+  confusing "required but not set" error for the value the user believed they
+  had set. Only close misspellings of the prefix are flagged, so unrelated
+  environment variables and correctly prefixed keys are never reported.
+  ([GitHub #154](https://github.com/maxfield-allison/dnsweaver/issues/154))
+
+### Fixed
+- **Log injection via URLs in debug logs.** `sanitizeURL`, used when the HTTP
+  transport logs request and response URLs at debug level, redacted sensitive
+  query parameters but passed the rest of the URL through unchanged. A URL
+  carrying CR/LF or other control characters could forge or split a log entry.
+  The sanitizer now strips ASCII control characters from its output, resolving
+  the CodeQL `go/log-injection` alerts.
+  ([GitHub #155](https://github.com/maxfield-allison/dnsweaver/pull/155))
+
+### Changed
+- **Dependencies.** Bumped `prometheus/client_golang` to 1.24.1, `k8s.io/api`
+  and `k8s.io/client-go` to 0.36.3, and the `actions/setup-go` and
+  `actions/setup-python` CI actions to v7.
+  ([GitHub #153](https://github.com/maxfield-allison/dnsweaver/pull/153),
+  [#150](https://github.com/maxfield-allison/dnsweaver/pull/150),
+  [#151](https://github.com/maxfield-allison/dnsweaver/pull/151))
 
 ## [2.6.0] - 2026-07-15
 

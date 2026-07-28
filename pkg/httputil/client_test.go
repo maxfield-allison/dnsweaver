@@ -328,6 +328,20 @@ func TestSanitizeURL_NilURL(t *testing.T) {
 	}
 }
 
+func TestSanitizeURL_StripsControlChars(t *testing.T) {
+	// A URL carrying CR/LF (and other control chars) must not be able to forge
+	// or split a log line once written out.
+	u, _ := url.Parse("http://example.com/api?zone=te%0d%0aFORGED+LOG+ENTRY%00st")
+	result := sanitizeURL(u)
+
+	for _, r := range result {
+		if r < 0x20 || r == 0x7f {
+			t.Errorf("sanitized URL should not contain control characters, got %q", result)
+			break
+		}
+	}
+}
+
 func TestTLSConfig_PinnedSHA256(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -271,8 +271,10 @@ var sensitiveQueryParams = map[string]bool{
 	"apikey":   true,
 }
 
-// sanitizeURL returns a URL string with sensitive query parameters redacted.
-// This prevents credentials from appearing in debug logs.
+// sanitizeURL returns a URL string with sensitive query parameters redacted
+// and control characters neutralized. This prevents credentials from appearing
+// in debug logs and blocks log injection/forging via CR/LF or other control
+// characters embedded in a URL.
 func sanitizeURL(u *url.URL) string {
 	if u == nil {
 		return ""
@@ -288,13 +290,24 @@ func sanitizeURL(u *url.URL) string {
 	}
 
 	if !redacted {
-		return u.String()
+		return stripControlChars(u.String())
 	}
 
 	// Rebuild URL with redacted query
 	sanitized := *u
 	sanitized.RawQuery = query.Encode()
-	return sanitized.String()
+	return stripControlChars(sanitized.String())
+}
+
+// stripControlChars removes ASCII control characters (including CR and LF) from
+// s so that untrusted URL content cannot forge or split log entries.
+func stripControlChars(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // RoundTrip implements http.RoundTripper.

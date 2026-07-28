@@ -7,13 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.1] - 2026-07-28
+
 ### Fixed
 - **Dynamic target modes were rejected at startup.** A provider instance
   configured with `DNSWEAVER_{NAME}_TARGET_MODE` (`public` or `interface:<name>`)
   but no static `DNSWEAVER_{NAME}_TARGET` failed provider initialization with
   `target: required but not set`. Config loading accepted the mode, but the
   target mode was dropped before provider validation, which still required a
-  literal target — so the feature's primary use case (resolve the target
+  literal target, so the feature's primary use case (resolve the target
   dynamically, no static IP) never started. The target mode now flows through to
   provider validation, which treats `TARGET` as an optional fallback whenever a
   mode is set. A static fallback, when provided, is still checked against the
@@ -1401,7 +1403,8 @@ release workflow.
 - GitLab CI/CD pipeline with GitHub release automation
 - Docker Hub and GitHub Container Registry publishing
 
-[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v2.7.0...HEAD
+[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v2.7.1...HEAD
+[2.7.1]: https://github.com/maxfield-allison/dnsweaver/compare/v2.7.0...v2.7.1
 [2.7.0]: https://github.com/maxfield-allison/dnsweaver/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/maxfield-allison/dnsweaver/compare/v2.5.0...v2.6.0
 [1.1.4]: https://github.com/maxfield-allison/dnsweaver/compare/v1.1.3...v1.1.4

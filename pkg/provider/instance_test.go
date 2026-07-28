@@ -248,6 +248,65 @@ func TestProviderInstanceConfig_Validate_Complete(t *testing.T) {
 	}
 }
 
+func TestProviderInstanceConfig_Validate_TargetMode_NoTarget(t *testing.T) {
+	// Regression for #130: when a dynamic TARGET_MODE is set, TARGET is
+	// resolved at runtime and must not be required at validation time.
+	cfg := ProviderInstanceConfig{
+		Name:       "cloudflare",
+		TypeName:   "cloudflare",
+		RecordType: RecordTypeA,
+		Target:     "", // resolved dynamically via TargetMode
+		TargetMode: "public",
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+		ProviderConfig: map[string]string{
+			"zone_id": "abc123",
+		},
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("expected valid config with TargetMode and no Target, got error: %v", err)
+	}
+}
+
+func TestProviderInstanceConfig_Validate_TargetMode_WithFallback(t *testing.T) {
+	// A static fallback Target alongside a mode is still type-checked.
+	valid := ProviderInstanceConfig{
+		Name:           "cloudflare",
+		TypeName:       "cloudflare",
+		RecordType:     RecordTypeA,
+		Target:         "203.0.113.10", // valid IPv4 fallback
+		TargetMode:     "public",
+		TTL:            300,
+		Domains:        []string{"*.example.com"},
+		ProviderConfig: map[string]string{"zone_id": "abc123"},
+	}
+	if err := valid.Validate(); err != nil {
+		t.Errorf("expected valid config with fallback Target, got error: %v", err)
+	}
+
+	invalid := valid
+	invalid.Target = "not-an-ip" // fallback must still match record type
+	if err := invalid.Validate(); err == nil {
+		t.Error("expected error for non-IPv4 fallback Target on an A record, got nil")
+	}
+}
+
+func TestProviderInstanceConfig_Validate_NoTargetNoMode(t *testing.T) {
+	// Without a mode, TARGET remains required.
+	cfg := ProviderInstanceConfig{
+		Name:           "cloudflare",
+		TypeName:       "cloudflare",
+		RecordType:     RecordTypeA,
+		TTL:            300,
+		Domains:        []string{"*.example.com"},
+		ProviderConfig: map[string]string{"zone_id": "abc123"},
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected 'target required' error when neither Target nor TargetMode is set, got nil")
+	}
+}
+
 func TestProviderInstanceConfig_Validate_CNAME_Complete(t *testing.T) {
 	// Test a complete valid CNAME configuration
 	cfg := ProviderInstanceConfig{

@@ -73,6 +73,7 @@ func (c *ProviderInstanceConfig) ToProviderConfig() provider.ProviderInstanceCon
 		TypeName:            c.TypeName,
 		RecordType:          c.RecordType,
 		Target:              c.Target,
+		TargetMode:          c.TargetMode,
 		TTL:                 c.TTL,
 		Mode:                c.Mode,
 		Domains:             c.Domains,

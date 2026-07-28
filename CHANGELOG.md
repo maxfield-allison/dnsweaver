@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Dynamic target modes were rejected at startup.** A provider instance
+  configured with `DNSWEAVER_{NAME}_TARGET_MODE` (`public` or `interface:<name>`)
+  but no static `DNSWEAVER_{NAME}_TARGET` failed provider initialization with
+  `target: required but not set`. Config loading accepted the mode, but the
+  target mode was dropped before provider validation, which still required a
+  literal target — so the feature's primary use case (resolve the target
+  dynamically, no static IP) never started. The target mode now flows through to
+  provider validation, which treats `TARGET` as an optional fallback whenever a
+  mode is set. A static fallback, when provided, is still checked against the
+  record type. ([GitHub #130](https://github.com/maxfield-allison/dnsweaver/issues/130))
+
 ## [2.7.0] - 2026-07-28
 
 ### Added

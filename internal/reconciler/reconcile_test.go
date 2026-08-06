@@ -8,6 +8,7 @@ import (
 	"github.com/maxfield-allison/dnsweaver/pkg/provider"
 	"github.com/maxfield-allison/dnsweaver/pkg/source"
 	"github.com/maxfield-allison/dnsweaver/pkg/workload"
+	dnsweaversrc "github.com/maxfield-allison/dnsweaver/sources/dnsweaver"
 	"github.com/maxfield-allison/dnsweaver/sources/traefik"
 )
 
@@ -389,6 +390,90 @@ func TestReconcile_DuplicateHostnameAcrossWorkloads(t *testing.T) {
 	created := mockProvider.GetCreatedDNSRecords()
 	if len(created) != 1 {
 		t.Errorf("expected 1 DNS record (not 2), got %d", len(created))
+	}
+}
+
+// TestReconcile_SourceCollision_NativeHintsWinRegardlessOfOrder verifies that
+// when a single workload declares the same hostname via both a Traefik router
+// rule (which carries no per-record hints) and a native dnsweaver record (which
+// carries an explicit proxied=false hint), the explicit hint always wins — no
+// matter which source is registered first. Regression test for issue #159.
+func TestReconcile_SourceCollision_NativeHintsWinRegardlessOfOrder(t *testing.T) {
+	registerOrders := []struct {
+		name  string
+		first string // which source is registered first
+	}{
+		{name: "traefik_first", first: "traefik"},
+		{name: "dnsweaver_first", first: "dnsweaver"},
+	}
+
+	for _, tc := range registerOrders {
+		t.Run(tc.name, func(t *testing.T) {
+			// One container exposes the same hostname via a Traefik rule AND a
+			// native dnsweaver record that overrides proxied to false with a
+			// non-proxiable target.
+			dockerMock := newTestMockWorkloadLister(workload.PlatformDocker)
+			dockerMock.AddWorkload("zerobyte", map[string]string{
+				"traefik.http.routers.zerobyte.rule": "Host(`app.example.com`)",
+				"dnsweaver.records.primary.hostname": "app.example.com",
+				"dnsweaver.records.primary.proxied":  "false",
+				"dnsweaver.records.primary.target":   "192.0.2.144",
+			})
+
+			logger := quietLogger()
+
+			sources := source.NewRegistry(logger)
+			if tc.first == "traefik" {
+				sources.Register(traefik.New(traefik.WithLogger(logger)))
+				sources.Register(dnsweaversrc.New(dnsweaversrc.WithLogger(logger)))
+			} else {
+				sources.Register(dnsweaversrc.New(dnsweaversrc.WithLogger(logger)))
+				sources.Register(traefik.New(traefik.WithLogger(logger)))
+			}
+
+			mockProvider := newTestMockProvider("test-dns")
+			providers := provider.NewRegistry(logger)
+			providers.RegisterFactory("mock", func(_ provider.FactoryConfig) (provider.Provider, error) {
+				return mockProvider, nil
+			})
+			_ = providers.CreateInstance(provider.ProviderInstanceConfig{
+				Name:       "test-dns",
+				TypeName:   "mock",
+				RecordType: provider.RecordTypeA,
+				Target:     "10.0.0.1",
+				TTL:        300,
+				Domains:    []string{"*.example.com"},
+			})
+
+			r := New([]workload.Lister{dockerMock}, sources, providers,
+				WithConfig(DefaultConfig()),
+				WithLogger(logger),
+			)
+
+			result, err := r.Reconcile(context.Background())
+			if err != nil {
+				t.Fatalf("Reconcile returned error: %v", err)
+			}
+
+			// The collision is on a single workload, so it must not be counted
+			// as a cross-workload duplicate.
+			if result.HostnamesDuplicate != 0 {
+				t.Errorf("HostnamesDuplicate = %d, want 0 (same-workload multi-source is not a duplicate)", result.HostnamesDuplicate)
+			}
+
+			created := mockProvider.GetCreatedDNSRecords()
+			if len(created) != 1 {
+				t.Fatalf("expected exactly 1 DNS record, got %d", len(created))
+			}
+
+			rec := created[0]
+			if rec.Metadata["proxied"] != "false" {
+				t.Errorf("explicit per-record proxied override was dropped: Metadata[proxied] = %q, want %q", rec.Metadata["proxied"], "false")
+			}
+			if rec.Target != "192.0.2.144" {
+				t.Errorf("native record target was not applied: Target = %q, want %q", rec.Target, "192.0.2.144")
+			}
+		})
 	}
 }
 

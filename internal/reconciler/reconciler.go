@@ -318,18 +318,41 @@ func (r *Reconciler) extractHostnames(ctx context.Context, workloads []workload.
 			hostname := &hostnames[i]
 			// Use normalized (lowercase) name as key for case-insensitive comparison (RFC 1035)
 			normalizedName := hostname.NormalizedName()
-			if existingWorkload, exists := hostnameOrigins[normalizedName]; exists {
-				// Duplicate hostname detected
+			existingWorkload, exists := hostnameOrigins[normalizedName]
+			if !exists {
+				hostnameOrigins[normalizedName] = w.Name
+				discoveredHostnames[normalizedName] = hostname
+				continue
+			}
+
+			// A hostname collision. Resolve it by explicit precedence rather than
+			// by source-registration order: a candidate carrying per-record hints
+			// (e.g. native dnsweaver labels with proxied=false) wins over one that
+			// carries none (e.g. a Traefik router rule), so the more specific
+			// declaration is never silently dropped. See issue #159.
+			winner := mergeDuplicateHostname(discoveredHostnames[normalizedName], hostname)
+			discoveredHostnames[normalizedName] = winner
+
+			if existingWorkload != w.Name {
+				// Genuine cross-workload collision: two different workloads claim
+				// the same hostname. This usually signals a misconfiguration.
 				r.logger.Warn("duplicate hostname found in multiple workloads",
 					slog.String("hostname", hostname.Name),
 					slog.String("first_workload", existingWorkload),
 					slog.String("duplicate_workload", w.Name),
+					slog.String("selected_source", winner.Source),
 				)
 				result.HostnamesDuplicate++
-				// First workload wins - don't update hostnameOrigins
 			} else {
-				hostnameOrigins[normalizedName] = w.Name
-				discoveredHostnames[normalizedName] = hostname
+				// The same workload declared this hostname via multiple sources
+				// (e.g. a Traefik rule and a native dnsweaver record). This is a
+				// supported pattern, not an error — hint precedence decides which
+				// declaration wins.
+				r.logger.Debug("hostname declared by multiple sources on one workload; applying hint precedence",
+					slog.String("hostname", hostname.Name),
+					slog.String("workload", w.Name),
+					slog.String("selected_source", winner.Source),
+				)
 			}
 		}
 	}
@@ -358,13 +381,56 @@ func (r *Reconciler) extractHostnames(ctx context.Context, workloads []workload.
 			hostname := &fileHostnames[i]
 			// Use normalized (lowercase) name as key for case-insensitive comparison (RFC 1035)
 			normalizedName := hostname.NormalizedName()
-			if _, exists := discoveredHostnames[normalizedName]; !exists {
+			if existing, exists := discoveredHostnames[normalizedName]; !exists {
 				discoveredHostnames[normalizedName] = hostname
+			} else {
+				// Apply the same hint precedence as workload extraction so a
+				// file-declared record with explicit hints is not shadowed by a
+				// hint-less label collision (and vice versa). See issue #159.
+				discoveredHostnames[normalizedName] = mergeDuplicateHostname(existing, hostname)
 			}
 		}
 	}
 
 	return discoveredHostnames
+}
+
+// mergeDuplicateHostname resolves a collision between an already-selected
+// hostname and a newly discovered duplicate of the same (normalized) name.
+//
+// Precedence is explicit and independent of source registration order: the
+// candidate carrying per-record hints (RecordHints, e.g. a native dnsweaver
+// record with proxied=false) wins over one without (e.g. a Traefik router rule
+// that only yields a bare hostname). When neither or both carry hints, the
+// existing selection is kept for determinism. Instance-selection metadata from
+// the losing candidate is preserved on the winner so provider-instance
+// filtering (e.g. Traefik entrypoints) still applies. See issue #159.
+func mergeDuplicateHostname(existing, candidate *source.Hostname) *source.Hostname {
+	winner, loser := existing, candidate
+	if existing.RecordHints == nil && candidate.RecordHints != nil {
+		winner, loser = candidate, existing
+	}
+	winner.Metadata = mergeInstanceMetadata(winner.Metadata, loser.Metadata)
+	return winner
+}
+
+// mergeInstanceMetadata returns the union of two instance-selection metadata
+// maps. The winner's existing keys take precedence; the loser only fills gaps.
+// The winner map is returned (possibly newly allocated); neither input's
+// existing values are overwritten.
+func mergeInstanceMetadata(winner, loser map[string]string) map[string]string {
+	if len(loser) == 0 {
+		return winner
+	}
+	if winner == nil {
+		winner = make(map[string]string, len(loser))
+	}
+	for k, v := range loser {
+		if _, ok := winner[k]; !ok {
+			winner[k] = v
+		}
+	}
+	return winner
 }
 
 // ReconcileHostname performs reconciliation for a single hostname.

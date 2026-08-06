@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Source collision could drop a per-record `proxied` override.** When one
+  workload exposed the same hostname via both a Traefik router rule and a native
+  `dnsweaver.records.<name>.*` label, deduplication kept whichever source was
+  listed first in `DNSWEAVER_SOURCES` rather than the more specific declaration.
+  Because the Traefik source carries no per-record hints, a native
+  `proxied=false` override (and its target) was silently discarded whenever
+  Traefik was registered first, causing the provider default to apply — e.g. a
+  Cloudflare `9003` error for a proxied record pointing at a private IP.
+  Hostname collisions on a single workload are now resolved by explicit hint
+  precedence: a candidate carrying record hints wins over one without,
+  regardless of source ordering, and instance-selection metadata from the losing
+  candidate is preserved. Same-workload multi-source declarations are no longer
+  counted or warned as cross-workload duplicates.
+  ([GitHub #159](https://github.com/maxfield-allison/dnsweaver/issues/159))
+
 ## [2.7.1] - 2026-07-28
 
 ### Fixed

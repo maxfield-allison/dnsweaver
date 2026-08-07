@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Cloudflare auto-disables proxying for non-routable targets.** An A/AAAA
+  record whose target is a private or otherwise non-routable IP (RFC1918,
+  loopback, link-local, IPv4 CGNAT `100.64.0.0/10`, IPv6 ULA `fc00::/7`, the
+  unspecified address) can never be proxied by Cloudflare — it rejects such
+  records with error `9003`. dnsweaver now detects this and creates the record
+  unproxied instead of failing, logging a warning that names the target. An
+  explicit per-record `proxied=true` on such a target is still demoted (it could
+  only ever error), with a louder warning noting the override. CNAME targets are
+  left untouched, since their routability can't be determined without a runtime
+  lookup. This makes the `proxied` label unnecessary for internal records.
+  ([GitHub #161](https://github.com/maxfield-allison/dnsweaver/issues/161))
+
+### Fixed
+- **Source collision could drop a per-record `proxied` override.** When one
+  workload exposed the same hostname via both a Traefik router rule and a native
+  `dnsweaver.records.<name>.*` label, deduplication kept whichever source was
+  listed first in `DNSWEAVER_SOURCES` rather than the more specific declaration.
+  Because the Traefik source carries no per-record hints, a native
+  `proxied=false` override (and its target) was silently discarded whenever
+  Traefik was registered first, causing the provider default to apply — e.g. a
+  Cloudflare `9003` error for a proxied record pointing at a private IP.
+  Hostname collisions on a single workload are now resolved by explicit hint
+  precedence: a candidate carrying record hints wins over one without,
+  regardless of source ordering, and instance-selection metadata from the losing
+  candidate is preserved. Same-workload multi-source declarations are no longer
+  counted or warned as cross-workload duplicates.
+  ([GitHub #159](https://github.com/maxfield-allison/dnsweaver/issues/159))
+
 ## [2.7.1] - 2026-07-28
 
 ### Fixed

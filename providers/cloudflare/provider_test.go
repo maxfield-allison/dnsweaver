@@ -3,6 +3,8 @@ package cloudflare
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -321,7 +323,7 @@ func TestProvider_Create_WithProxied(t *testing.T) {
 	record := provider.Record{
 		Hostname: "proxy.example.com",
 		Type:     provider.RecordTypeA,
-		Target:   "10.0.0.1",
+		Target:   "203.0.113.10",
 	}
 
 	err := p.Create(context.Background(), record)
@@ -605,7 +607,7 @@ func TestProvider_Create_WithMetadataProxiedOverride(t *testing.T) {
 	record := provider.Record{
 		Hostname: "override.example.com",
 		Type:     provider.RecordTypeA,
-		Target:   "10.0.0.1",
+		Target:   "203.0.113.10",
 		TTL:      300,
 		Metadata: map[string]string{"proxied": "true"},
 	}
@@ -722,5 +724,140 @@ func TestProvider_List_PopulatesProxiedMetadata(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// newResolveProxiedProvider builds a minimal provider for resolveProxied unit
+// tests, with a given provider-level default and a discarding logger.
+func newResolveProxiedProvider(defaultProxied bool) *Provider {
+	return &Provider{
+		name:    "test-cf",
+		proxied: defaultProxied,
+		logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+}
+
+func TestResolveProxied_NonRoutableTargetsDemoted(t *testing.T) {
+	// A/AAAA records whose target cannot be proxied by Cloudflare should be
+	// forced unproxied regardless of the provider default or an explicit hint.
+	nonRoutable := []struct {
+		name   string
+		typ    provider.RecordType
+		target string
+	}{
+		{"rfc1918_10", provider.RecordTypeA, "10.0.0.1"},
+		{"rfc1918_172", provider.RecordTypeA, "172.16.5.9"},
+		{"rfc1918_192", provider.RecordTypeA, "192.168.0.144"},
+		{"loopback_v4", provider.RecordTypeA, "127.0.0.1"},
+		{"linklocal_v4", provider.RecordTypeA, "169.254.1.1"},
+		{"unspecified_v4", provider.RecordTypeA, "0.0.0.0"},
+		{"cgnat_low", provider.RecordTypeA, "100.64.0.1"},
+		{"cgnat_high", provider.RecordTypeA, "100.127.255.254"},
+		{"ula_v6", provider.RecordTypeAAAA, "fd00::1"},
+		{"loopback_v6", provider.RecordTypeAAAA, "::1"},
+		{"linklocal_v6", provider.RecordTypeAAAA, "fe80::1"},
+	}
+
+	for _, tc := range nonRoutable {
+		t.Run(tc.name+"_default_true", func(t *testing.T) {
+			p := newResolveProxiedProvider(true)
+			rec := provider.Record{Hostname: "app.example.com", Type: tc.typ, Target: tc.target}
+			if p.resolveProxied(rec) {
+				t.Errorf("resolveProxied(%s %s) = true, want false (non-routable, default on)", tc.typ, tc.target)
+			}
+		})
+		t.Run(tc.name+"_explicit_true", func(t *testing.T) {
+			p := newResolveProxiedProvider(false)
+			rec := provider.Record{
+				Hostname: "app.example.com",
+				Type:     tc.typ,
+				Target:   tc.target,
+				Metadata: map[string]string{"proxied": "true"},
+			}
+			if p.resolveProxied(rec) {
+				t.Errorf("resolveProxied(%s %s, explicit true) = true, want false (non-routable overrides explicit)", tc.typ, tc.target)
+			}
+		})
+	}
+}
+
+func TestResolveProxied_RoutableAndOtherTypesUnchanged(t *testing.T) {
+	tests := []struct {
+		name           string
+		defaultProxied bool
+		record         provider.Record
+		want           bool
+	}{
+		{
+			name:           "public_v4_default_true",
+			defaultProxied: true,
+			record:         provider.Record{Type: provider.RecordTypeA, Target: "1.1.1.1"},
+			want:           true,
+		},
+		{
+			name:           "public_v4_default_false",
+			defaultProxied: false,
+			record:         provider.Record{Type: provider.RecordTypeA, Target: "1.1.1.1"},
+			want:           false,
+		},
+		{
+			name:           "public_v4_explicit_true",
+			defaultProxied: false,
+			record:         provider.Record{Type: provider.RecordTypeA, Target: "8.8.8.8", Metadata: map[string]string{"proxied": "true"}},
+			want:           true,
+		},
+		{
+			name:           "public_v6_default_true",
+			defaultProxied: true,
+			record:         provider.Record{Type: provider.RecordTypeAAAA, Target: "2606:4700:4700::1111"},
+			want:           true,
+		},
+		{
+			// CNAME targets are names, not IPs — never inferred, honor default/hint.
+			name:           "cname_private_looking_default_true",
+			defaultProxied: true,
+			record:         provider.Record{Type: provider.RecordTypeCNAME, Target: "internal.example.com"},
+			want:           true,
+		},
+		{
+			name:           "cname_explicit_false",
+			defaultProxied: true,
+			record:         provider.Record{Type: provider.RecordTypeCNAME, Target: "internal.example.com", Metadata: map[string]string{"proxied": "false"}},
+			want:           false,
+		},
+		{
+			// A record with a non-IP target (shouldn't happen, but must not panic).
+			name:           "a_record_non_ip_target",
+			defaultProxied: true,
+			record:         provider.Record{Type: provider.RecordTypeA, Target: "not-an-ip"},
+			want:           true,
+		},
+		{
+			name:           "txt_never_proxied",
+			defaultProxied: true,
+			record:         provider.Record{Type: provider.RecordTypeTXT, Target: "some text"},
+			want:           false,
+		},
+		{
+			name:           "srv_never_proxied",
+			defaultProxied: true,
+			record:         provider.Record{Type: provider.RecordTypeSRV, Target: "srv.example.com"},
+			want:           false,
+		},
+		{
+			name:           "explicit_false_public_target",
+			defaultProxied: true,
+			record:         provider.Record{Type: provider.RecordTypeA, Target: "1.1.1.1", Metadata: map[string]string{"proxied": "false"}},
+			want:           false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newResolveProxiedProvider(tc.defaultProxied)
+			if got := p.resolveProxied(tc.record); got != tc.want {
+				t.Errorf("resolveProxied() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

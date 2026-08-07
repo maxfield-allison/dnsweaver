@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/provider"
@@ -464,23 +466,80 @@ var _ provider.Updater = (*Provider)(nil)
 // resolveProxied determines the effective proxied state for a record.
 // Priority order:
 //  1. TXT/SRV records are never proxied (Cloudflare limitation)
-//  2. Per-record Metadata["proxied"] override (if present)
-//  3. Provider-level config default (p.proxied)
+//  2. Per-record Metadata["proxied"] override, else provider-level default
+//  3. A/AAAA records whose target is a non-routable IP are forced unproxied,
+//     because Cloudflare rejects proxying such targets with error 9003. This
+//     overrides both the default and an explicit proxied=true (a louder
+//     warning is logged in the explicit case).
 func (p *Provider) resolveProxied(record provider.Record) bool {
 	// TXT and SRV records cannot be proxied by Cloudflare
 	if record.Type == provider.RecordTypeTXT || record.Type == provider.RecordTypeSRV {
 		return false
 	}
 
-	// Check per-record metadata override
+	// Determine the requested proxied state and whether it was set explicitly
+	// via a per-record hint (vs inherited from the provider default).
+	proxied := p.proxied
+	explicit := false
 	if record.Metadata != nil {
 		if v, ok := record.Metadata["proxied"]; ok {
-			return parseBool(v)
+			proxied = parseBool(v)
+			explicit = true
 		}
 	}
 
-	// Fall back to provider-level default
-	return p.proxied
+	// Cloudflare cannot proxy a non-routable target; honoring proxied=true here
+	// can only ever produce a 9003 API error. Demote to unproxied and explain.
+	if proxied && isNonRoutableTarget(record) {
+		if explicit {
+			p.logger.Warn("overriding explicit proxied=true: Cloudflare cannot proxy a non-routable target; creating record unproxied",
+				slog.String("provider", p.name),
+				slog.String("hostname", record.Hostname),
+				slog.String("type", string(record.Type)),
+				slog.String("target", record.Target),
+			)
+		} else {
+			p.logger.Warn("auto-disabling Cloudflare proxy: target is not publicly routable",
+				slog.String("provider", p.name),
+				slog.String("hostname", record.Hostname),
+				slog.String("type", string(record.Type)),
+				slog.String("target", record.Target),
+			)
+		}
+		return false
+	}
+
+	return proxied
+}
+
+// isNonRoutableTarget reports whether the record's target is a literal IP that
+// Cloudflare cannot proxy. Only A and AAAA records are considered; CNAME
+// targets are hostnames and are left to the explicit hint / provider default,
+// since deciding their routability would require runtime DNS lookups.
+//
+// "Non-routable" here is Cloudflare-specific: RFC1918, loopback, link-local,
+// the unspecified address, IPv6 ULA (fc00::/7), and IPv4 CGNAT
+// (100.64.0.0/10, RFC 6598). CGNAT is intentionally included because it is not
+// publicly reachable, even though other parts of dnsweaver (e.g. the Incus IP
+// resolver) deliberately keep CGNAT for Tailscale targets — different context,
+// different call.
+func isNonRoutableTarget(record provider.Record) bool {
+	if record.Type != provider.RecordTypeA && record.Type != provider.RecordTypeAAAA {
+		return false
+	}
+	ip := net.ParseIP(strings.TrimSpace(record.Target))
+	if ip == nil {
+		return false
+	}
+	// IsPrivate covers IPv4 RFC1918 and IPv6 ULA (fc00::/7).
+	if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+		return true
+	}
+	// IPv4 CGNAT 100.64.0.0/10 (RFC 6598) is not covered by IsPrivate().
+	if v4 := ip.To4(); v4 != nil && v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127 {
+		return true
+	}
+	return false
 }
 
 // proxiedMetadata returns a Metadata map with the proxied state.

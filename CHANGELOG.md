@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Cloudflare auto-disables proxying for non-routable targets.** An A/AAAA
+  record whose target is a private or otherwise non-routable IP (RFC1918,
+  loopback, link-local, IPv4 CGNAT `100.64.0.0/10`, IPv6 ULA `fc00::/7`, the
+  unspecified address) can never be proxied by Cloudflare — it rejects such
+  records with error `9003`. dnsweaver now detects this and creates the record
+  unproxied instead of failing, logging a warning that names the target. An
+  explicit per-record `proxied=true` on such a target is still demoted (it could
+  only ever error), with a louder warning noting the override. CNAME targets are
+  left untouched, since their routability can't be determined without a runtime
+  lookup. This makes the `proxied` label unnecessary for internal records.
+  ([GitHub #161](https://github.com/maxfield-allison/dnsweaver/issues/161))
+
 ### Fixed
 - **Source collision could drop a per-record `proxied` override.** When one
   workload exposed the same hostname via both a Traefik router rule and a native

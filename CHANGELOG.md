@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.2] - 2026-08-07
+
 ### Changed
 - **Cloudflare auto-disables proxying for non-routable targets.** An A/AAAA
   record whose target is a private or otherwise non-routable IP (RFC1918,

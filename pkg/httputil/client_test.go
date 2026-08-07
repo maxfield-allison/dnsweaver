@@ -340,6 +340,11 @@ func TestSanitizeURL_StripsControlChars(t *testing.T) {
 			break
 		}
 	}
+
+	// Explicitly assert the CR/LF log-forging vectors are gone (CWE-117).
+	if strings.ContainsAny(result, "\r\n") {
+		t.Errorf("sanitized URL must not contain CR or LF, got %q", result)
+	}
 }
 
 func TestTLSConfig_PinnedSHA256(t *testing.T) {

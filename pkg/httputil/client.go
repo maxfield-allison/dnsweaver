@@ -299,9 +299,19 @@ func sanitizeURL(u *url.URL) string {
 	return stripControlChars(sanitized.String())
 }
 
-// stripControlChars removes ASCII control characters (including CR and LF) from
-// s so that untrusted URL content cannot forge or split log entries.
+// stripControlChars removes ASCII control characters from s so that untrusted
+// URL content cannot forge or split log entries.
+//
+// CR and LF (the actual log-forging vectors for CWE-117) are removed first via
+// explicit replacements; this is the canonical newline barrier that static
+// analyzers recognize as neutralizing log injection. The subsequent pass then
+// drops any remaining control characters (tab, NUL, DEL, etc.) for good measure.
 func stripControlChars(s string) string {
+	// Remove carriage returns and line feeds explicitly. These are what allow
+	// forging a new log line; neutralizing them is the CWE-117 barrier.
+	s = strings.ReplaceAll(s, "\r", "")
+	s = strings.ReplaceAll(s, "\n", "")
+	// Drop any other control characters that could corrupt log output.
 	return strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
 			return -1

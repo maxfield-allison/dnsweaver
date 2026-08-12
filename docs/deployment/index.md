@@ -1,6 +1,6 @@
 ---
 title: Deployment
-description: Deploy dnsweaver in Docker, Kubernetes, Proxmox VE, or hybrid environments
+description: Deploy dnsweaver on Docker, Swarm, Kubernetes, Proxmox VE, Incus, or hybrid environments
 icon: material/server
 ---
 

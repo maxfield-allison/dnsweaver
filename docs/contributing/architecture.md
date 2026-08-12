@@ -4,7 +4,7 @@ High-level overview of dnsweaver's architecture, data flow, and package structur
 
 ## System Overview
 
-dnsweaver is a DNS record lifecycle manager. It watches for service changes on container orchestration platforms (Docker, Kubernetes) and on Proxmox VE clusters, discovers which hostnames those services or VMs declare, and creates or removes DNS records in one or more DNS providers to match.
+dnsweaver is a DNS record lifecycle manager. It watches seven sources (Traefik, Caddy, nginx-proxy, and native labels on Docker/Swarm/Incus, plus Kubernetes, Proxmox VE, and Incus via their APIs), discovers which hostnames those workloads declare, and creates or removes DNS records in one or more of eleven DNS providers to match.
 
 ```mermaid
 graph LR

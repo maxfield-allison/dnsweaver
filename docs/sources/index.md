@@ -6,7 +6,7 @@ icon: material/source-branch
 
 # Sources
 
-dnsweaver discovers hostnames to manage from multiple **sources**. Each source type extracts hostnames differently, allowing dnsweaver to work with existing reverse proxy configurations on Docker and Kubernetes, and with VMs and containers on Proxmox VE and Incus.
+dnsweaver reads hostnames from seven **sources**. All seven are peers: enable any combination with `DNSWEAVER_SOURCES`, and run as many at once as you need. Each one extracts hostnames differently, so dnsweaver works with the reverse proxy configuration you already have and with VMs and containers discovered straight from the Proxmox VE and Incus APIs.
 
 ## Available Sources
 
@@ -90,30 +90,38 @@ dnsweaver discovers hostnames to manage from multiple **sources**. Each source t
 
 When multiple sources provide the same hostname, dnsweaver uses the following priority:
 
-1. **Native labels** (explicit dnsweaver configuration)
-2. **Traefik labels** (reverse proxy configuration)
-3. **Caddy labels** (caddy-docker-proxy configuration)
-4. **nginx-proxy labels** (`VIRTUAL_HOST`)
-5. **Traefik files** (dynamic configuration)
-6. **Kubernetes** (resource spec hostnames)
-7. **Proxmox VE** (VM/LXC name + domain suffix)
-8. **Incus** (instance name + domain suffix)
+1. `dnsweaver` native labels (explicit configuration)
+2. `traefik` labels (reverse proxy configuration)
+3. `caddy` labels (caddy-docker-proxy configuration)
+4. `nginx-proxy` labels (`VIRTUAL_HOST`)
+5. `traefik` files (dynamic configuration)
+6. `kubernetes` (resource spec hostnames)
+7. `proxmox` (VM/LXC name + domain suffix)
+8. `incus` (instance name + domain suffix)
 
-## Hostname Extraction
+Priority applies only when two sources claim the same hostname. It is a tiebreaker, not a ranking
+of the sources themselves.
 
-Each source extracts hostnames differently:
+## Capability matrix
 
-| Source | Extracts From | Example Label/Config |
-| :----- | :------------ | :------------------- |
-| Docker (Traefik) | `traefik.http.routers.*.rule` | `` Host(`app.example.com`) `` |
-| Docker (Caddy) | `caddy` / `caddy_<n>` | `caddy=app.example.com` |
-| Docker (nginx-proxy) | `VIRTUAL_HOST` label | `VIRTUAL_HOST=app.example.com` |
-| Docker Swarm | Service labels | Same as Docker |
-| Traefik Files | `http.routers.*.rule` in YAML/TOML | Standard Traefik config |
-| Native | `dnsweaver.hostname` | `dnsweaver.hostname=app.example.com` |
-| Kubernetes | Resource spec fields | `.spec.rules[].host` (Ingress) |
-| Proxmox VE | VM/LXC name + domain suffix | `webserver` + `home.example.com` |
-| Incus | Instance name + domain suffix | `webserver` + `home.example.com` |
+The value in the first column is what you put in `DNSWEAVER_SOURCES`.
+
+| Source | Reads | Runs over | Example |
+| :----- | :---- | :-------- | :------ |
+| `traefik` | `traefik.http.routers.*.rule` labels, plus `http.routers.*.rule` in Traefik dynamic config files | Docker, Swarm, Incus | `` Host(`app.example.com`) `` |
+| `caddy` | `caddy` / `caddy_<n>` labels from caddy-docker-proxy | Docker, Swarm, Incus | `caddy=app.example.com` |
+| `nginx-proxy` | `VIRTUAL_HOST` labels from jwilder/nginx-proxy | Docker, Swarm, Incus | `VIRTUAL_HOST=app.example.com` |
+| `dnsweaver` | Native `dnsweaver.*` labels, for explicit record configuration | Docker, Swarm, Incus | `dnsweaver.hostname=app.example.com` |
+| `kubernetes` | Ingress, IngressRoute, HTTPRoute, and Service resource specs | Kubernetes | `.spec.rules[].host` |
+| `proxmox` | PVE API: QEMU VM names via the guest agent, and LXC container names | Proxmox VE | `webserver` + `home.example.com` |
+| `incus` | Incus API: system container and VM instance names | Incus | `webserver` + `home.example.com` |
+
+The four label-reading sources also work on Incus, because the Incus adapter surfaces
+[incus-compose](https://github.com/lxc/incus-compose) `user.label.<key>` config keys under their
+stripped `<key>` form. No extra configuration needed.
+
+Traefik file discovery is part of the `traefik` source, not a separate entry: set
+`DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS` and it turns on.
 
 !!! info "Multiple hostnames"
     Containers and Kubernetes resources can expose multiple hostnames. All discovered hostnames are processed independently and matched against configured provider domains.

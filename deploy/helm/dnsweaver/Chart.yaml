@@ -1,6 +1,6 @@
 apiVersion: v2
 name: dnsweaver
-description: Automatic DNS record management for Docker and Kubernetes workloads
+description: Automatic DNS records for containers, VMs and clusters
 type: application
 version: 1.0.0
 appVersion: "1.0.0"
@@ -12,9 +12,18 @@ maintainers:
     url: https://github.com/maxfield-allison
 keywords:
   - dns
+  - dns-automation
   - kubernetes
   - docker
+  - proxmox
+  - incus
   - external-dns
   - traefik
   - ingress
-icon: https://raw.githubusercontent.com/maxfield-allison/dnsweaver/main/docs/assets/logo.png
+  - split-horizon
+  - self-hosted
+  - homelab
+  - technitium
+  - pihole
+  - adguard
+icon: https://raw.githubusercontent.com/maxfield-allison/dnsweaver/main/docs/assets/brand/icon-512.png

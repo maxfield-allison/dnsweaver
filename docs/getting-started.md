@@ -1,6 +1,6 @@
 ---
 title: Getting Started
-description: Install dnsweaver and set up automatic DNS for Docker, Kubernetes, or Proxmox in minutes — first provider configuration and your first auto-created record.
+description: Install dnsweaver and set up automatic DNS records for containers, VMs and clusters in minutes. First provider configuration and your first auto-created record.
 ---
 
 # Getting Started

@@ -1,6 +1,6 @@
 site_name: dnsweaver
 site_url: https://maxfield-allison.github.io/dnsweaver/
-site_description: Automatic DNS management for Docker, Kubernetes, and Proxmox VE workloads — multi-provider, split-horizon, and platform-agnostic
+site_description: Automatic DNS records for containers, VMs and clusters. Seven sources, eleven DNS providers, split-horizon out of the box.
 site_author: Maxfield Allison
 
 repo_name: maxfield-allison/dnsweaver
@@ -17,19 +17,20 @@ theme:
     # Light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: blue grey
-      accent: teal
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     # Dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: blue grey
-      accent: teal
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
+  font: false
   features:
     - announce.dismiss
     - content.action.edit
@@ -54,8 +55,11 @@ theme:
     - toc.follow
   icon:
     repo: fontawesome/brands/github
-  logo: assets/logo.svg
-  # favicon uses Material theme default
+  logo: assets/brand/mark-bright.svg
+  favicon: assets/brand/favicon.svg
+
+extra_css:
+  - stylesheets/brand.css
 
 extra_javascript:
   - assets/javascripts/mermaid-init.js

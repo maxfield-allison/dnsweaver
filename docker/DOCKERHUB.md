@@ -1,8 +1,8 @@
 # dnsweaver
 
-**Automatic DNS record management for Docker, Kubernetes, and Proxmox VE — with multi-provider and split-horizon support.**
+**Automatic DNS records for containers, VMs & clusters.**
 
-dnsweaver watches Docker events, Kubernetes resources, and Proxmox VE clusters and automatically creates and deletes DNS records from the labels you already have. Think of it as **external-dns for the homelab**.
+dnsweaver reads hostnames from seven sources and writes records to eleven DNS providers. A container starts with a Traefik label or a Proxmox VM boots, and the record appears; when they go away, so does it. Think of it as **external-dns for the homelab**.
 
 📚 **[Documentation](https://maxfield-allison.github.io/dnsweaver/)** · 🐙 **[GitHub](https://github.com/maxfield-allison/dnsweaver)** · 🔖 **[Releases](https://github.com/maxfield-allison/dnsweaver/releases)**
 
@@ -11,10 +11,24 @@ dnsweaver watches Docker events, Kubernetes resources, and Proxmox VE clusters a
 ## Why dnsweaver?
 
 - **Proxmox VE auto-DNS** — A records for VMs and LXCs from the PVE API. Almost nothing else does this.
-- **Self-hosted DNS, first-class** — Technitium, Pi-hole, AdGuard Home, dnsmasq, RFC 2136, Cloudflare, and webhook.
-- **Multi-platform** — Docker, Docker Swarm, Kubernetes, and Proxmox in one binary. Run one or all at once.
+- **Self-hosted DNS, first-class** — Technitium, Pi-hole, AdGuard Home, dnsmasq, OPNsense, and pfSense.
+- **Seven sources** — Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, and Incus in one binary. Run one or all at once.
 - **Split-horizon** — Internal and external records from the *same* labels (e.g. Technitium internally, Cloudflare externally).
 - **Single static Go binary** — ~15 MB, multi-arch (amd64/arm64), zero runtime dependencies.
+
+## Supported Sources
+
+Enable any combination with `DNSWEAVER_SOURCES`.
+
+| Source | Reads | Runs over |
+|--------|-------|-----------|
+| `traefik` | `traefik.http.routers.*.rule` labels, plus Traefik dynamic config files | Docker, Swarm, Incus |
+| `caddy` | `caddy` / `caddy_<n>` labels from caddy-docker-proxy | Docker, Swarm, Incus |
+| `nginx-proxy` | `VIRTUAL_HOST` labels from jwilder/nginx-proxy | Docker, Swarm, Incus |
+| `dnsweaver` | Native `dnsweaver.*` labels for explicit record configuration | Docker, Swarm, Incus |
+| `kubernetes` | Ingress, IngressRoute, HTTPRoute, and Service resources | Kubernetes |
+| `proxmox` | PVE API: QEMU VMs via guest agent, and LXC containers | Proxmox VE |
+| `incus` | Incus API: system containers and VMs | Incus |
 
 ## Supported Providers
 
@@ -22,9 +36,13 @@ dnsweaver watches Docker events, Kubernetes resources, and Proxmox VE clusters a
 |----------|--------------|
 | Technitium | A, AAAA, CNAME, SRV, TXT |
 | Cloudflare | A, AAAA, CNAME, SRV, TXT (optional proxy) |
-| RFC 2136 (BIND, Windows DNS, PowerDNS, Knot) | A, AAAA, CNAME, SRV, TXT |
+| OVHcloud | A, AAAA, CNAME, SRV, TXT |
+| RFC 2136 (BIND, Windows DNS, Knot) | A, AAAA, CNAME, SRV, TXT |
+| PowerDNS | A, AAAA, CNAME, SRV, TXT |
 | Pi-hole | A, CNAME |
 | AdGuard Home | A, AAAA, CNAME |
+| OPNsense | A, AAAA |
+| pfSense | A, AAAA |
 | dnsmasq | A, CNAME |
 | Webhook | Any (custom integrations) |
 

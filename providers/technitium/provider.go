@@ -17,7 +17,7 @@ type Provider struct {
 	url              string // Technitium API URL (recorded for Identity reporting)
 	zone             string
 	ttl              int
-	autoHTTPSRecords bool   // Create companion HTTPS records for A/CNAME records
+	autoHTTPSRecords bool   // Create companion HTTPS records for A/AAAA records
 	autoHTTPSALPN    string // ALPN value for companion HTTPS records (e.g., "h2")
 	client           *Client
 	logger           *slog.Logger
@@ -278,7 +278,7 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 		slog.Int("ttl", ttl),
 	)
 
-	// Auto-create companion HTTPS record for A/AAAA/CNAME records when enabled.
+	// Auto-create companion HTTPS record for A/AAAA records when enabled.
 	// This prevents ECH fallback errors in split-horizon DNS environments.
 	if err := p.createCompanionHTTPS(ctx, record.Hostname, record.Type, ttl); err != nil {
 		p.logger.Warn("companion HTTPS record creation failed (non-fatal)",
@@ -335,7 +335,7 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 		slog.String("target", record.Target),
 	)
 
-	// Auto-delete companion HTTPS record when an A/AAAA/CNAME record is removed.
+	// Auto-delete companion HTTPS record when an A/AAAA record is removed.
 	// Uses best-effort: companion may already be gone or manually deleted.
 	if err := p.deleteCompanionHTTPS(ctx, record.Hostname, record.Type); err != nil {
 		p.logger.Warn("companion HTTPS record deletion failed (non-fatal)",

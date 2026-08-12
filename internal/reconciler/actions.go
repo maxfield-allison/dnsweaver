@@ -16,7 +16,7 @@ import (
 // 1. Check if record exists for hostname
 // 2. If exists with same target → skip (idempotent)
 // 3. If exists with different target (same type) → delete old, create new
-// 4. If exists with different type → log warning, skip (don't delete manual records)
+// 4. If exists with a type that cannot coexist (CNAME) → log warning, skip
 //
 // When hostname has RecordHints, they override provider defaults:
 // - RecordHints.Provider: route directly to named provider instead of domain matching
@@ -108,6 +108,64 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname *source.Hostname
 	return actions
 }
 
+// typesConflict reports whether a record of type desired can be created at a
+// name that already holds a record of type existing.
+//
+// DNS only forbids one combination: a CNAME is exclusive and cannot share an
+// owner name with any other data (RFC 1034 §3.6.2, RFC 2181 §10.1). Every other
+// pairing is legal and common in practice — A + AAAA for dual-stack, either of
+// them alongside an HTTPS/SVCB record, SRV alongside address records. Treating
+// those as conflicts made dnsweaver skip its own hostnames forever once a second
+// record type appeared, including the companion HTTPS record the Technitium
+// provider creates itself (issue #165).
+//
+// Callers handle the same-type case before reaching here; TXT ownership markers
+// are filtered out upstream and never reach this comparison.
+func typesConflict(desired, existing provider.RecordType) bool {
+	return desired == provider.RecordTypeCNAME || existing == provider.RecordTypeCNAME
+}
+
+// isSelfReferential reports whether target names the record's own hostname,
+// which would create a CNAME pointing at itself (a resolution loop). This
+// happens when the configured TARGET is itself a discovered hostname — e.g. a
+// reverse proxy that also has a router rule of its own.
+func isSelfReferential(hostname, target string, recordType provider.RecordType) bool {
+	if recordType != provider.RecordTypeCNAME {
+		return false
+	}
+	return source.NormalizeHostname(hostname) == source.NormalizeHostname(target)
+}
+
+// warnSelfReferentialOnce reports a self-referential CNAME at warn level the
+// first time it is seen for a provider/hostname pair and at debug level after
+// that. The condition is a configuration problem that cannot resolve on its own,
+// so repeating the warning every interval is pure noise (issue #165).
+func (r *Reconciler) warnSelfReferentialOnce(hostname, providerName, target string) {
+	key := providerName + "|" + hostname
+
+	r.mu.Lock()
+	_, seen := r.warnedSelfCNAME[key]
+	if !seen {
+		if r.warnedSelfCNAME == nil {
+			r.warnedSelfCNAME = make(map[string]struct{})
+		}
+		r.warnedSelfCNAME[key] = struct{}{}
+	}
+	r.mu.Unlock()
+
+	const msg = "skipping self-referential CNAME (target is the hostname itself)"
+	attrs := []any{
+		slog.String("hostname", hostname),
+		slog.String("provider", providerName),
+		slog.String("target", target),
+	}
+	if seen {
+		r.logger.Debug(msg, attrs...)
+		return
+	}
+	r.logger.Warn(msg, attrs...)
+}
+
 // ensureRecordForProvider handles record creation for a single provider with List+Compare logic.
 // When hostname has RecordHints, they override provider instance defaults.
 func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *source.Hostname, inst *provider.ProviderInstance, cache *recordCache) Action {
@@ -164,6 +222,16 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		Target:     target,
 	}
 
+	// A CNAME pointing at its own name is a resolution loop; no provider will
+	// accept it and retrying every interval only produces noise.
+	if isSelfReferential(hostname.Name, target, recordType) {
+		action.Type = ActionSkip
+		action.Status = StatusSkipped
+		action.Error = errSelfReferentialCNAME
+		r.warnSelfReferentialOnce(hostname.Name, inst.Name(), target)
+		return action
+	}
+
 	if r.isDryRun() {
 		action.Status = StatusSuccess
 		r.logger.Info("would create record (dry-run)",
@@ -202,18 +270,23 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 	}
 
 	// Step 2: Analyze existing records
+	// Records of a different type only conflict when DNS itself forbids the
+	// coexistence — see typesConflict. Types that may legally share a name
+	// (A + AAAA + HTTPS + SRV) are ignored here: they belong to another
+	// instance, another address family, or to our own companion HTTPS record.
 	var sameTypeRecords []provider.Record
 	var conflictingTypeRecords []provider.Record
 
 	for _, existing := range existingRecords {
-		if existing.Type == recordType {
+		switch {
+		case existing.Type == recordType:
 			sameTypeRecords = append(sameTypeRecords, existing)
-		} else {
+		case typesConflict(recordType, existing.Type):
 			conflictingTypeRecords = append(conflictingTypeRecords, existing)
 		}
 	}
 
-	// Step 3: Handle type conflicts (A vs CNAME)
+	// Step 3: Handle type conflicts (CNAME vs everything else)
 	if len(conflictingTypeRecords) > 0 {
 		conflictTypes := make([]string, 0, len(conflictingTypeRecords))
 		for _, rec := range conflictingTypeRecords {

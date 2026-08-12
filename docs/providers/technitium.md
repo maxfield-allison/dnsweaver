@@ -190,7 +190,9 @@ but emits a deprecation warning and will be removed in a future major release.
 
 ## Companion HTTPS Records
 
-By default, dnsweaver automatically creates companion HTTPS (SVCB Type 65) records whenever it creates an A, AAAA, or CNAME record in Technitium. This prevents **ECH (Encrypted Client Hello) fallback errors** that commonly affect split-horizon DNS environments.
+By default, dnsweaver automatically creates companion HTTPS (SVCB Type 65) records whenever it creates an A or AAAA record in Technitium. This prevents **ECH (Encrypted Client Hello) fallback errors** that commonly affect split-horizon DNS environments.
+
+Instances configured with `RECORD_TYPE=CNAME` get no companion record: a CNAME is exclusive and cannot share a name with any other record type, so Technitium rejects the companion outright. Those hostnames inherit the HTTPS record of the name their CNAME points at.
 
 ### Why This Exists
 
@@ -200,7 +202,7 @@ The companion HTTPS record tells browsers "this host speaks HTTP/2 over TLS" wit
 
 ### What Gets Created
 
-For each A/AAAA/CNAME record, dnsweaver creates:
+For each A/AAAA record, dnsweaver creates:
 
 ```
 app.example.com  300  IN  HTTPS  1 . alpn="h2"

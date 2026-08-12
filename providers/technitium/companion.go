@@ -19,14 +19,28 @@ const companionHTTPSSvcPriority = 1
 const companionHTTPSTargetName = "."
 
 // needsCompanionHTTPS returns true if the given record type should trigger
-// companion HTTPS record creation (A, AAAA, or CNAME).
+// companion HTTPS record creation (A or AAAA).
+//
+// CNAME is deliberately excluded: a CNAME is exclusive and cannot share an
+// owner name with an HTTPS record (RFC 1034 §3.6.2, RFC 2181 §10.1). Technitium
+// rejects the companion outright in that case, so attempting it only produced a
+// warning on every reconcile (issue #165). Hosts fronted by a CNAME inherit the
+// HTTPS record of the name they point at.
 func needsCompanionHTTPS(recordType provider.RecordType) bool {
 	switch recordType {
-	case provider.RecordTypeA, provider.RecordTypeAAAA, provider.RecordTypeCNAME:
+	case provider.RecordTypeA, provider.RecordTypeAAAA:
 		return true
 	default:
 		return false
 	}
+}
+
+// hadCompanionHTTPS returns true if a record of the given type may have a
+// companion HTTPS record left over from an earlier dnsweaver release, which
+// created companions for CNAME records too. Deletion stays broader than
+// creation so those leftovers are still cleaned up when the record is removed.
+func hadCompanionHTTPS(recordType provider.RecordType) bool {
+	return needsCompanionHTTPS(recordType) || recordType == provider.RecordTypeCNAME
 }
 
 // createCompanionHTTPS creates a companion HTTPS record for the given hostname.
@@ -38,7 +52,7 @@ func needsCompanionHTTPS(recordType provider.RecordType) bool {
 //
 // Skips creation if:
 //   - Auto HTTPS records are disabled
-//   - The record type doesn't need a companion (not A/AAAA/CNAME)
+//   - The record type doesn't need a companion (not A/AAAA)
 //   - An HTTPS record already exists for the hostname (avoids overwriting manual records)
 func (p *Provider) createCompanionHTTPS(ctx context.Context, hostname string, recordType provider.RecordType, ttl int) error {
 	if !p.autoHTTPSRecords {
@@ -90,7 +104,7 @@ func (p *Provider) deleteCompanionHTTPS(ctx context.Context, hostname string, re
 	if !p.autoHTTPSRecords {
 		return nil
 	}
-	if !needsCompanionHTTPS(recordType) {
+	if !hadCompanionHTTPS(recordType) {
 		return nil
 	}
 

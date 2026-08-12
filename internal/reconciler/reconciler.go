@@ -18,9 +18,10 @@ import (
 
 // Common error messages used in reconciliation actions.
 const (
-	errRecordAlreadyExists = "record already exists"
-	errRecordTypeConflict  = "record type conflict"
-	errNoMatchingProvider  = "no matching provider"
+	errRecordAlreadyExists  = "record already exists"
+	errRecordTypeConflict   = "record type conflict"
+	errNoMatchingProvider   = "no matching provider"
+	errSelfReferentialCNAME = "self-referential CNAME (target equals hostname)"
 )
 
 // Reconciliation-level outcome labels used for the reconciliations_total metric.
@@ -94,11 +95,17 @@ type Reconciler struct {
 	enabled atomic.Bool
 	dryRun  atomic.Bool
 
-	// mu protects knownHostnames and recoveredMetadata during concurrent access
+	// mu protects knownHostnames, recoveredMetadata, and warnedSelfCNAME during
+	// concurrent access
 	mu sync.RWMutex
 	// knownHostnames tracks hostnames discovered in the last reconciliation.
 	// Used for orphan detection.
 	knownHostnames map[string]struct{}
+
+	// warnedSelfCNAME tracks "provider|hostname" pairs already reported as
+	// self-referential CNAMEs, so the warning is logged once rather than on
+	// every reconciliation interval. Populated lazily.
+	warnedSelfCNAME map[string]struct{}
 
 	// hostnameProviders tracks which provider(s) each hostname was routed to
 	// in the previous reconciliation. Used by orphan cleanup to delete records

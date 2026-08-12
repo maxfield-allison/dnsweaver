@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Coexisting record types were rejected as conflicts, stalling reconciliation.**
+  Any existing record whose type differed from the desired one was treated as a
+  conflict, so dnsweaver logged `skipping due to record type conflict` and made
+  no changes. DNS only forbids one combination — a CNAME cannot share a name
+  with any other record (RFC 1034 §3.6.2, RFC 2181 §10.1) — and that is now the
+  only case that skips. A + AAAA dual-stack instances, SRV records, and HTTPS
+  records may coexist as they do in real zones. This most often hit single
+  Technitium instances on default settings: the companion HTTPS record dnsweaver
+  creates itself was seen as a conflict on the next pass, so target changes
+  stopped being applied after the first successful create, and deleting one
+  record never restored it.
+  ([GitHub #165](https://github.com/maxfield-allison/dnsweaver/issues/165))
+- **Technitium no longer attempts a companion HTTPS record for CNAME instances.**
+  A CNAME is exclusive, so Technitium rejected the companion and dnsweaver
+  logged a warning on every reconcile. Companions are now created for A and AAAA
+  records only; hostnames fronted by a CNAME inherit the HTTPS record of the
+  name they point at. Companions written by earlier releases are still deleted
+  when their CNAME is removed.
+  ([GitHub #165](https://github.com/maxfield-allison/dnsweaver/issues/165))
+- **Self-referential CNAMEs are skipped instead of retried.** When the configured
+  target is itself a discovered hostname — a reverse proxy with a router rule of
+  its own — dnsweaver tried to create a CNAME pointing at its own name once per
+  interval. It is now skipped with a single warning naming the hostname.
+  ([GitHub #165](https://github.com/maxfield-allison/dnsweaver/issues/165))
+
 ## [2.7.2] - 2026-08-07
 
 ### Changed

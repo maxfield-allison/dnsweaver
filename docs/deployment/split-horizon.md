@@ -60,7 +60,7 @@ When container `app.example.com` starts:
 - External DNS → `CNAME` record → `tunnel.example.com`
 
 !!! tip "Companion HTTPS Records"
-    When using Technitium for internal DNS, dnsweaver automatically creates companion HTTPS (SVCB) records alongside A/CNAME records. This prevents ECH (Encrypted Client Hello) fallback errors that commonly occur in split-horizon setups where external DNS (e.g., Cloudflare) provides HTTPS records but internal DNS doesn't. See [Technitium — Companion HTTPS Records](../providers/technitium.md#companion-https-records) for details.
+    When using Technitium for internal DNS, dnsweaver automatically creates companion HTTPS (SVCB) records alongside A/AAAA records. This prevents ECH (Encrypted Client Hello) fallback errors that commonly occur in split-horizon setups where external DNS (e.g., Cloudflare) provides HTTPS records but internal DNS doesn't. See [Technitium — Companion HTTPS Records](../providers/technitium.md#companion-https-records) for details.
 
 ## Internal-Only Services
 

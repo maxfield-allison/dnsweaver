@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.3] - 2026-08-12
+
 ### Fixed
 - **Coexisting record types were rejected as conflicts, stalling reconciliation.**
   Any existing record whose type differed from the desired one was treated as a

@@ -1,12 +1,12 @@
 ---
 title: Configuration
-description: Complete guide to configuring dnsweaver for Docker, Kubernetes, and Proxmox VE
+description: Complete guide to configuring dnsweaver across all seven sources and eleven DNS providers
 icon: material/cog
 ---
 
 # Configuration
 
-dnsweaver is configured through environment variables, making it ideal for Docker, Kubernetes, and Proxmox VE deployments. On Kubernetes, environment variables can be set via ConfigMaps, Helm values, or directly in Deployment manifests. This section covers all configuration options.
+dnsweaver is configured through environment variables, which suits Docker, Kubernetes, Proxmox VE, and Incus deployments equally. On Kubernetes, environment variables can be set via ConfigMaps, Helm values, or directly in Deployment manifests. This section covers all configuration options.
 
 ## Configuration Methods
 

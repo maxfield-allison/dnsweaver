@@ -9,12 +9,12 @@ description: Frequently asked questions about dnsweaver — how it compares to e
 
 ### What's the difference between dnsweaver and external-dns?
 
-external-dns is primarily designed for Kubernetes and cloud DNS providers. dnsweaver supports Docker, Kubernetes, and Proxmox VE with:
+external-dns is primarily designed for Kubernetes and cloud DNS providers. dnsweaver reads from seven sources and writes to eleven providers:
 
-- First-class Docker Swarm, Kubernetes, and Proxmox VE support
-- Self-hosted DNS provider focus (Technitium, Pi-hole, AdGuard Home, dnsmasq)
+- Seven sources as peers: Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, and Incus
+- Self-hosted DNS provider focus (Technitium, Pi-hole, AdGuard Home, dnsmasq, OPNsense, pfSense)
 - Multi-provider for split-horizon DNS
-- Platform-agnostic design — run on any combination of Docker, Kubernetes, and Proxmox VE simultaneously
+- Run any combination of sources simultaneously, set with `DNSWEAVER_SOURCES`
 - Simpler configuration via environment variables or YAML
 
 ### Do I need to run dnsweaver on every Docker host?

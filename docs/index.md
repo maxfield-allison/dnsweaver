@@ -1,13 +1,16 @@
 ---
-title: Automatic DNS for Docker, Kubernetes & Proxmox VE
-description: dnsweaver automatically manages DNS records for Docker containers, Kubernetes workloads, and Proxmox VE VMs and LXCs with multi-provider support
+title: Automatic DNS records for containers, VMs & clusters
+description: dnsweaver reads hostnames from seven sources (Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, Incus) and writes records to eleven DNS providers, with split-horizon out of the box.
 ---
 
 # dnsweaver
 
-**Automatic DNS management for Docker, Kubernetes, and Proxmox VE workloads with multi-provider support.**
+**Automatic DNS records for containers, VMs & clusters.**
 
-dnsweaver watches Docker events, Kubernetes resources, and Proxmox VE clusters to automatically create and delete DNS records. Unlike single-provider or single-platform tools, dnsweaver supports **split-horizon DNS**, **multiple DNS providers** simultaneously, and works across **Docker**, **Docker Swarm**, **Kubernetes**, and **Proxmox VE** — or all of them at once.
+dnsweaver reads hostnames from seven sources and writes records to eleven DNS providers. A container starts with a Traefik label or a Proxmox VM boots, and the record appears; when they go away, so does it. Internal and external records come from the same labels, so **split-horizon** costs nothing extra.
+
+![Seven sources feed dnsweaver, which writes to eleven DNS providers](assets/brand/flow-light.svg#only-light){ .dnsw-flow }
+![Seven sources feed dnsweaver, which writes to eleven DNS providers](assets/brand/flow-dark.svg#only-dark){ .dnsw-flow }
 
 ---
 
@@ -31,11 +34,11 @@ dnsweaver watches Docker events, Kubernetes resources, and Proxmox VE clusters t
 
     [:octicons-arrow-right-24: Split-Horizon Guide](deployment/split-horizon.md)
 
--   :material-docker:{ .lg .middle } **Docker, Swarm & Kubernetes**
+-   :material-source-branch:{ .lg .middle } **Seven Sources**
 
     ---
 
-    First-class support for Docker, Docker Swarm, and Kubernetes. Run on one platform or all three simultaneously.
+    Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, and Incus. All peers. Enable any combination with `DNSWEAVER_SOURCES`.
 
     [:octicons-arrow-right-24: Sources Overview](sources/index.md)
 

@@ -1,0 +1,140 @@
+/* dnsweaver brand theme for Material for MkDocs
+ *
+ * Canonical tokens live in homelab-docs/projects/dnsweaver/BRAND.md.
+ * Do not introduce colors outside the six defined here.
+ *
+ * Contrast notes:
+ *   Cyan 700 (#0E93B0) is ~3.5:1 on white. Graphics and large text only.
+ *   Cyan 800 (#0B7A93) is ~4.8:1 on white. Safe for body text and links.
+ *   Bright accents (Cyan 400, Teal 400) are for dark grounds only.
+ */
+
+/* ---------------------------------------------------------------- tokens */
+
+:root {
+  --dnsw-navy-950: #0a1422;
+  --dnsw-navy-900: #0f1d31;
+  --dnsw-cyan-400: #56d9f2;
+  --dnsw-teal-400: #2ec8a6;
+  --dnsw-cyan-700: #0e93b0;
+  --dnsw-cyan-800: #0b7a93;
+}
+
+/* ----------------------------------------------------------------- fonts */
+
+/* Sora ships as a variable font, so one file covers the 400-600 range.
+ * Both faces are SIL OFL 1.1; see fonts/OFL-*.txt. */
+@font-face {
+  font-family: "Sora";
+  src: url("./fonts/sora-variable.woff2") format("woff2");
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./fonts/jetbrains-mono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --md-text-font: "Sora";
+  --md-code-font: "JetBrains Mono";
+}
+
+/* The wordmark and headings use tight tracking per the brand spec. */
+.md-header__topic .md-ellipsis,
+.md-nav__title,
+h1, h2, h3 {
+  letter-spacing: -0.015em;
+}
+
+h1, h2, h3 {
+  font-weight: 600;
+}
+
+/* --------------------------------------------------- light scheme (default) */
+
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--dnsw-navy-950);
+  --md-primary-fg-color--light: var(--dnsw-navy-900);
+  --md-primary-fg-color--dark: var(--dnsw-navy-950);
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: rgba(255, 255, 255, 0.7);
+
+  --md-accent-fg-color: var(--dnsw-cyan-800);
+  --md-accent-fg-color--transparent: rgba(11, 122, 147, 0.1);
+
+  --md-typeset-a-color: var(--dnsw-cyan-800);
+}
+
+/* Graphics-weight cyan is fine on light for non-text UI (3:1). */
+[data-md-color-scheme="default"] .md-typeset hr,
+[data-md-color-scheme="default"] .md-typeset table th {
+  border-color: var(--dnsw-cyan-700);
+}
+
+/* ---------------------------------------------------- dark scheme (slate) */
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: var(--dnsw-navy-900);
+  --md-primary-fg-color--light: var(--dnsw-navy-900);
+  --md-primary-fg-color--dark: var(--dnsw-navy-950);
+  --md-primary-bg-color: #ffffff;
+
+  --md-accent-fg-color: var(--dnsw-cyan-400);
+  --md-accent-fg-color--transparent: rgba(86, 217, 242, 0.1);
+
+  --md-typeset-a-color: var(--dnsw-cyan-400);
+
+  --md-default-bg-color: var(--dnsw-navy-950);
+  --md-code-bg-color: var(--dnsw-navy-900);
+  --md-footer-bg-color: var(--dnsw-navy-900);
+  --md-footer-bg-color--dark: var(--dnsw-navy-950);
+}
+
+/* Horizon coding: cyan is one horizon, teal the other. Keep the pairing
+ * meaningful rather than decorative. Teal marks "secondary" affordances. */
+[data-md-color-scheme="slate"] .md-typeset .md-button--primary {
+  background-color: var(--dnsw-cyan-400);
+  border-color: var(--dnsw-cyan-400);
+  color: var(--dnsw-navy-950);
+}
+
+[data-md-color-scheme="slate"] .md-typeset code {
+  color: var(--dnsw-teal-400);
+}
+
+[data-md-color-scheme="default"] .md-typeset code {
+  color: var(--dnsw-cyan-800);
+}
+
+/* --------------------------------------------------------------- surfaces */
+
+.md-typeset .grid.cards > ul > li {
+  border-radius: 0.4rem;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .grid.cards > ul > li {
+  background-color: var(--dnsw-navy-900);
+  border-color: rgba(86, 217, 242, 0.15);
+}
+
+/* The sources-to-providers flow diagram. Full-bleed within the content column,
+ * with its own ground baked into the SVG, so no card or border around it. */
+.md-typeset img.dnsw-flow {
+  display: block;
+  width: 100%;
+  max-width: 46rem;
+  margin: 1.5rem auto;
+  border-radius: 0.4rem;
+}
+
+/* The logo mark carries its own color; never let the theme tint it. */
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  filter: none;
+}

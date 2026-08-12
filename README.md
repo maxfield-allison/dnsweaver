@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/brand/hero-banner.png" alt="dnsweaver — Automatic DNS records for containers, VMs and clusters" width="100%">
+</p>
+
 # dnsweaver
 
 [![CI](https://img.shields.io/github/actions/workflow/status/maxfield-allison/dnsweaver/ci.yml?branch=main&style=flat-square)](https://github.com/maxfield-allison/dnsweaver/actions/workflows/ci.yml)
@@ -6,9 +10,9 @@
 [![License](https://img.shields.io/github/license/maxfield-allison/dnsweaver?style=flat-square)](LICENSE)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/maxfield-allison/dnsweaver?style=flat-square)](go.mod)
 
-**Automatic DNS record management for Docker, Kubernetes, and Proxmox VE workloads with multi-provider support.**
+**Automatic DNS records for containers, VMs & clusters.**
 
-dnsweaver watches Docker events, Kubernetes resources, and Proxmox VE clusters to automatically create and delete DNS records. Unlike single-provider tools, dnsweaver supports **split-horizon DNS**, **multiple DNS providers** simultaneously, and works across **Docker**, **Kubernetes**, and **Proxmox** platforms.
+dnsweaver reads hostnames from seven sources and writes records to eleven DNS providers. A container starts with a Traefik label or a Proxmox VM boots, and the record appears; when they go away, so does it. Internal and external records come from the same labels, so split-horizon costs nothing extra.
 
 📚 **[Full Documentation](https://maxfield-allison.github.io/dnsweaver/)**
 
@@ -16,10 +20,10 @@ dnsweaver watches Docker events, Kubernetes resources, and Proxmox VE clusters t
 
 Think of dnsweaver as **external-dns for the homelab**. Where most tools solve a slice of the problem, dnsweaver covers the parts self-hosters actually run into:
 
-- **It does Proxmox.** Auto-create A records for VMs and LXCs from the PVE API — something almost no other DNS automation tool offers.
-- **It speaks self-hosted DNS.** First-class [Technitium](https://maxfield-allison.github.io/dnsweaver/providers/technitium/), [Pi-hole](https://maxfield-allison.github.io/dnsweaver/providers/pihole/), [AdGuard Home](https://maxfield-allison.github.io/dnsweaver/providers/adguard/), and [dnsmasq](https://maxfield-allison.github.io/dnsweaver/providers/dnsmasq/) support — not an afterthought, and not alpha.
-- **It's multi-platform.** Docker, Docker Swarm, Kubernetes, and Proxmox in one binary. Run one or all of them at once. `external-dns` is Kubernetes-only.
-- **It does split-horizon out of the box.** Internal and external records from the *same* labels — route private hostnames to Technitium and public ones to Cloudflare simultaneously.
+- **It does Proxmox.** Auto-create A records for VMs and LXCs from the PVE API. Almost no other DNS automation tool offers it.
+- **It speaks self-hosted DNS.** First-class [Technitium](https://maxfield-allison.github.io/dnsweaver/providers/technitium/), [Pi-hole](https://maxfield-allison.github.io/dnsweaver/providers/pihole/), [AdGuard Home](https://maxfield-allison.github.io/dnsweaver/providers/adguard/), and [dnsmasq](https://maxfield-allison.github.io/dnsweaver/providers/dnsmasq/) support. Not an afterthought, and not alpha.
+- **It's multi-source.** Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, and Incus in one binary. Run one or all of them at once. `external-dns` is Kubernetes-only.
+- **It does split-horizon out of the box.** Internal and external records from the *same* labels. Route private hostnames to Technitium and public ones to Cloudflare simultaneously.
 - **It's a single static Go binary.** ~15 MB, multi-arch (amd64/arm64), zero runtime dependencies. No Node.js, no sidecars.
 
 If you manage a homelab with Traefik, Proxmox, and a self-hosted resolver and you're still creating DNS records by hand, dnsweaver is built for you.
@@ -28,20 +32,30 @@ If you manage a homelab with Traefik, Proxmox, and a self-hosted resolver and yo
 
 - 🔀 **Multi-Provider Support** — Route different domains to different DNS providers
 - 🌐 **Split-Horizon DNS** — Internal and external records from the same container labels
-- 🐳 **Docker & Swarm** — Works with standalone Docker and Docker Swarm clusters
-- ☸️ **Kubernetes Native** — Watches Ingress, IngressRoute, HTTPRoute, and Service resources via Helm or Kustomize
-- 🖥️ **Proxmox VE** — Auto-creates A records for VMs (via QEMU guest agent) and LXC containers
-- 📦 **Incus** — Auto-creates A records for system containers and VMs via local socket or remote HTTPS
+- 🧩 **Seven Sources** — Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, and Incus, in one binary. See [Supported Sources](#supported-sources)
 - 🏗️ **Multi-Instance Safe** — Run multiple dnsweaver instances on the same DNS zone without conflicts
 - 🔒 **Socket Proxy Compatible** — Connect via TCP to a Docker socket proxy for improved security
-- 🛡️ **Hardened TLS** — Unified per-instance TLS controls (custom CA, mTLS client certs, SNI override, configurable min version; TLS 1.2 floor by default) for every HTTP-based provider and the Proxmox source
-- 🏷️ **Traefik Integration** — Parses `traefik.http.routers.*.rule` labels to extract hostnames
-- 🚀 **Caddy Integration** — Parses `caddy` / `caddy_<n>` labels from [caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy)
-- 🔧 **nginx-proxy Integration** — Parses `VIRTUAL_HOST` labels used by [jwilder/nginx-proxy](https://github.com/nginx-proxy/nginx-proxy)
+- 🛡️ **Hardened TLS** — Unified per-instance TLS controls (custom CA, mTLS client certs, SNI override, configurable min version; TLS 1.2 floor by default) for every HTTP-based provider and the Proxmox and Incus sources
 - 📊 **Observable** — Prometheus metrics, health endpoints, structured logging
 - 🔑 **Secrets Support** — Docker secrets and Kubernetes Secrets via `_FILE` suffix variables
 
+## Supported Sources
+
+Sources are where hostnames come from. Enable any combination with `DNSWEAVER_SOURCES`.
+
+| Source | Reads | Runs over |
+|--------|-------|-----------|
+| [`traefik`](https://maxfield-allison.github.io/dnsweaver/sources/docker/) | `traefik.http.routers.*.rule` labels, plus Traefik dynamic config files | Docker, Swarm, Incus |
+| [`caddy`](https://maxfield-allison.github.io/dnsweaver/sources/caddy/) | `caddy` / `caddy_<n>` labels from [caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy) | Docker, Swarm, Incus |
+| [`nginx-proxy`](https://maxfield-allison.github.io/dnsweaver/sources/nginx-proxy/) | `VIRTUAL_HOST` labels from [jwilder/nginx-proxy](https://github.com/nginx-proxy/nginx-proxy) | Docker, Swarm, Incus |
+| [`dnsweaver`](https://maxfield-allison.github.io/dnsweaver/sources/native-labels/) | Native `dnsweaver.*` labels for explicit record configuration | Docker, Swarm, Incus |
+| [`kubernetes`](https://maxfield-allison.github.io/dnsweaver/sources/kubernetes/) | Ingress, IngressRoute, HTTPRoute, and Service resources | Kubernetes |
+| [`proxmox`](https://maxfield-allison.github.io/dnsweaver/sources/proxmox/) | PVE API: QEMU VMs via guest agent, and LXC containers | Proxmox VE |
+| [`incus`](https://maxfield-allison.github.io/dnsweaver/sources/incus/) | Incus API: system containers and VMs, local socket or remote HTTPS | Incus |
+
 ## Supported Providers
+
+Providers are where records get written. Run several at once to split internal and external DNS.
 
 | Provider | Record Types | Notes |
 |----------|--------------|-------|
@@ -99,11 +113,11 @@ secrets:
 
 ```mermaid
 flowchart LR
-    subgraph sources["Sources"]
+    subgraph sources["7 sources"]
         direction TB
-        A["Docker / Swarm<br/>Traefik · Caddy · nginx labels"]
-        D["Kubernetes<br/>Ingress · HTTPRoute · Service"]
-        P["Proxmox VE · Incus<br/>VMs · LXC"]
+        A["traefik · caddy · nginx-proxy · dnsweaver<br/>labels on Docker, Swarm, Incus"]
+        D["kubernetes<br/>Ingress · IngressRoute · HTTPRoute · Service"]
+        P["proxmox · incus<br/>API: VMs · LXC · system containers"]
     end
 
     subgraph engine["dnsweaver"]
@@ -111,10 +125,10 @@ flowchart LR
         W["Watch<br/>events"] --> M["Match hostname<br/>to domain patterns"] --> R["Reconcile<br/>desired vs. live"]
     end
 
-    subgraph providers["DNS providers · split-horizon"]
+    subgraph providers["11 providers · split-horizon"]
         direction TB
-        INT["Internal<br/>Technitium · Pi-hole · AdGuard"]
-        EXT["External<br/>Cloudflare · OVH · RFC 2136"]
+        INT["Internal instance<br/>e.g. technitium · pi-hole · adguard"]
+        EXT["External instance<br/>e.g. cloudflare · ovhcloud"]
     end
 
     A --> W
@@ -145,7 +159,7 @@ flowchart LR
 | [Getting Started](https://maxfield-allison.github.io/dnsweaver/getting-started/) | Installation and first configuration |
 | [Configuration](https://maxfield-allison.github.io/dnsweaver/configuration/environment/) | Environment variables reference |
 | [Providers](https://maxfield-allison.github.io/dnsweaver/providers/) | Provider-specific setup guides |
-| [Sources](https://maxfield-allison.github.io/dnsweaver/sources/) | Docker, Kubernetes, Proxmox, Incus, Traefik file sources |
+| [Sources](https://maxfield-allison.github.io/dnsweaver/sources/) | All seven sources, what each reads, and the capability matrix |
 | [Kubernetes](https://maxfield-allison.github.io/dnsweaver/deployment/kubernetes/) | Kubernetes deployment with Helm/Kustomize |
 | [Proxmox VE](https://maxfield-allison.github.io/dnsweaver/sources/proxmox/) | Auto-DNS for VMs and LXC containers |
 | [Incus](https://maxfield-allison.github.io/dnsweaver/sources/incus/) | Auto-DNS for system containers and VMs |
@@ -156,7 +170,7 @@ flowchart LR
 
 ### TLS Configuration
 
-Every HTTP-based provider (Technitium, AdGuard Home, Cloudflare, OVHcloud, PowerDNS, Pi-hole, Webhook) and the Proxmox source share a single TLS configuration surface:
+Every HTTP-based provider (Technitium, AdGuard Home, Cloudflare, OVHcloud, PowerDNS, Pi-hole, OPNsense, pfSense, Webhook) and the Proxmox and Incus sources share a single TLS configuration surface:
 
 | Env key (per instance) | Purpose |
 |------------------------|---------|
@@ -166,7 +180,7 @@ Every HTTP-based provider (Technitium, AdGuard Home, Cloudflare, OVHcloud, Power
 | `DNSWEAVER_<NAME>_TLS_SKIP_VERIFY` | Disable verification (development only) |
 | `DNSWEAVER_<NAME>_TLS_MIN_VERSION` | `1.2` (default) or `1.3` |
 
-The Proxmox source uses the same keys under `DNSWEAVER_PROXMOX_TLS_*`. The legacy `*_INSECURE_SKIP_VERIFY` and `DNSWEAVER_PROXMOX_VERIFY_TLS` variables are still accepted but emit a deprecation warning at startup — migrate to the unified `TLS_SKIP_VERIFY` keys. See the [Environment Reference](https://maxfield-allison.github.io/dnsweaver/configuration/environment/) and [SECURITY.md](SECURITY.md) for full details and recipes.
+The Proxmox and Incus sources use the same keys under `DNSWEAVER_PROXMOX_TLS_*` and `DNSWEAVER_INCUS_TLS_*` (Incus adds `DNSWEAVER_INCUS_TLS_PIN_SHA` for certificate pinning). The legacy `*_INSECURE_SKIP_VERIFY` and `DNSWEAVER_PROXMOX_VERIFY_TLS` variables are still accepted but emit a deprecation warning at startup — migrate to the unified `TLS_SKIP_VERIFY` keys. See the [Environment Reference](https://maxfield-allison.github.io/dnsweaver/configuration/environment/) and [SECURITY.md](SECURITY.md) for full details and recipes.
 
 > **Mounting certs?** The container drops privileges to uid/gid `1000`, so cert/key files must be readable by that user — a `root:root 0600` key yields `permission denied`. See [TLS Certificate File Permissions](https://maxfield-allison.github.io/dnsweaver/configuration/environment/#tls-certificate-file-permissions).
 

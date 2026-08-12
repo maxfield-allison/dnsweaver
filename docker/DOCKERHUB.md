@@ -1,3 +1,5 @@
+![dnsweaver](https://raw.githubusercontent.com/maxfield-allison/dnsweaver/main/docs/assets/brand/hero-banner.png)
+
 # dnsweaver
 
 **Automatic DNS records for containers, VMs & clusters.**
@@ -81,7 +83,14 @@ secrets:
     external: true
 ```
 
-A container with the label `traefik.http.routers.myapp.rule=Host(myapp.home.example.com)` gets an A record created automatically. When the container stops, the record is removed.
+A container carrying this label gets an A record created automatically:
+
+```yaml
+labels:
+  - "traefik.http.routers.myapp.rule=Host(`myapp.home.example.com`)"
+```
+
+When the container stops, the record is removed.
 
 See the **[Getting Started guide](https://maxfield-allison.github.io/dnsweaver/getting-started/)** for the full walkthrough, Kubernetes and Proxmox setup, and provider-specific configuration.
 

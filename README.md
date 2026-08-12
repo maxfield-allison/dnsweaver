@@ -35,7 +35,7 @@ If you manage a homelab with Traefik, Proxmox, and a self-hosted resolver and yo
 - 🧩 **Seven Sources** — Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, and Incus, in one binary. See [Supported Sources](#supported-sources)
 - 🏗️ **Multi-Instance Safe** — Run multiple dnsweaver instances on the same DNS zone without conflicts
 - 🔒 **Socket Proxy Compatible** — Connect via TCP to a Docker socket proxy for improved security
-- 🛡️ **Hardened TLS** — Unified per-instance TLS controls (custom CA, mTLS client certs, SNI override, configurable min version; TLS 1.2 floor by default) for every HTTP-based provider and the Proxmox source
+- 🛡️ **Hardened TLS** — Unified per-instance TLS controls (custom CA, mTLS client certs, SNI override, configurable min version; TLS 1.2 floor by default) for every HTTP-based provider and the Proxmox and Incus sources
 - 📊 **Observable** — Prometheus metrics, health endpoints, structured logging
 - 🔑 **Secrets Support** — Docker secrets and Kubernetes Secrets via `_FILE` suffix variables
 
@@ -170,7 +170,7 @@ flowchart LR
 
 ### TLS Configuration
 
-Every HTTP-based provider (Technitium, AdGuard Home, Cloudflare, OVHcloud, PowerDNS, Pi-hole, Webhook) and the Proxmox source share a single TLS configuration surface:
+Every HTTP-based provider (Technitium, AdGuard Home, Cloudflare, OVHcloud, PowerDNS, Pi-hole, OPNsense, pfSense, Webhook) and the Proxmox and Incus sources share a single TLS configuration surface:
 
 | Env key (per instance) | Purpose |
 |------------------------|---------|
@@ -180,7 +180,7 @@ Every HTTP-based provider (Technitium, AdGuard Home, Cloudflare, OVHcloud, Power
 | `DNSWEAVER_<NAME>_TLS_SKIP_VERIFY` | Disable verification (development only) |
 | `DNSWEAVER_<NAME>_TLS_MIN_VERSION` | `1.2` (default) or `1.3` |
 
-The Proxmox source uses the same keys under `DNSWEAVER_PROXMOX_TLS_*`. The legacy `*_INSECURE_SKIP_VERIFY` and `DNSWEAVER_PROXMOX_VERIFY_TLS` variables are still accepted but emit a deprecation warning at startup — migrate to the unified `TLS_SKIP_VERIFY` keys. See the [Environment Reference](https://maxfield-allison.github.io/dnsweaver/configuration/environment/) and [SECURITY.md](SECURITY.md) for full details and recipes.
+The Proxmox and Incus sources use the same keys under `DNSWEAVER_PROXMOX_TLS_*` and `DNSWEAVER_INCUS_TLS_*` (Incus adds `DNSWEAVER_INCUS_TLS_PIN_SHA` for certificate pinning). The legacy `*_INSECURE_SKIP_VERIFY` and `DNSWEAVER_PROXMOX_VERIFY_TLS` variables are still accepted but emit a deprecation warning at startup — migrate to the unified `TLS_SKIP_VERIFY` keys. See the [Environment Reference](https://maxfield-allison.github.io/dnsweaver/configuration/environment/) and [SECURITY.md](SECURITY.md) for full details and recipes.
 
 > **Mounting certs?** The container drops privileges to uid/gid `1000`, so cert/key files must be readable by that user — a `root:root 0600` key yields `permission denied`. See [TLS Certificate File Permissions](https://maxfield-allison.github.io/dnsweaver/configuration/environment/#tls-certificate-file-permissions).
 

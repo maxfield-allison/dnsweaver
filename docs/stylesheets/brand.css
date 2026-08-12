@@ -123,6 +123,16 @@ h1, h2, h3 {
   border-color: rgba(86, 217, 242, 0.15);
 }
 
+/* The sources-to-providers flow diagram. Full-bleed within the content column,
+ * with its own ground baked into the SVG, so no card or border around it. */
+.md-typeset img.dnsw-flow {
+  display: block;
+  width: 100%;
+  max-width: 46rem;
+  margin: 1.5rem auto;
+  border-radius: 0.4rem;
+}
+
 /* The logo mark carries its own color; never let the theme tint it. */
 .md-header__button.md-logo img,
 .md-header__button.md-logo svg {

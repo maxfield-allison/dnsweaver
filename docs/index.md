@@ -9,6 +9,9 @@ description: dnsweaver reads hostnames from seven sources (Traefik, Caddy, nginx
 
 dnsweaver reads hostnames from seven sources and writes records to eleven DNS providers. A container starts with a Traefik label or a Proxmox VM boots, and the record appears; when they go away, so does it. Internal and external records come from the same labels, so **split-horizon** costs nothing extra.
 
+![Seven sources feed dnsweaver, which writes to eleven DNS providers](assets/brand/flow-light.svg#only-light){ .dnsw-flow }
+![Seven sources feed dnsweaver, which writes to eleven DNS providers](assets/brand/flow-dark.svg#only-dark){ .dnsw-flow }
+
 ---
 
 ## Key Features

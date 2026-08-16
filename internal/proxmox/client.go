@@ -32,6 +32,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
+	"sort"
+	"strconv"
 	"time"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/httputil"
@@ -148,14 +151,100 @@ type ClusterResource struct {
 	// Tags is the semicolon-delimited list of tags assigned to the resource.
 	// Example: "dns;web;production"
 	Tags string `json:"tags"`
+
+	// Pool is the PVE resource pool the VM/container belongs to, or empty if
+	// it is not pooled. Populated by /cluster/resources when the token holds
+	// Pool.Audit (which dnsweaver already requires).
+	Pool string `json:"pool"`
 }
 
 // LXCConfig holds the parsed configuration of a single LXC container.
 // Only fields relevant to IP resolution are populated.
 type LXCConfig struct {
-	// Net0 is the raw value of the net0 config field.
-	// Example: "name=eth0,bridge=vmbr0,hwaddr=AA:BB:CC:DD:EE:FF,ip=192.0.2.50/24,ip6=auto"
-	Net0 string `json:"net0"`
+	// Nets holds every netN interface definition keyed by its config key
+	// ("net0", "net1", ...). Values are the raw PVE config strings, e.g.
+	// "name=eth0,bridge=vmbr0,hwaddr=AA:BB:CC:DD:EE:FF,ip=192.0.2.50/24,ip6=auto".
+	Nets map[string]string
+}
+
+// lxcNetKeyPattern matches PVE LXC network config keys ("net0" ... "netN").
+var lxcNetKeyPattern = regexp.MustCompile(`^net(\d+)$`)
+
+// UnmarshalJSON collects every netN key from the raw LXC config object.
+// PVE exposes each interface as its own top-level key, so a fixed struct field
+// can only ever see net0; containers with additional NICs need the whole set.
+func (c *LXCConfig) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	c.Nets = make(map[string]string)
+	for key, value := range raw {
+		if !lxcNetKeyPattern.MatchString(key) {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal(value, &s); err != nil {
+			// A netN key that is not a string is malformed; skip it rather
+			// than failing the whole config fetch for one bad interface.
+			continue
+		}
+		c.Nets[key] = s
+	}
+	return nil
+}
+
+// SortedNetKeys returns the netN keys in numeric order (net0, net1, ... net10),
+// so interface iteration is deterministic rather than map-random.
+func (c *LXCConfig) SortedNetKeys() []string {
+	keys := make([]string, 0, len(c.Nets))
+	for k := range c.Nets {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return lxcNetIndex(keys[i]) < lxcNetIndex(keys[j])
+	})
+	return keys
+}
+
+// lxcNetIndex extracts the numeric suffix of a netN key for ordering.
+func lxcNetIndex(key string) int {
+	m := lxcNetKeyPattern.FindStringSubmatch(key)
+	if m == nil {
+		return -1
+	}
+	n, err := strconv.Atoi(m[1])
+	if err != nil {
+		return -1
+	}
+	return n
+}
+
+// LXCInterface represents a single entry from the LXC interfaces API
+// (/nodes/{node}/lxc/{vmid}/interfaces).
+//
+// Unlike the QEMU guest agent, this endpoint reads the container's live
+// network namespace via `ip --json a`, so it reports DHCP-assigned addresses
+// that never appear in the container config. It requires only VM.Audit.
+type LXCInterface struct {
+	// Name is the interface name inside the container (e.g., "eth0").
+	Name string `json:"name"`
+
+	// HardwareAddress is the interface MAC address.
+	HardwareAddress string `json:"hardware-address"`
+
+	// Inet is the legacy single IPv4 address in CIDR form ("10.0.0.5/24").
+	// Retained for PVE versions that predate the ip-addresses array.
+	Inet string `json:"inet"`
+
+	// Inet6 is the legacy single IPv6 address in CIDR form.
+	Inet6 string `json:"inet6"`
+
+	// IPAddresses is the modern per-address list. Note that PVE populates
+	// ip-address-type from `ip --json a`, so the family strings here are
+	// "inet"/"inet6" rather than the "ipv4"/"ipv6" the QEMU guest agent uses.
+	IPAddresses []AgentIPAddress `json:"ip-addresses"`
 }
 
 // AgentNetworkInterface represents a single network interface from
@@ -204,6 +293,30 @@ func (c *Client) GetLXCConfig(ctx context.Context, node string, vmid int) (*LXCC
 	}
 
 	return &result.Data, nil
+}
+
+// GetLXCInterfaces returns the live network interfaces of a running LXC
+// container from /nodes/{node}/lxc/{vmid}/interfaces.
+//
+// This is the only way to learn the address of a DHCP-configured container:
+// the container config records "ip=dhcp" with no address, while this endpoint
+// inspects the running network namespace. It needs only VM.Audit, the same
+// privilege already required to list resources.
+//
+// PVE returns a null payload (not an error) when the container is not running,
+// because the lookup starts by resolving the container PID. That case yields a
+// nil slice and a nil error, and callers should treat it as "no addresses".
+func (c *Client) GetLXCInterfaces(ctx context.Context, node string, vmid int) ([]LXCInterface, error) {
+	var result struct {
+		Data []LXCInterface `json:"data"`
+	}
+
+	path := fmt.Sprintf("/api2/json/nodes/%s/lxc/%d/interfaces", node, vmid)
+	if err := c.get(ctx, path, &result); err != nil {
+		return nil, fmt.Errorf("getting LXC interfaces for %s/%d: %w", node, vmid, err)
+	}
+
+	return result.Data, nil
 }
 
 // GetVMAgentNetworks returns network interface information from the qemu-guest-agent.

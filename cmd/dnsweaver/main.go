@@ -307,12 +307,14 @@ func run() error {
 			StateFilter:         cfg.ProxmoxStateFilter(),
 			InterfacePreference: cfg.ProxmoxInterfaceTagPrefix(),
 			AllowedInterfaces:   cfg.ProxmoxAllowedInterfaces(),
+			IPVersion:           proxmoxIPVersion(cfg),
 		}, logger)
 		listers = append(listers, proxmoxLister)
 		logger.Info("proxmox lister configured",
 			slog.String("url", cfg.ProxmoxURL()),
 			slog.String("node_filter", cfg.ProxmoxNodeFilter()),
 			slog.String("tag_filter", cfg.ProxmoxTagFilter()),
+			slog.String("ip_version", string(proxmoxIPVersion(cfg))),
 		)
 	}
 
@@ -724,4 +726,15 @@ func run() error {
 
 	logger.Info("dnsweaver shutdown complete")
 	return nil
+}
+
+// proxmoxIPVersion resolves the Proxmox address families from config.
+// Validation happens during config load — this returns the default for any
+// unrecognized value to keep the adapter strict-typed.
+func proxmoxIPVersion(cfg *config.Config) proxmoxclient.IPVersion {
+	version, err := proxmoxclient.ParseIPVersion(cfg.ProxmoxIPVersion())
+	if err != nil {
+		return proxmoxclient.IPVersionIPv4
+	}
+	return version
 }

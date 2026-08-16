@@ -97,6 +97,7 @@ type GlobalConfig struct {
 	ProxmoxAllowedInterfaces  []string // Optional allow-list of guest interface names for IP resolution
 	ProxmoxVerifyTLS          bool     // Verify TLS certificate on PVE API endpoint (DEPRECATED in v1.5: prefer ProxmoxTLSSkipVerify)
 	ProxmoxTargetMode         string   // Target resolution mode: "guest-ip" (default) or "instance"
+	ProxmoxIPVersion          string   // Address families to resolve: "ipv4" (default), "ipv6", or "dual"
 
 	// Unified PVE TLS configuration (v1.5+). Populated from DNSWEAVER_PROXMOX_TLS_*
 	// env vars and consumed by internal/proxmox via httputil.TLSConfig.
@@ -439,6 +440,20 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 				fmt.Sprintf("invalid value %q", cfg.ProxmoxTargetMode),
 				"Must be one of: guest-ip (default, A record per guest IP), instance (defer to instance TARGET/RECORD_TYPE)",
 				"DNSWEAVER_PROXMOX_TARGET_MODE=instance",
+			))
+		}
+	}
+	cfg.ProxmoxIPVersion = getEnv("DNSWEAVER_PROXMOX_IP_VERSION")
+	if cfg.ProxmoxIPVersion != "" {
+		switch strings.ToLower(strings.TrimSpace(cfg.ProxmoxIPVersion)) {
+		case "ipv4", "4", "v4", "ipv6", "6", "v6", "dual", "both", "dualstack", "dual-stack":
+			// valid
+		default:
+			errs = append(errs, configErrFull(
+				"DNSWEAVER_PROXMOX_IP_VERSION",
+				fmt.Sprintf("invalid value %q", cfg.ProxmoxIPVersion),
+				"Must be one of: ipv4 (default, A records), ipv6 (AAAA records), dual (both)",
+				"DNSWEAVER_PROXMOX_IP_VERSION=dual",
 			))
 		}
 	}

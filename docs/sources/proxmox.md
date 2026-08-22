@@ -47,6 +47,7 @@ flowchart LR
 | `DNSWEAVER_PROXMOX_INTERFACE_TAG_PREFIX` | No | — | Optional tag prefix in the form `<prefix>+<interface>` that selects a specific guest interface for IP resolution. A matching tag overrides the allow-list and can target an interface even if it is not otherwise allowed. |
 | `DNSWEAVER_PROXMOX_ALLOWED_INTERFACES` | No | — | Comma-separated allow-list of guest interface prefixes to consider when resolving IPs (for example `eth,ens`). Prefix matching is used, so `eth` matches `eth0` and `eth1`. If no allow-listed or tagged interface yields a usable IPv4 address, dnsweaver falls back to the first non-loopback IPv4 address instead of skipping the VM. |
 | `DNSWEAVER_PROXMOX_STATE_FILTER` | No | `running` | PVE resource status filter (`running`, `stopped`, etc.) |
+| `DNSWEAVER_PROXMOX_IP_VERSION` | No | `ipv4` | Address families to resolve. `ipv4` emits A records, `ipv6` emits AAAA records, `dual` emits both for guests that have both. |
 | `DNSWEAVER_PROXMOX_DOMAIN_SUFFIX` | No | — | Domain suffix appended to VM names, e.g. `home.example.com` |
 | `DNSWEAVER_PROXMOX_TARGET_MODE` | No | `guest-ip` | Target resolution mode. `guest-ip` (default) emits an A record per VM IP. `instance` defers record type and target to the matching provider instance — useful for pointing all VMs at a reverse proxy via CNAME. |
 
@@ -92,9 +93,64 @@ IP resolution differs by resource type:
 | Type | Method | Notes |
 | :--- | :----- | :---- |
 | **VM (QEMU)** | QEMU guest agent (`/agent/network-get-interfaces`) | Requires `qemu-guest-agent` installed and running in the VM |
-| **LXC container** | `net0` config field (`ip=<address>/prefix`) | Reads directly from the PVE API; no agent required |
+| **LXC container** | `netN` config fields, then the live interfaces API | Reads directly from the PVE API; no agent required |
 
 VMs without a running guest agent are skipped (a debug log entry is emitted). To include VMs, install and enable `qemu-guest-agent` inside the guest.
+
+### LXC containers
+
+Containers are resolved in two steps:
+
+1. **Container config** — every `netN` interface is read, not just `net0`, and any
+   statically configured `ip=` / `ip6=` value is used.
+2. **Live interfaces** — if the config yields no usable address for a wanted family,
+   dnsweaver queries `/nodes/{node}/lxc/{vmid}/interfaces`, which inspects the running
+   container's network namespace.
+
+Step 2 is what makes **DHCP containers** resolvable: their config records `ip=dhcp`
+with no address, so the live lookup is the only place the real address exists. The
+same applies to `ip6=auto` under SLAAC.
+
+!!! note "No extra privilege, no extra call when it isn't needed"
+    The interfaces endpoint requires only `VM.Audit`, which the documented role
+    already grants. It is queried only when the config comes up short, so
+    statically addressed containers make exactly the same number of API calls
+    as before.
+
+!!! warning "The endpoint needs a running container"
+    PVE resolves the container PID before reading its namespace, so a stopped
+    container returns an empty result. On PVE releases that predate the endpoint,
+    the lookup fails and dnsweaver falls back to config-derived addresses only,
+    logging at debug level rather than failing the resource.
+
+## Dual-Stack (IPv6)
+
+By default the source resolves IPv4 only and emits A records. Set
+`DNSWEAVER_PROXMOX_IP_VERSION` to change that:
+
+| Value | Records emitted |
+| :---- | :-------------- |
+| `ipv4` *(default)* | `A` only |
+| `ipv6` | `AAAA` only |
+| `dual` | `A` and `AAAA` for guests that have both |
+
+```bash
+DNSWEAVER_PROXMOX_IP_VERSION=dual
+```
+
+In `dual` mode a guest with both families produces two records for the same
+hostname, which is a legal pair that the reconciler allows to coexist. A guest
+with only one family produces only that record.
+
+Address family is determined by parsing each address, not by trusting the API's
+family label — the QEMU guest agent reports `ipv4`/`ipv6` while the LXC
+interfaces endpoint passes through the kernel's `inet`/`inet6`.
+
+!!! note "Which addresses are eligible"
+    Loopback, link-local (`fe80::/10`), unspecified, multicast, documentation
+    (`2001:db8::/32`), and discard-prefix addresses are skipped. IPv6 unique
+    local addresses (`fc00::/7`) are kept, for the same reason RFC 1918 space is
+    kept on the IPv4 side: they are what homelab guests actually use.
 
 When interface selection is configured, dnsweaver resolves VM IPs in this order:
 
@@ -166,9 +222,9 @@ pveum user token add dnsweaver@pve dnsweaver --privsep=0
 
 | Privilege | Why it is required |
 | :-------- | :----------------- |
-| `VM.Audit` | List VMs and LXC containers via `/cluster/resources` |
+| `VM.Audit` | List VMs and LXC containers via `/cluster/resources`, read LXC config, and query LXC live interfaces (`/lxc/{vmid}/interfaces`) |
 | `VM.Monitor` | Query the QEMU guest agent (`/agent/network-get-interfaces`) for VM IPs |
-| `Pool.Audit` | Required for `/cluster/resources` to enumerate pool-scoped resources |
+| `Pool.Audit` | Required for `/cluster/resources` to enumerate pool-scoped resources and report each resource's pool |
 
 The token ID format is `<user>@<realm>!<tokenname>`, for example:
 `dnsweaver@pve!dnsweaver`
@@ -191,6 +247,13 @@ The token ID format is `<user>@<realm>!<tokenname>`, for example:
 
 The Proxmox source exposes PVE tags as workload labels with the prefix `proxmox.tag/`.
 For example, a VM tagged `web` will have the label `proxmox.tag/web=true`.
+
+It also exposes the PVE **resource pool** as `proxmox.pool/<pool>=true`, and as the
+`pool` workload metadata key. A VM in the `tenant-alice` pool gets
+`proxmox.pool/tenant-alice=true`. Pools are the closest thing PVE has to a tenant
+boundary, so this is the useful axis for routing records when several groups of
+guests share a cluster. Guests that belong to no pool get neither the label nor the
+metadata key.
 
 These labels are available for filtering and can be used to route records to specific
 DNS providers via provider label selectors (if supported by your provider configuration).
@@ -298,6 +361,17 @@ DNSWEAVER_PROXMOX_STATE_FILTER=running
 - Ensure `qemu-guest-agent` is installed and running inside the VM
 - Check with: `pvesh get /nodes/<node>/qemu/<vmid>/agent/network-get-interfaces`
 - If the agent is not available, the VM is silently skipped (check debug logs)
+
+### LXC container has no resolved IP
+
+- Confirm the container is running — the live interfaces lookup reads the
+  container's network namespace and returns nothing for a stopped container
+- Check what PVE reports: `pvesh get /nodes/<node>/lxc/<vmid>/interfaces`
+- If that command errors with "no such resource", your PVE release predates the
+  endpoint; only statically configured (`ip=<address>/prefix`) containers can be
+  resolved, and DHCP containers will be skipped
+- If the container's only address is link-local or in a filtered range, it is
+  skipped by design — see [Dual-Stack](#dual-stack-ipv6)
 
 ### TLS certificate errors
 

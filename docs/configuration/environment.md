@@ -307,6 +307,7 @@ full setup including the required PVE role privileges.
 | `DNSWEAVER_PROXMOX_INTERFACE_TAG_PREFIX` | No | — | Optional tag prefix in the form `<prefix>+<interface>` that selects a specific guest interface for IP resolution. A matching tag overrides the allow-list and is honored even when that interface is not otherwise allowed. |
 | `DNSWEAVER_PROXMOX_ALLOWED_INTERFACES` | No | — | Comma-separated allow-list of guest interface prefixes to consider when resolving IPs. Entries are matched as prefixes (for example `eth` matches `eth0`), and if no entry matches, dnsweaver falls back to the first non-loopback IPv4 address instead of skipping the VM. |
 | `DNSWEAVER_PROXMOX_STATE_FILTER` | No | `running` | Resource status filter (`running`, `stopped`, etc.) |
+| `DNSWEAVER_PROXMOX_IP_VERSION` | No | `ipv4` | Address families to resolve: `ipv4` (A records), `ipv6` (AAAA records), or `dual` (both). |
 | `DNSWEAVER_PROXMOX_DOMAIN_SUFFIX` | No | — | Domain suffix appended to VM names |
 
 ## Provider-Specific Settings

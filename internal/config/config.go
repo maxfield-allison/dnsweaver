@@ -368,6 +368,12 @@ func (c *Config) ProxmoxTargetMode() string {
 	return c.Global.ProxmoxTargetMode
 }
 
+// ProxmoxIPVersion returns the configured address families to resolve
+// ("ipv4", "ipv6", or "dual"). Empty string means use the default (ipv4).
+func (c *Config) ProxmoxIPVersion() string {
+	return c.Global.ProxmoxIPVersion
+}
+
 // ProxmoxVerifyTLS returns whether to verify TLS on the PVE API endpoint.
 //
 // Deprecated: prefer ProxmoxTLS().InsecureSkip (inverted polarity). Retained

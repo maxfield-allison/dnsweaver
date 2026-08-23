@@ -65,6 +65,8 @@ Only records with matching TXT ownership records are deleted when containers sto
     - "*.apps.internal.example.com"  # Only use on dedicated subdomains
 ```
 
+**Conflicting record types:** a pre-existing record whose type cannot coexist with the configured one (for example a CNAME where an A record is configured, or the reverse) is deleted and replaced by the configured record. In managed mode the same record is replaced only when `DNSWEAVER_ADOPT_EXISTING=true` or when dnsweaver already owns the hostname; otherwise it is skipped and a warning is logged once. Additive mode never replaces it.
+
 **When to use:**
 
 - Dedicated zones exclusively for container DNS
@@ -142,7 +144,7 @@ These global settings interact with operational modes:
 | `DNSWEAVER_CLEANUP_ORPHANS` | If `false`, disables deletion globally (overrides managed/authoritative) |
 | `DNSWEAVER_CLEANUP_ON_STOP` | If `false`, only delete records when containers are removed, not stopped |
 | `DNSWEAVER_OWNERSHIP_TRACKING` | If `false`, dnsweaver can't distinguish its own records from others |
-| `DNSWEAVER_ADOPT_EXISTING` | If `true`, dnsweaver claims ownership of pre-existing records |
+| `DNSWEAVER_ADOPT_EXISTING` | If `true`, dnsweaver claims ownership of pre-existing records, and replaces a pre-existing record of a conflicting type (for example a CNAME where an A is configured) instead of skipping it. Managed mode without it skips the record and logs once; additive mode never replaces it |
 
 ## Choosing the Right Mode
 

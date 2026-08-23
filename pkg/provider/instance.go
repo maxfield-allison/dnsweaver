@@ -300,6 +300,17 @@ func (pi *ProviderInstance) UpdateRecord(ctx context.Context, existing, desired 
 	return err
 }
 
+// RecordNeedsUpdate reports whether the provider would write different
+// provider-specific state for desired than existing currently holds (see
+// RecordComparer). Providers that do not implement RecordComparer never report
+// a difference, so callers see today's TTL/SRV-only comparison for them.
+func (pi *ProviderInstance) RecordNeedsUpdate(existing, desired Record) bool {
+	if cmp, ok := pi.Provider.(RecordComparer); ok {
+		return cmp.RecordNeedsUpdate(existing, desired)
+	}
+	return false
+}
+
 // GetExistingRecords returns all A/CNAME records that exist for a given hostname.
 // This is used by the reconciler to detect if the target has changed or if there's
 // a type conflict before creating a new record.

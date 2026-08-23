@@ -247,6 +247,29 @@ type Updater interface {
 	Update(ctx context.Context, existing, desired Record) error
 }
 
+// RecordComparer is an optional interface for providers whose records carry
+// state that hostname, type, target, TTL and SRV data do not capture (for
+// Cloudflare, the proxied flag). When an existing record already matches a
+// desired one on those fields, the reconciler asks a RecordComparer whether it
+// would nevertheless write something different, and updates the record in
+// place if so.
+//
+// Implementations should resolve desired exactly as Create and Update do,
+// applying the instance default and any per-record Metadata override, so that
+// a changed default is detected as well as a changed override. They should
+// compare only state they themselves report on List, and return false when
+// existing carries none, so a record the provider cannot tell apart from the
+// desired one is never rewritten.
+//
+// Providers that do not implement RecordComparer are compared on the generic
+// fields only.
+type RecordComparer interface {
+	// RecordNeedsUpdate reports whether existing must be rewritten to match
+	// what the provider would write for desired. Hostname, type and target
+	// are already known to match when this is called.
+	RecordNeedsUpdate(existing, desired Record) bool
+}
+
 // Closer is an optional interface that providers can implement to release
 // resources held for the lifetime of the instance (e.g. SSH/SFTP sessions or
 // database connections). The registry calls Close on shutdown for any provider

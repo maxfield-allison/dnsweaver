@@ -177,6 +177,12 @@ When a record does not set `proxied`, the Cloudflare instance's
 `DNSWEAVER_{NAME}_PROXIED` value (default `true`) is used as the fallback. The
 label is ignored by providers that have no concept of proxying.
 
+Adding, changing or removing the label updates a record that already exists:
+on the next reconciliation dnsweaver compares the record's proxied state with
+what the label (or the instance default) now asks for and updates it in place
+when they differ. The same applies when `DNSWEAVER_{NAME}_PROXIED` itself is
+changed.
+
 ### Combine with Traefik Labels
 
 Use both Traefik and native labels:

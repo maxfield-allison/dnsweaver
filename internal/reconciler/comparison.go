@@ -57,6 +57,9 @@ func (d *RecordDiff) TotalChanges() int {
 // - Same hostname+type, different target → update
 // - In desired but not existing → create
 // - In existing but not desired → delete
+//
+// Provider-specific state (provider.RecordComparer) is not consulted here;
+// this comparison has no provider in hand.
 func CompareRecordSets(existing, desired []provider.Record) RecordDiff {
 	diff := RecordDiff{}
 
@@ -78,7 +81,7 @@ func CompareRecordSets(existing, desired []provider.Record) RecordDiff {
 	for key, desiredRecord := range desiredMap {
 		if existingRecord, exists := existingMap[key]; exists {
 			// Record exists - check if it needs updating
-			if recordNeedsUpdate(existingRecord, desiredRecord) {
+			if recordNeedsUpdate(existingRecord, desiredRecord, nil) {
 				diff.ToUpdate = append(diff.ToUpdate, RecordPair{
 					Existing: existingRecord,
 					Desired:  desiredRecord,
@@ -147,9 +150,11 @@ func formatSRVKey(srv *provider.SRVData) string {
 }
 
 // recordNeedsUpdate checks if an existing record needs to be updated to match desired.
-// Records are considered needing update if TTL differs.
+// Records are considered needing update if TTL or SRV data differs, or if cmp
+// (the provider's own view of record state, see provider.RecordComparer) reports
+// a difference. cmp may be nil, in which case only the generic fields are compared.
 // Target differences are already handled by the key comparison.
-func recordNeedsUpdate(existing, desired provider.Record) bool {
+func recordNeedsUpdate(existing, desired provider.Record, cmp provider.RecordComparer) bool {
 	// TTL difference requires update
 	if existing.TTL != desired.TTL {
 		return true
@@ -162,7 +167,7 @@ func recordNeedsUpdate(existing, desired provider.Record) bool {
 		}
 	}
 
-	return false
+	return cmp != nil && cmp.RecordNeedsUpdate(existing, desired)
 }
 
 // categorizeSameHostnameRecords groups records by whether they match the desired type.

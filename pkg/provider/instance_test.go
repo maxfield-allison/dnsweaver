@@ -535,3 +535,58 @@ func TestMatches_LegacyDomainOnly_IgnoresFilters(t *testing.T) {
 		t.Error("expected match: legacy Matches ignores filters")
 	}
 }
+
+// comparingMockProvider is a mockProvider that also implements RecordComparer
+// with a fixed answer, recording how often it was asked.
+type comparingMockProvider struct {
+	*mockProvider
+	needsUpdate bool
+	calls       int
+}
+
+func (m *comparingMockProvider) RecordNeedsUpdate(_, _ Record) bool {
+	m.calls++
+	return m.needsUpdate
+}
+
+func TestProviderInstance_RecordNeedsUpdate(t *testing.T) {
+	existing := Record{Hostname: "app.example.com", Type: RecordTypeA, Target: "203.0.113.10", TTL: 1, Metadata: map[string]string{"proxied": "true"}}
+	desired := Record{Hostname: "app.example.com", Type: RecordTypeA, Target: "203.0.113.10", TTL: 300, Metadata: map[string]string{"proxied": "false"}}
+
+	tests := []struct {
+		name      string
+		prov      Provider
+		want      bool
+		wantCalls int
+	}{
+		{
+			name: "provider without RecordComparer never reports a difference",
+			prov: &mockProvider{name: "plain", typeName: "mock"},
+			want: false,
+		},
+		{
+			name:      "RecordComparer reporting a change is honored",
+			prov:      &comparingMockProvider{mockProvider: &mockProvider{name: "cmp", typeName: "mock"}, needsUpdate: true},
+			want:      true,
+			wantCalls: 1,
+		},
+		{
+			name:      "RecordComparer reporting no change is honored",
+			prov:      &comparingMockProvider{mockProvider: &mockProvider{name: "cmp", typeName: "mock"}, needsUpdate: false},
+			want:      false,
+			wantCalls: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inst := &ProviderInstance{Provider: tt.prov}
+			if got := inst.RecordNeedsUpdate(existing, desired); got != tt.want {
+				t.Errorf("RecordNeedsUpdate() = %v, want %v", got, tt.want)
+			}
+			if cmp, ok := tt.prov.(*comparingMockProvider); ok && cmp.calls != tt.wantCalls {
+				t.Errorf("comparer consulted %d times, want %d", cmp.calls, tt.wantCalls)
+			}
+		})
+	}
+}

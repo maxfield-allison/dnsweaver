@@ -164,8 +164,9 @@ func (p *Proxmox) Extract(_ context.Context, w workload.Workload) ([]source.Host
 		return nil, nil
 	}
 
-	ip := w.Metadata["ip"]
-	if ip == "" {
+	ipv4 := w.Metadata["ip"]
+	ipv6 := w.Metadata["ip6"]
+	if ipv4 == "" && ipv6 == "" {
 		p.logger.Debug("proxmox workload has no resolved IP; skipping",
 			slog.String("workload", w.Name),
 			slog.String("node", w.Metadata["node"]),
@@ -182,25 +183,43 @@ func (p *Proxmox) Extract(_ context.Context, w workload.Workload) ([]source.Host
 		return nil, nil //nolint:nilerr // not a configuration error; silently skip
 	}
 
-	h := source.Hostname{
-		Name:   hostname,
-		Source: sourceName,
-		Router: fmt.Sprintf("%s/%s", w.Metadata["node"], w.Metadata["vmid"]),
+	router := fmt.Sprintf("%s/%s", w.Metadata["node"], w.Metadata["vmid"])
+
+	// In instance mode, emit the hostname once with no hints so the matching
+	// provider instance's RECORD_TYPE and TARGET drive the resulting record.
+	// The IP lookup above still acts as a liveness gate — workloads with no
+	// resolved address are skipped in both modes.
+	if p.targetMode != TargetModeGuestIP {
+		return []source.Hostname{{
+			Name:   hostname,
+			Source: sourceName,
+			Router: router,
+		}}, nil
 	}
 
-	// In guest-ip mode (default) emit an A record hint targeting the VM's IP.
-	// In instance mode, leave RecordHints nil so the matching provider
-	// instance's RECORD_TYPE and TARGET drive the resulting record. The IP
-	// lookup above still acts as a liveness gate — workloads with no
-	// resolved IP are skipped in both modes.
-	if p.targetMode == TargetModeGuestIP {
-		h.RecordHints = &source.RecordHints{
-			Type:   "A",
-			Target: ip,
+	// In guest-ip mode emit one record hint per resolved family. A guest with
+	// both an IPv4 and an IPv6 address yields an A and an AAAA for the same
+	// name, which is a legal dual-stack pair the reconciler allows to coexist.
+	var hostnames []source.Hostname
+	for _, rec := range []struct{ recordType, target string }{
+		{"A", ipv4},
+		{"AAAA", ipv6},
+	} {
+		if rec.target == "" {
+			continue
 		}
+		hostnames = append(hostnames, source.Hostname{
+			Name:   hostname,
+			Source: sourceName,
+			Router: router,
+			RecordHints: &source.RecordHints{
+				Type:   rec.recordType,
+				Target: rec.target,
+			},
+		})
 	}
 
-	return []source.Hostname{h}, nil
+	return hostnames, nil
 }
 
 // resolveHostname determines the FQDN for a given VM name.

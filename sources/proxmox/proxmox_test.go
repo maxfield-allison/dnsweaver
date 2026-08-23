@@ -308,3 +308,111 @@ func TestParseTargetMode(t *testing.T) {
 		})
 	}
 }
+
+func TestExtract_DualStackEmitsAAndAAAA(t *testing.T) {
+	src := New(WithDomain("home.example.com"))
+	w := workload.Workload{
+		Platform: workload.PlatformProxmox,
+		Name:     "webserver",
+		Metadata: map[string]string{
+			"node": "pve-00",
+			"vmid": "100",
+			"ip":   "10.1.20.5",
+			"ip6":  "fd00::5",
+		},
+	}
+
+	hostnames, err := src.Extract(context.Background(), w)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(hostnames) != 2 {
+		t.Fatalf("got %d hostnames, want 2: %+v", len(hostnames), hostnames)
+	}
+
+	byType := map[string]string{}
+	for _, h := range hostnames {
+		if h.Name != "webserver.home.example.com" {
+			t.Errorf("Name = %q, want %q", h.Name, "webserver.home.example.com")
+		}
+		if h.RecordHints == nil {
+			t.Fatalf("expected record hints on %+v", h)
+		}
+		byType[h.RecordHints.Type] = h.RecordHints.Target
+	}
+	if byType["A"] != "10.1.20.5" {
+		t.Errorf("A target = %q, want %q", byType["A"], "10.1.20.5")
+	}
+	if byType["AAAA"] != "fd00::5" {
+		t.Errorf("AAAA target = %q, want %q", byType["AAAA"], "fd00::5")
+	}
+}
+
+func TestExtract_IPv6OnlyEmitsAAAAOnly(t *testing.T) {
+	src := New(WithDomain("home.example.com"))
+	w := workload.Workload{
+		Platform: workload.PlatformProxmox,
+		Name:     "webserver",
+		Metadata: map[string]string{
+			"node": "pve-00",
+			"vmid": "100",
+			"ip6":  "fd00::5",
+		},
+	}
+
+	hostnames, err := src.Extract(context.Background(), w)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(hostnames) != 1 {
+		t.Fatalf("got %d hostnames, want 1", len(hostnames))
+	}
+	if hostnames[0].RecordHints.Type != "AAAA" || hostnames[0].RecordHints.Target != "fd00::5" {
+		t.Errorf("got %+v, want AAAA -> fd00::5", hostnames[0].RecordHints)
+	}
+}
+
+func TestExtract_InstanceModeEmitsSingleHostnameForDualStack(t *testing.T) {
+	// Instance mode defers type and target to the provider instance, so a
+	// dual-stack guest must still produce exactly one hint-free hostname.
+	src := New(WithDomain("home.example.com"), WithTargetMode(TargetModeInstance))
+	w := workload.Workload{
+		Platform: workload.PlatformProxmox,
+		Name:     "webserver",
+		Metadata: map[string]string{
+			"node": "pve-00",
+			"vmid": "100",
+			"ip":   "10.1.20.5",
+			"ip6":  "fd00::5",
+		},
+	}
+
+	hostnames, err := src.Extract(context.Background(), w)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(hostnames) != 1 {
+		t.Fatalf("got %d hostnames, want 1", len(hostnames))
+	}
+	if hostnames[0].RecordHints != nil {
+		t.Errorf("instance mode must not set record hints, got %+v", hostnames[0].RecordHints)
+	}
+}
+
+func TestExtract_IPv6OnlyStillGatesOnLiveness(t *testing.T) {
+	// An IPv6-only guest must not be skipped just because it has no IPv4.
+	src := New(WithDomain("home.example.com"), WithTargetMode(TargetModeInstance))
+	w := workload.Workload{
+		Platform: workload.PlatformProxmox,
+		Name:     "webserver",
+		Metadata: map[string]string{"node": "pve-00", "vmid": "100", "ip6": "fd00::5"},
+	}
+
+	hostnames, err := src.Extract(context.Background(), w)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(hostnames) != 1 {
+		t.Fatalf("got %d hostnames, want 1", len(hostnames))
+	}
+}

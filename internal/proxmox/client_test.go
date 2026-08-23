@@ -95,8 +95,8 @@ func TestGetLXCConfig(t *testing.T) {
 	}
 
 	expected := "name=eth0,bridge=vmbr0,hwaddr=AA:BB:CC:DD:EE:FF,ip=192.0.2.50/24,ip6=auto"
-	if cfg.Net0 != expected {
-		t.Errorf("Net0 = %q, want %q", cfg.Net0, expected)
+	if cfg.Nets["net0"] != expected {
+		t.Errorf("Nets[net0] = %q, want %q", cfg.Nets["net0"], expected)
 	}
 }
 
@@ -195,5 +195,102 @@ func TestAPIError(t *testing.T) {
 	_, err := client.ListClusterResources(context.Background())
 	if err == nil {
 		t.Fatal("expected error for non-200 response, got nil")
+	}
+}
+
+func TestGetLXCConfig_MultipleNICs(t *testing.T) {
+	_, client := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"data": map[string]any{
+				"net0":     "name=eth0,bridge=vmbr0,ip=dhcp",
+				"net1":     "name=eth1,bridge=vmbr1,ip=10.20.0.7/24",
+				"net10":    "name=eth10,bridge=vmbr2,ip=10.30.0.7/24",
+				"hostname": "db-lxc",
+				"cores":    2,
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	cfg, err := client.GetLXCConfig(context.Background(), "pve-00", 200)
+	if err != nil {
+		t.Fatalf("GetLXCConfig: %v", err)
+	}
+
+	if len(cfg.Nets) != 3 {
+		t.Fatalf("Nets has %d entries, want 3: %v", len(cfg.Nets), cfg.Nets)
+	}
+	if cfg.Nets["net1"] != "name=eth1,bridge=vmbr1,ip=10.20.0.7/24" {
+		t.Errorf("Nets[net1] = %q", cfg.Nets["net1"])
+	}
+	// Non-net keys must not leak in.
+	if _, ok := cfg.Nets["hostname"]; ok {
+		t.Error("hostname must not be collected as a network interface")
+	}
+
+	// net10 must sort after net1, not between net0 and net1.
+	want := []string{"net0", "net1", "net10"}
+	got := cfg.SortedNetKeys()
+	if len(got) != len(want) {
+		t.Fatalf("SortedNetKeys() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("SortedNetKeys() = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestGetLXCInterfaces(t *testing.T) {
+	_, client := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api2/json/nodes/pve-00/lxc/200/interfaces" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		resp := map[string]any{
+			"data": []map[string]any{
+				{
+					"name":             "eth0",
+					"hardware-address": "AA:BB:CC:DD:EE:FF",
+					"inet":             "10.30.0.42/24",
+					"ip-addresses": []map[string]any{
+						{"ip-address-type": "inet", "ip-address": "10.30.0.42", "prefix": 24},
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	ifaces, err := client.GetLXCInterfaces(context.Background(), "pve-00", 200)
+	if err != nil {
+		t.Fatalf("GetLXCInterfaces: %v", err)
+	}
+	if len(ifaces) != 1 {
+		t.Fatalf("got %d interfaces, want 1", len(ifaces))
+	}
+	if ifaces[0].Name != "eth0" || ifaces[0].HardwareAddress != "AA:BB:CC:DD:EE:FF" {
+		t.Errorf("unexpected interface: %+v", ifaces[0])
+	}
+	if len(ifaces[0].IPAddresses) != 1 || ifaces[0].IPAddresses[0].IPAddress != "10.30.0.42" {
+		t.Errorf("unexpected addresses: %+v", ifaces[0].IPAddresses)
+	}
+}
+
+func TestGetLXCInterfaces_StoppedContainerReturnsNull(t *testing.T) {
+	// PVE resolves the container PID first and bails out with a null payload
+	// (HTTP 200) when the container is not running.
+	_, client := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":null}`))
+	})
+
+	ifaces, err := client.GetLXCInterfaces(context.Background(), "pve-00", 200)
+	if err != nil {
+		t.Fatalf("GetLXCInterfaces returned error for stopped container: %v", err)
+	}
+	if len(ifaces) != 0 {
+		t.Errorf("got %d interfaces, want 0", len(ifaces))
 	}
 }

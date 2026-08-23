@@ -14,8 +14,7 @@ const (
 	resourceTypeQEMU = "qemu"
 	tagLabelValue    = "true"
 
-	stateRunning  = "running"
-	ipVersionIPv4 = "ipv4"
+	stateRunning = "running"
 )
 
 // Metadata/log field keys shared between logging and the toWorkload metadata map.
@@ -24,7 +23,51 @@ const (
 	metaKeyVMID   = "vmid"
 	metaKeyTags   = "tags"
 	metaKeyStatus = "status"
+	metaKeyPool   = "pool"
+	metaKeyIP     = "ip"
+	metaKeyIP6    = "ip6"
 )
+
+// IPVersion selects which address families the Proxmox source resolves.
+type IPVersion string
+
+const (
+	// IPVersionIPv4 resolves IPv4 only and emits A records. This is the
+	// default and preserves historical behavior.
+	IPVersionIPv4 IPVersion = "ipv4"
+
+	// IPVersionIPv6 resolves IPv6 only and emits AAAA records.
+	IPVersionIPv6 IPVersion = "ipv6"
+
+	// IPVersionDual resolves both families, emitting an A record and an AAAA
+	// record for guests that have both.
+	IPVersionDual IPVersion = "dual"
+)
+
+// ParseIPVersion parses a string into an IPVersion. Empty input maps to the
+// default (IPVersionIPv4). Returns an error for unrecognized values.
+func ParseIPVersion(s string) (IPVersion, error) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", string(IPVersionIPv4), "4", "v4":
+		return IPVersionIPv4, nil
+	case string(IPVersionIPv6), "6", "v6":
+		return IPVersionIPv6, nil
+	case string(IPVersionDual), "both", "dualstack", "dual-stack":
+		return IPVersionDual, nil
+	default:
+		return "", fmt.Errorf("invalid proxmox ip version %q (must be one of: ipv4, ipv6, dual)", s)
+	}
+}
+
+// wantsV4 reports whether A records should be produced.
+func (v IPVersion) wantsV4() bool {
+	return v != IPVersionIPv6
+}
+
+// wantsV6 reports whether AAAA records should be produced.
+func (v IPVersion) wantsV6() bool {
+	return v == IPVersionIPv6 || v == IPVersionDual
+}
 
 // AdapterConfig holds filtering options for the WorkloadListerAdapter.
 type AdapterConfig struct {
@@ -48,6 +91,10 @@ type AdapterConfig struct {
 	// AllowedInterfaces is a list of interface names that are allowed for IP resolution.
 	// If provided, the resolver will only consider those interfaces in order.
 	AllowedInterfaces []string
+
+	// IPVersion selects which address families to resolve.
+	// Defaults to IPVersionIPv4 if empty.
+	IPVersion IPVersion
 }
 
 // WorkloadListerAdapter wraps a Proxmox Client to implement the workload.Lister interface.
@@ -66,6 +113,10 @@ func NewWorkloadListerAdapter(c *Client, cfg AdapterConfig, logger *slog.Logger)
 	if stateFilter == "" {
 		stateFilter = stateRunning
 	}
+	ipVersion := cfg.IPVersion
+	if ipVersion == "" {
+		ipVersion = IPVersionIPv4
+	}
 	return &WorkloadListerAdapter{
 		client: c,
 		cfg: AdapterConfig{
@@ -74,6 +125,7 @@ func NewWorkloadListerAdapter(c *Client, cfg AdapterConfig, logger *slog.Logger)
 			StateFilter:         stateFilter,
 			InterfacePreference: cfg.InterfacePreference,
 			AllowedInterfaces:   cfg.AllowedInterfaces,
+			IPVersion:           ipVersion,
 		},
 		logger: logger,
 	}
@@ -96,7 +148,11 @@ func (a *WorkloadListerAdapter) ListWorkloads(ctx context.Context) ([]workload.W
 		}
 
 		interfacePreference := parseInterfacePreferenceFromTags(r.Tags, a.cfg.InterfacePreference)
-		ip, err := ResolveIPWithInterfacePreferences(ctx, a.client, r, a.logger, interfacePreference, a.cfg.AllowedInterfaces)
+		ips, err := ResolveIPs(ctx, a.client, r, a.logger, ResolveOptions{
+			InterfacePreference: interfacePreference,
+			AllowedInterfaces:   a.cfg.AllowedInterfaces,
+			WantV6:              a.cfg.IPVersion.wantsV6(),
+		})
 		if err != nil {
 			a.logger.Warn("could not resolve IP for proxmox resource",
 				slog.String(metaKeyNode, r.Node),
@@ -109,7 +165,7 @@ func (a *WorkloadListerAdapter) ListWorkloads(ctx context.Context) ([]workload.W
 			continue
 		}
 
-		w := toWorkload(r, ip)
+		w := toWorkload(r, ips, a.cfg.IPVersion)
 		result = append(result, w)
 	}
 
@@ -135,8 +191,10 @@ func (a *WorkloadListerAdapter) matchesFilters(r ClusterResource) bool {
 	return true
 }
 
-// toWorkload converts a ClusterResource and its resolved IP into a platform-agnostic Workload.
-func toWorkload(r ClusterResource, ip string) workload.Workload {
+// toWorkload converts a ClusterResource and its resolved addresses into a
+// platform-agnostic Workload. Only the families selected by ipVersion are
+// recorded, so an IPv4-only deployment never sees an ip6 key.
+func toWorkload(r ClusterResource, ips ResolvedIPs, ipVersion IPVersion) workload.Workload {
 	kind := workload.KindVM
 	if r.Type == resourceTypeLXC {
 		kind = workload.KindLXC
@@ -148,14 +206,26 @@ func toWorkload(r ClusterResource, ip string) workload.Workload {
 		metaKeyTags:   r.Tags,
 		metaKeyStatus: r.Status,
 	}
-	if ip != "" {
-		meta["ip"] = ip
+	if r.Pool != "" {
+		meta[metaKeyPool] = r.Pool
+	}
+	if ipVersion.wantsV4() && ips.V4 != "" {
+		meta[metaKeyIP] = ips.V4
+	}
+	if ipVersion.wantsV6() && ips.V6 != "" {
+		meta[metaKeyIP6] = ips.V6
 	}
 
 	// Parse PVE tags into workload labels so sources can act on them.
 	// Proxmox tags are semicolon-delimited. We expose them as
 	// "proxmox.tag/<tagvalue>" = "true" labels.
 	labels := parseTags(r.Tags)
+
+	// Expose the PVE resource pool as a label so provider label selectors can
+	// route by pool — the closest thing PVE has to a tenant boundary.
+	if r.Pool != "" {
+		labels["proxmox.pool/"+r.Pool] = tagLabelValue
+	}
 
 	return workload.Workload{
 		ID:       fmt.Sprintf("%s/%d", r.Node, r.VMID),

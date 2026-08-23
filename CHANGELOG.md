@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **DHCP-configured LXC containers were skipped entirely.** IP resolution read
+  the container's `net0` config and gave up when it found `ip=dhcp`, because a
+  DHCP container's address exists only inside the running container. dnsweaver
+  now falls back to `/nodes/{node}/lxc/{vmid}/interfaces`, which reports the
+  live address from the container's network namespace, so DHCP containers get
+  DNS records like every other workload. The endpoint requires only `VM.Audit`
+  — already part of the documented role — and is queried only when the config
+  comes up short, so statically addressed containers make the same number of
+  API calls as before. On PVE releases that predate the endpoint the lookup
+  fails softly and config-derived resolution is unchanged.
+- **Only the first LXC network interface was considered.** A container with
+  `net1`, `net2`, and so on had those interfaces ignored, so a container whose
+  address lived on anything but `net0` resolved to nothing. Every `netN` entry
+  is now read, in numeric order, and `DNSWEAVER_PROXMOX_INTERFACE_TAG_PREFIX`
+  and `DNSWEAVER_PROXMOX_ALLOWED_INTERFACES` apply to containers the same way
+  they already applied to VMs.
+
+### Added
+- **Dual-stack support for the Proxmox source.** `DNSWEAVER_PROXMOX_IP_VERSION`
+  selects which address families to resolve: `ipv4` (default, A records),
+  `ipv6` (AAAA records), or `dual` (both, for guests that have both). Providers
+  have supported AAAA for some time; the Proxmox source was discarding IPv6
+  addresses before they ever reached one. Address family is now determined by
+  parsing each address rather than by trusting the API's family label, because
+  the QEMU guest agent reports `ipv4`/`ipv6` while the LXC interfaces endpoint
+  passes through the kernel's `inet`/`inet6`. IPv6 unique local addresses
+  (`fc00::/7`) are treated as valid targets for the same reason RFC 1918 space
+  is: they are what homelab guests use. Link-local, documentation, and
+  discard-prefix addresses are filtered.
+- **PVE resource pools are exposed as workload labels.** Each pooled guest gets
+  a `proxmox.pool/<pool>=true` label and a `pool` metadata key, so records can
+  be routed by pool — the closest thing PVE has to a tenant boundary. Requires
+  no new privilege; `Pool.Audit` was already required.
+
+### Security
+- **Go toolchain bumped to 1.26.6** (from 1.26.5) for five standard-library
+  advisories that `govulncheck` had started flagging on every pull request:
+  [GO-2026-6218](https://pkg.go.dev/vuln/GO-2026-6218) (`net/url`),
+  [GO-2026-6090](https://pkg.go.dev/vuln/GO-2026-6090) (`crypto/tls`),
+  [GO-2026-6089](https://pkg.go.dev/vuln/GO-2026-6089) (`net/http`),
+  [GO-2026-5972](https://pkg.go.dev/vuln/GO-2026-5972) (`encoding/asn1`) and
+  [GO-2026-5026](https://pkg.go.dev/vuln/GO-2026-5026) (`golang.org/x/net/idna`
+  via `net/http`). The `golang:1.26.6-alpine` pins in `.gitlab-ci.yml` and the
+  `Dockerfile` move with it, since neither reads `go.mod`.
+- **`golang.org/x/mod` bumped to 0.40.0** for CVE-2026-56864 and CVE-2026-56865
+  (a malicious GOSUMDB or GOPROXY could serve forged module data), which Trivy
+  flagged on the release pipeline. The same tidy moved `x/net`, `x/text`,
+  `x/tools` and `x/crypto` to their current releases.
+
 ## [2.7.3] - 2026-08-12
 
 ### Fixed

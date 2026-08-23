@@ -24,7 +24,7 @@ workflow:
   - if: $CI_COMMIT_TAG
   - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
     changes: &code-files ["{**/*.go,go.mod,go.sum}"]
-  - if: $CI_COMMIT_BRANCH =~ /^(feature|bugfix|hotfix)\//
+  - if: $CI_COMMIT_BRANCH =~ /^(feature|bugfix|hotfix|fix)\//
     changes: *code-files
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     changes: *code-files
@@ -39,7 +39,7 @@ workflow:
     changes: *docker-files
 
 .go-base:
-  image: golang:1.26.5-alpine
+  image: golang:1.26.6-alpine
   before_script:
     - apk add --no-cache git
     - go mod download
@@ -462,13 +462,14 @@ github:dockerhub-description:
       if [ -z "$JWT" ] || [ "$JWT" = "null" ]; then echo "Docker Hub login failed"; exit 1; fi
       CODE=$(curl -s -o /tmp/resp.json -w '%{http_code}' -X PATCH \
         -H "Authorization: JWT $JWT" -H "Content-Type: application/json" \
-        --data "$(jq -n --rawfile d docker/DOCKERHUB.md '{full_description:$d}')" \
+        --data "$(jq -n --rawfile d docker/DOCKERHUB.md --rawfile s docker/DOCKERHUB-SHORT.txt \
+          '{full_description:$d, description:($s|rtrimstr("\n"))}')" \
         "https://hub.docker.com/v2/repositories/$DOCKERHUB_USERNAME/dnsweaver/")
       echo "Docker Hub PATCH HTTP $CODE"
       [ "$CODE" = "200" ] || { cat /tmp/resp.json; exit 1; }
-      echo "Synced full_description ($(wc -c < docker/DOCKERHUB.md) bytes)"
+      echo "Synced full_description ($(wc -c < docker/DOCKERHUB.md) bytes) + description ($(tr -d '\n' < docker/DOCKERHUB-SHORT.txt | wc -c) chars)"
   rules:
     - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes: ["docker/DOCKERHUB.md"]
+      changes: ["docker/DOCKERHUB.md", "docker/DOCKERHUB-SHORT.txt"]
   tags: [docker]

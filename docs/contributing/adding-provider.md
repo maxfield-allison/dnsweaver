@@ -381,7 +381,7 @@ DNSWEAVER_{NAME}_ZONE=home.example.com
 1. Update `README.md` with provider-specific settings table
 2. Add example configuration in "Quick Start" section
 3. Update `CHANGELOG.md` with new provider announcement
-4. Create issue in GitLab for tracking
+4. Open an issue on GitHub for tracking
 
 ## Record Types
 

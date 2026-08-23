@@ -17,7 +17,7 @@ make test-integration  # Requires test environment
 
 ## 1. Automated CI Checks
 
-These checks run automatically in the GitLab CI pipeline. Verify all pass on the release branch.
+These run automatically: GitHub Actions on every pull request (lint, tests, build, govulncheck, CodeQL), and the GitLab tag pipeline again at release time. Verify all pass on `main` before tagging.
 
 | Check | Command | Pass Criteria |
 |-------|---------|---------------|
@@ -91,7 +91,7 @@ For each source enabled in the test environment:
 | ☐ CHANGELOG.md has release date and version header | |
 | ☐ Git tag follows SemVer (`vMAJOR.MINOR.PATCH`) | |
 | ☐ Docker image tagged and pushed to registry | |
-| ☐ GitHub release created (if public) | |
+| ☐ GitHub Release created by the tag pipeline | |
 | ☐ SBOM attached to release | |
 
 ## 5. Post-Release Verification
@@ -101,7 +101,7 @@ For each source enabled in the test environment:
 | ☐ Docker image pulls successfully | |
 | ☐ Fresh deployment with example config works | |
 | ☐ GitLab pipeline for tag completed successfully | |
-| ☐ GitHub mirror release (if applicable) synced | |
+| ☐ GitHub Release published, notes match CHANGELOG.md | |
 
 ---
 
@@ -117,48 +117,40 @@ See the [CHANGELOG](https://github.com/maxfield-allison/dnsweaver/blob/main/CHAN
 
 ## Release Workflow
 
-```bash
-# 1. Ensure develop is clean and all checks pass
-git checkout develop
-git pull origin develop
-gofmt -w . && golangci-lint run ./... && go test ./... -count=1 -race && go build ./...
+GitHub is the origin and the tag is what triggers a release. The `Sync to GitLab`
+workflow mirrors `main` and `v*` tags to the GitLab instance, whose tag pipeline
+builds the multi-arch images, pushes them to GHCR and Docker Hub, and publishes
+the GitHub Release with notes drawn from the changelog. There is no `develop`
+branch; everything merges to `main` by pull request.
 
-# 2. Merge to main
+```bash
+# 1. main is clean and the merged PRs were green in CI
 git checkout main
 git pull origin main
-git merge develop --no-edit
+gofmt -l . && golangci-lint run ./... && go test ./... -count=1 -race && go build ./...
 
-# 3. Tag the release
+# 2. Move the Unreleased section of CHANGELOG.md under a version header with
+#    today's date, and merge that change by PR like any other.
+
+# 3. Tag on main and push the tag to GitHub
 git tag -a v1.0.0 -m "v1.0.0 - Description of release"
+git push origin v1.0.0
 
-# 4. Push
-git push origin main --tags
-
-# 5. Verify CI pipeline runs release jobs
-# GitLab CI will: build Docker image, push to registry, create release, mirror to GitHub
+# 4. Watch the Sync to GitLab workflow, then the GitLab tag pipeline. When it
+#    finishes, the images are published and the GitHub Release exists.
 ```
 
 ## Hotfix Workflow
 
-For critical fixes that can't wait for the next release:
+A hotfix is an ordinary pull request against `main` followed by a patch tag:
 
 ```bash
-# 1. Branch from main
-git checkout -b hotfix/v1.0.1 main
+# 1. Branch from main, fix, run the checks above, update CHANGELOG.md, open the PR
+git checkout -b fix/short-description main
 
-# 2. Apply fix, run all checks
-gofmt -w . && golangci-lint run ./... && go test ./... -count=1
-
-# 3. Update CHANGELOG.md
-
-# 4. Merge to main and tag
+# 2. After merge, tag the patch release
 git checkout main
-git merge hotfix/v1.0.1
+git pull origin main
 git tag -a v1.0.1 -m "v1.0.1 - Hotfix: description"
-git push origin main --tags
-
-# 5. Backport to develop
-git checkout develop
-git merge hotfix/v1.0.1
-git push origin develop
+git push origin v1.0.1
 ```

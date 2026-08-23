@@ -95,17 +95,19 @@ type Reconciler struct {
 	enabled atomic.Bool
 	dryRun  atomic.Bool
 
-	// mu protects knownHostnames, recoveredMetadata, and warnedSelfCNAME during
+	// mu protects knownHostnames, recoveredMetadata, and warnedOnce during
 	// concurrent access
 	mu sync.RWMutex
 	// knownHostnames tracks hostnames discovered in the last reconciliation.
 	// Used for orphan detection.
 	knownHostnames map[string]struct{}
 
-	// warnedSelfCNAME tracks "provider|hostname" pairs already reported as
-	// self-referential CNAMEs, so the warning is logged once rather than on
-	// every reconciliation interval. Populated lazily.
-	warnedSelfCNAME map[string]struct{}
+	// warnedOnce tracks conditions already reported at warn level, keyed by
+	// "<reason>|<provider>|<hostname>", so a problem that cannot resolve on its
+	// own (a self-referential CNAME, a type conflict dnsweaver may not replace)
+	// is logged once rather than on every reconciliation interval. Populated
+	// lazily; see warnOnce.
+	warnedOnce map[string]struct{}
 
 	// hostnameProviders tracks which provider(s) each hostname was routed to
 	// in the previous reconciliation. Used by orphan cleanup to delete records

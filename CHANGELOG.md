@@ -43,6 +43,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is now read, in numeric order, and `DNSWEAVER_PROXMOX_INTERFACE_TAG_PREFIX`
   and `DNSWEAVER_PROXMOX_ALLOWED_INTERFACES` apply to containers the same way
   they already applied to VMs.
+- **A pre-existing record of a conflicting type blocked the configured record
+  forever.** When a hostname already held a CNAME at the time dnsweaver started
+  managing it (created by hand, or left over from an earlier configuration) and
+  the instance was configured for an A record, or the reverse, the conflict was
+  reported as `skipping due to record type conflict` on every interval and
+  nothing ever changed: the CNAME stayed and the A record was never created.
+  Orphan cleanup could not help because the hostname was still desired, and
+  `DNSWEAVER_ADOPT_EXISTING` was never consulted. The conflicting record is now
+  deleted and replaced when the instance is allowed to delete it: authoritative
+  mode, `DNSWEAVER_ADOPT_EXISTING=true`, or an ownership record showing the
+  stale record is dnsweaver's own. Additive mode never deletes, so it still
+  skips. When the record cannot be replaced the warning is logged once rather
+  than every interval, and names the setting that would let dnsweaver resolve
+  it. Dry-run reports what would be replaced; a failed delete marks the action
+  failed and nothing is created on top of the leftover record.
+  ([GitHub #171](https://github.com/maxfield-allison/dnsweaver/issues/171))
 
 ### Added
 - **Dual-stack support for the Proxmox source.** `DNSWEAVER_PROXMOX_IP_VERSION`

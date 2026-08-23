@@ -4,6 +4,7 @@ package reconciler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -18,7 +19,8 @@ import (
 //     reports it would write different state for it (provider.RecordComparer,
 //     e.g. Cloudflare proxied) → update in place
 //  3. If exists with different target (same type) → delete old, create new
-//  4. If exists with a type that cannot coexist (CNAME) → log warning, skip
+//  4. If exists with a type that cannot coexist (CNAME) → replace when allowed
+//     (see canReplaceConflicting), else warn once and skip
 //
 // When hostname has RecordHints, they override provider defaults:
 // - RecordHints.Provider: route directly to named provider instead of domain matching
@@ -44,8 +46,7 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname *source.Hostname
 			return actions
 		}
 		// Route to explicit provider, bypassing domain matching
-		action := r.ensureRecordForProvider(ctx, hostname, inst, cache)
-		return append(actions, action)
+		return append(actions, r.ensureRecordForProvider(ctx, hostname, inst, cache)...)
 	}
 
 	// Standard domain-based matching (with optional metadata-filter scoping
@@ -105,7 +106,7 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname *source.Hostname
 	}
 
 	for _, inst := range writers {
-		actions = append(actions, r.ensureRecordForProvider(ctx, hostname, inst, cache))
+		actions = append(actions, r.ensureRecordForProvider(ctx, hostname, inst, cache)...)
 	}
 	return actions
 }
@@ -138,29 +139,20 @@ func isSelfReferential(hostname, target string, recordType provider.RecordType) 
 	return source.NormalizeHostname(hostname) == source.NormalizeHostname(target)
 }
 
-// warnSelfReferentialOnce reports a self-referential CNAME at warn level the
-// first time it is seen for a provider/hostname pair and at debug level after
-// that. The condition is a configuration problem that cannot resolve on its own,
-// so repeating the warning every interval is pure noise (issue #165).
-func (r *Reconciler) warnSelfReferentialOnce(hostname, providerName, target string) {
-	key := providerName + "|" + hostname
-
+// warnOnce logs msg at warn level the first time key is seen and at debug
+// level after that. It is for conditions that cannot resolve on their own, where
+// repeating the warning every interval is pure noise (issue #165).
+func (r *Reconciler) warnOnce(key, msg string, attrs ...any) {
 	r.mu.Lock()
-	_, seen := r.warnedSelfCNAME[key]
+	_, seen := r.warnedOnce[key]
 	if !seen {
-		if r.warnedSelfCNAME == nil {
-			r.warnedSelfCNAME = make(map[string]struct{})
+		if r.warnedOnce == nil {
+			r.warnedOnce = make(map[string]struct{})
 		}
-		r.warnedSelfCNAME[key] = struct{}{}
+		r.warnedOnce[key] = struct{}{}
 	}
 	r.mu.Unlock()
 
-	const msg = "skipping self-referential CNAME (target is the hostname itself)"
-	attrs := []any{
-		slog.String("hostname", hostname),
-		slog.String("provider", providerName),
-		slog.String("target", target),
-	}
 	if seen {
 		r.logger.Debug(msg, attrs...)
 		return
@@ -168,9 +160,102 @@ func (r *Reconciler) warnSelfReferentialOnce(hostname, providerName, target stri
 	r.logger.Warn(msg, attrs...)
 }
 
+// warnSelfReferentialOnce reports a self-referential CNAME once per
+// provider/hostname pair.
+func (r *Reconciler) warnSelfReferentialOnce(hostname, providerName, target string) {
+	r.warnOnce("self-cname|"+providerName+"|"+hostname,
+		"skipping self-referential CNAME (target is the hostname itself)",
+		slog.String("hostname", hostname),
+		slog.String("provider", providerName),
+		slog.String("target", target),
+	)
+}
+
+// warnTypeConflictOnce reports a type conflict dnsweaver is not allowed to
+// resolve, once per provider/hostname pair, with the setting that would let it.
+func (r *Reconciler) warnTypeConflictOnce(hostname string, inst *provider.ProviderInstance, desiredType string, existingTypes []string) {
+	msg := "skipping due to record type conflict; set DNSWEAVER_ADOPT_EXISTING=true or use authoritative mode to let dnsweaver replace the existing record(s)"
+	if !inst.Mode.AllowsDelete() {
+		msg = "skipping due to record type conflict; additive mode never deletes, so the existing record(s) must be removed by hand"
+	}
+	r.warnOnce("type-conflict|"+inst.Name()+"|"+hostname, msg,
+		slog.String("hostname", hostname),
+		slog.String("provider", inst.Name()),
+		slog.String("mode", string(inst.Mode)),
+		slog.String("desired_type", desiredType),
+		slog.Any("existing_types", existingTypes),
+	)
+}
+
+// canReplaceConflicting reports whether inst may delete records of another
+// type that occupy hostname so the desired record can take their place.
+// Additive mode never deletes. Authoritative mode owns everything in scope and
+// ADOPT_EXISTING is the operator saying pre-existing records are dnsweaver's to
+// manage; otherwise only a record this instance already owns (left over from
+// an earlier configuration) is replaced (issue #171).
+func (r *Reconciler) canReplaceConflicting(inst *provider.ProviderInstance, hostname string, cache *recordCache) bool {
+	switch {
+	case !inst.Mode.AllowsDelete():
+		return false
+	case !inst.Mode.RequiresOwnership(), r.config.AdoptExisting:
+		return true
+	}
+	return cache != nil && cache.hasOwnershipRecord(inst.Name(), hostname, r.config.InstanceID)
+}
+
+// replaceConflictingRecords deletes the records at hostname whose type cannot
+// coexist with the desired record, returning a delete action per record removed
+// (or that would be removed, in dry-run). It stops at the first failure and
+// returns the error, leaving the remaining records in place: creating on top of
+// a half-cleared name would fail anyway, and the caller must not try.
+func (r *Reconciler) replaceConflictingRecords(ctx context.Context, hostname string, inst *provider.ProviderInstance, conflicting []provider.Record) ([]Action, error) {
+	actions := make([]Action, 0, len(conflicting))
+	for _, rec := range conflicting {
+		action := Action{
+			Type:       ActionDelete,
+			Provider:   inst.Name(),
+			Hostname:   hostname,
+			RecordType: string(rec.Type),
+			Target:     rec.Target,
+		}
+		attrs := []any{
+			slog.String("hostname", hostname),
+			slog.String("provider", inst.Name()),
+			slog.String("type", string(rec.Type)),
+			slog.String("target", rec.Target),
+		}
+
+		if r.isDryRun() {
+			action.Status = StatusSuccess
+			r.logger.Info("would replace conflicting record (dry-run)", attrs...)
+			actions = append(actions, action)
+			continue
+		}
+
+		var err error
+		if rec.Type == provider.RecordTypeSRV {
+			err = inst.DeleteSRVRecord(ctx, hostname, rec.Target, rec.SRV)
+		} else {
+			err = inst.DeleteRecordByTarget(ctx, hostname, rec.Type, rec.Target)
+		}
+		// A record that vanished between List and Delete is the outcome we wanted.
+		if err != nil && !errors.Is(err, provider.ErrNotFound) {
+			r.logger.Error("failed to replace conflicting record", append(attrs, slog.String("error", err.Error()))...)
+			return actions, fmt.Errorf("replacing conflicting %s record %s: %w", rec.Type, rec.Target, err)
+		}
+
+		action.Status = StatusSuccess
+		r.logger.Info("replaced conflicting record", attrs...)
+		actions = append(actions, action)
+	}
+	return actions, nil
+}
+
 // ensureRecordForProvider handles record creation for a single provider with List+Compare logic.
 // When hostname has RecordHints, they override provider instance defaults.
-func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *source.Hostname, inst *provider.ProviderInstance, cache *recordCache) Action {
+// It returns a delete action for each conflicting record it replaced, followed
+// by the action for the desired record itself.
+func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *source.Hostname, inst *provider.ProviderInstance, cache *recordCache) []Action {
 	// Determine effective record type, target, and TTL
 	// RecordHints override provider defaults when present
 	recordType := inst.RecordType
@@ -247,20 +332,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		action.Status = StatusSkipped
 		action.Error = errSelfReferentialCNAME
 		r.warnSelfReferentialOnce(hostname.Name, inst.Name(), target)
-		return action
-	}
-
-	if r.isDryRun() {
-		action.Status = StatusSuccess
-		r.logger.Info("would create record (dry-run)",
-			slog.String("hostname", hostname.Name),
-			slog.String("provider", inst.Name()),
-			slog.String("type", string(recordType)),
-			slog.String("target", target),
-			slog.Bool("ownership_tracking", r.config.OwnershipTracking),
-			slog.Bool("has_hints", hostname.HasRecordHints()),
-		)
-		return action
+		return []Action{action}
 	}
 
 	// Step 1: Get existing records from cache (or fetch if cache unavailable)
@@ -304,23 +376,44 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		}
 	}
 
-	// Step 3: Handle type conflicts (CNAME vs everything else)
+	// Step 3: Handle type conflicts (CNAME vs everything else). A conflicting
+	// record is replaced when this instance may delete it; otherwise the desired
+	// record can never be created and the hostname is skipped (issue #171).
+	var replaced []Action
 	if len(conflictingTypeRecords) > 0 {
 		conflictTypes := make([]string, 0, len(conflictingTypeRecords))
 		for _, rec := range conflictingTypeRecords {
 			conflictTypes = append(conflictTypes, string(rec.Type))
 		}
-		action.Type = ActionSkip
-		action.Status = StatusSkipped
-		action.Error = fmt.Sprintf("type conflict: existing %v record(s) conflict with %s",
-			conflictTypes, recordType)
-		r.logger.Warn("skipping due to record type conflict",
+		if !r.canReplaceConflicting(inst, hostname.Name, cache) {
+			action.Type = ActionSkip
+			action.Status = StatusSkipped
+			action.Error = fmt.Sprintf("type conflict: existing %v record(s) conflict with %s",
+				conflictTypes, recordType)
+			r.warnTypeConflictOnce(hostname.Name, inst, string(recordType), conflictTypes)
+			return []Action{action}
+		}
+
+		var err error
+		replaced, err = r.replaceConflictingRecords(ctx, hostname.Name, inst, conflictingTypeRecords)
+		if err != nil {
+			action.Status = StatusFailed
+			action.Error = err.Error()
+			return append(replaced, action)
+		}
+	}
+
+	if r.isDryRun() {
+		action.Status = StatusSuccess
+		r.logger.Info("would create record (dry-run)",
 			slog.String("hostname", hostname.Name),
 			slog.String("provider", inst.Name()),
-			slog.String("desired_type", string(recordType)),
-			slog.Any("existing_types", conflictTypes),
+			slog.String("type", string(recordType)),
+			slog.String("target", target),
+			slog.Bool("ownership_tracking", r.config.OwnershipTracking),
+			slog.Bool("has_hints", hostname.HasRecordHints()),
 		)
-		return action
+		return append(replaced, action)
 	}
 
 	// Step 4: Check if record with correct target already exists
@@ -401,7 +494,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 					slog.String("target", target),
 				)
 			}
-			return action
+			return append(replaced, action)
 		}
 	}
 
@@ -438,7 +531,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 				slog.String("provider", inst.Name()),
 				slog.String("error", err.Error()),
 			)
-			return action
+			return append(replaced, action)
 		}
 
 		action.Type = ActionUpdate
@@ -450,7 +543,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 			slog.String("target", target),
 		)
 		r.ensureOwnershipRecord(ctx, hostname.Name, inst, metadata, cache)
-		return action
+		return append(replaced, action)
 	}
 
 	// Step 6: Create the record (no existing records)
@@ -496,7 +589,7 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		r.ensureOwnershipRecord(ctx, hostname.Name, inst, metadata, cache)
 	}
 
-	return action
+	return append(replaced, action)
 }
 
 // ensureOwnershipRecord creates the ownership TXT record if tracking is enabled.

@@ -358,3 +358,40 @@ func TestRecordDiff_HasChanges(t *testing.T) {
 		})
 	}
 }
+
+// fixedComparer is a provider.RecordComparer with a fixed answer.
+type fixedComparer struct{ needsUpdate bool }
+
+func (f fixedComparer) RecordNeedsUpdate(_, _ provider.Record) bool { return f.needsUpdate }
+
+func TestRecordNeedsUpdate(t *testing.T) {
+	base := provider.Record{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "10.0.0.1", TTL: 300}
+	ttl600 := base
+	ttl600.TTL = 600
+	srv10 := provider.Record{Hostname: "_http._tcp.example.com", Type: provider.RecordTypeSRV, Target: "server.example.com", TTL: 300, SRV: &provider.SRVData{Priority: 10, Weight: 5, Port: 80}}
+	srv20 := srv10
+	srv20.SRV = &provider.SRVData{Priority: 20, Weight: 5, Port: 80}
+
+	tests := []struct {
+		name     string
+		existing provider.Record
+		desired  provider.Record
+		cmp      provider.RecordComparer
+		want     bool
+	}{
+		{"identical without comparer", base, base, nil, false},
+		{"TTL differs without comparer", base, ttl600, nil, true},
+		{"SRV data differs without comparer", srv10, srv20, nil, true},
+		{"identical, comparer sees no change", base, base, fixedComparer{false}, false},
+		{"identical, comparer sees a change", base, base, fixedComparer{true}, true},
+		{"TTL differs, comparer sees no change", base, ttl600, fixedComparer{false}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := recordNeedsUpdate(tt.existing, tt.desired, tt.cmp); got != tt.want {
+				t.Errorf("recordNeedsUpdate() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

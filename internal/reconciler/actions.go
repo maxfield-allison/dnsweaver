@@ -13,10 +13,12 @@ import (
 
 // ensureRecord creates DNS records for a hostname in all matching providers.
 // It uses a List+Compare approach to handle IP changes and type conflicts:
-// 1. Check if record exists for hostname
-// 2. If exists with same target → skip (idempotent)
-// 3. If exists with different target (same type) → delete old, create new
-// 4. If exists with a type that cannot coexist (CNAME) → log warning, skip
+//  1. Check if record exists for hostname
+//  2. If exists with same target → skip (idempotent), unless the provider
+//     reports it would write different state for it (provider.RecordComparer,
+//     e.g. Cloudflare proxied) → update in place
+//  3. If exists with different target (same type) → delete old, create new
+//  4. If exists with a type that cannot coexist (CNAME) → log warning, skip
 //
 // When hostname has RecordHints, they override provider defaults:
 // - RecordHints.Provider: route directly to named provider instead of domain matching
@@ -201,9 +203,25 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		}
 	}
 
+	// desired is what the sources declare right now plus the instance defaults.
+	// An existing record is compared against it and, when it differs, updated
+	// to it.
+	desired := provider.Record{
+		Hostname: hostname.Name,
+		Type:     recordType,
+		Target:   target,
+		TTL:      ttl,
+		SRV:      srvData,
+		Metadata: metadata,
+	}
+
 	// If source didn't provide metadata, check for recovered metadata from
 	// ownership TXT records (populated on startup by RecoverOwnership).
 	// This bridges the gap between restart and the source re-asserting metadata.
+	// It informs creation and the ownership record only and is kept out of
+	// desired on purpose: the TXT copy is not refreshed when a label changes,
+	// so comparing an existing record against it would flip the record back to
+	// its original state on every restart.
 	if len(metadata) == 0 {
 		if recovered := r.getRecoveredMetadata(hostname.Name); len(recovered) > 0 {
 			metadata = recovered
@@ -307,23 +325,21 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 
 	// Step 4: Check if record with correct target already exists
 	// For SRV records, we need to handle multiple records with the same target but different SRV data
+	var exactMatch provider.Record
 	var exactMatchFound bool
 	var staleSrvRecords []provider.Record
 	for _, existing := range sameTypeRecords {
-		if existing.Target == target {
-			// For SRV records, check if SRV-specific data matches
-			if recordType == provider.RecordTypeSRV {
-				if srvDataEquals(existing.SRV, srvData) {
-					// Perfect match for SRV record
-					exactMatchFound = true
-				} else {
-					// Same target but different SRV data - this is a stale record
-					staleSrvRecords = append(staleSrvRecords, existing)
-				}
-			} else {
-				// Non-SRV record with matching target - exact match
-				exactMatchFound = true
-			}
+		if existing.Target != target {
+			continue
+		}
+		// Same target but different SRV data - this is a stale record
+		if recordType == provider.RecordTypeSRV && !srvDataEquals(existing.SRV, srvData) {
+			staleSrvRecords = append(staleSrvRecords, existing)
+			continue
+		}
+		if !exactMatchFound {
+			exactMatch = existing
+			exactMatchFound = true
 		}
 	}
 
@@ -346,63 +362,72 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		}
 	}
 
-	// Step 4b: If exact match exists, skip creation
+	// Step 4b: If exact match exists, skip creation. The one exception is a
+	// record dnsweaver manages for which the provider would still write
+	// different state (Cloudflare proxied, issue #170); that falls through to
+	// the in-place update in Step 5. Records dnsweaver does not manage are left
+	// exactly as found.
 	if exactMatchFound {
-		action.Type = ActionSkip
-		action.Status = StatusSkipped
-		action.Error = errRecordAlreadyExists
-
 		// Check if we already own this record
 		hasOwnership := false
 		if cache != nil {
 			hasOwnership = cache.hasOwnershipRecord(inst.Name(), hostname.Name, r.config.InstanceID)
 		}
+		managed := hasOwnership || r.config.AdoptExisting || !r.config.OwnershipTracking
 
-		if hasOwnership {
-			r.logger.Debug("record already exists with correct target",
-				slog.String("hostname", hostname.Name),
-				slog.String("provider", inst.Name()),
-				slog.String("target", target),
-			)
-			r.ensureOwnershipRecord(ctx, hostname.Name, inst, metadata, cache)
-		} else if r.config.AdoptExisting {
-			r.logger.Info("adopting existing record",
-				slog.String("hostname", hostname.Name),
-				slog.String("provider", inst.Name()),
-				slog.String("target", target),
-			)
-			r.ensureOwnershipRecord(ctx, hostname.Name, inst, metadata, cache)
-		} else {
-			r.logger.Info("existing record found, skipping adoption (set ADOPT_EXISTING=true to manage)",
-				slog.String("hostname", hostname.Name),
-				slog.String("provider", inst.Name()),
-				slog.String("target", target),
-			)
+		if !managed || !inst.RecordNeedsUpdate(exactMatch, desired) {
+			action.Type = ActionSkip
+			action.Status = StatusSkipped
+			action.Error = errRecordAlreadyExists
+
+			if hasOwnership {
+				r.logger.Debug("record already exists with correct target",
+					slog.String("hostname", hostname.Name),
+					slog.String("provider", inst.Name()),
+					slog.String("target", target),
+				)
+				r.ensureOwnershipRecord(ctx, hostname.Name, inst, metadata, cache)
+			} else if r.config.AdoptExisting {
+				r.logger.Info("adopting existing record",
+					slog.String("hostname", hostname.Name),
+					slog.String("provider", inst.Name()),
+					slog.String("target", target),
+				)
+				r.ensureOwnershipRecord(ctx, hostname.Name, inst, metadata, cache)
+			} else {
+				r.logger.Info("existing record found, skipping adoption (set ADOPT_EXISTING=true to manage)",
+					slog.String("hostname", hostname.Name),
+					slog.String("provider", inst.Name()),
+					slog.String("target", target),
+				)
+			}
+			return action
 		}
-		return action
 	}
 
 	// Step 5: Update or create records as needed
 	// If we have existing records with wrong targets, update the first one in place
 	// (duplicates with wrong targets should be cleaned up separately)
+	// If the exact match only differs in provider state, update that one in place
 	// If no existing records, create new ones
 
 	if len(sameTypeRecords) > 0 {
-		// Update the first existing record - use UpdateRecord which handles native update vs fallback
+		// Use UpdateRecord which handles native update vs fallback
 		existing := sameTypeRecords[0]
-		r.logger.Info("target changed, updating record",
-			slog.String("hostname", hostname.Name),
-			slog.String("provider", inst.Name()),
-			slog.String("old_target", existing.Target),
-			slog.String("new_target", target),
-		)
-
-		desired := provider.Record{
-			Hostname: hostname.Name,
-			Type:     recordType,
-			Target:   target,
-			TTL:      ttl,
-			SRV:      srvData,
+		if exactMatchFound {
+			existing = exactMatch
+			r.logger.Info("record state changed, updating record",
+				slog.String("hostname", hostname.Name),
+				slog.String("provider", inst.Name()),
+				slog.String("target", target),
+			)
+		} else {
+			r.logger.Info("target changed, updating record",
+				slog.String("hostname", hostname.Name),
+				slog.String("provider", inst.Name()),
+				slog.String("old_target", existing.Target),
+				slog.String("new_target", target),
+			)
 		}
 
 		if err := inst.UpdateRecord(ctx, existing, desired); err != nil {

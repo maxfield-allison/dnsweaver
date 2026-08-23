@@ -78,6 +78,7 @@ The Kubernetes source reads `dnsweaver.dev/*` annotations from resources to over
 - **RecordHints are per-hostname** — all hostnames from a resource inherit the same annotations
 - **Provider matching** — if `dnsweaver.dev/provider` is set, only that provider handles the record; otherwise, normal domain-matching applies
 - **Multiple sources** — if both `dnsweaver` and `kubernetes` sources are enabled, annotations are processed by both (the dnsweaver source converts `dnsweaver.dev/*` annotations to its native label format)
+- **`dnsweaver.dev/proxied` applies to existing records too**: changing the annotation (or the Cloudflare instance's `PROXIED` default) updates a record that already exists on the next reconciliation, rather than only taking effect on creation
 
 ### Examples
 

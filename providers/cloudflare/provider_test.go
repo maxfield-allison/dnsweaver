@@ -1,12 +1,14 @@
 package cloudflare
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/provider"
@@ -859,5 +861,150 @@ func TestResolveProxied_RoutableAndOtherTypesUnchanged(t *testing.T) {
 				t.Errorf("resolveProxied() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestProvider_RecordNeedsUpdate(t *testing.T) {
+	// existing is what List reports; desired is what the reconciler wants,
+	// carrying the per-record hint (if any) in Metadata and the configured TTL.
+	listed := func(typ provider.RecordType, target string, proxied bool) provider.Record {
+		rec := provider.Record{Hostname: "app.example.com", Type: typ, Target: target, TTL: 300, Metadata: proxiedMetadata(proxied)}
+		if proxied {
+			rec.TTL = 1
+		}
+		return rec
+	}
+	wanted := func(typ provider.RecordType, target string, metadata map[string]string) provider.Record {
+		return provider.Record{Hostname: "app.example.com", Type: typ, Target: target, TTL: 300, Metadata: metadata}
+	}
+
+	tests := []struct {
+		name           string
+		defaultProxied bool
+		existing       provider.Record
+		desired        provider.Record
+		want           bool
+	}{
+		{
+			name:           "label false on a proxied record",
+			defaultProxied: true,
+			existing:       listed(provider.RecordTypeA, "1.1.1.1", true),
+			desired:        wanted(provider.RecordTypeA, "1.1.1.1", map[string]string{"proxied": "false"}),
+			want:           true,
+		},
+		{
+			name:           "label true on a DNS-only record",
+			defaultProxied: false,
+			existing:       listed(provider.RecordTypeA, "1.1.1.1", false),
+			desired:        wanted(provider.RecordTypeA, "1.1.1.1", map[string]string{"proxied": "true"}),
+			want:           true,
+		},
+		{
+			name:           "label matches existing state",
+			defaultProxied: true,
+			existing:       listed(provider.RecordTypeA, "1.1.1.1", false),
+			desired:        wanted(provider.RecordTypeA, "1.1.1.1", map[string]string{"proxied": "false"}),
+			want:           false,
+		},
+		{
+			name:           "default flipped to false, no label",
+			defaultProxied: false,
+			existing:       listed(provider.RecordTypeA, "1.1.1.1", true),
+			desired:        wanted(provider.RecordTypeA, "1.1.1.1", nil),
+			want:           true,
+		},
+		{
+			name:           "default flipped to true, no label",
+			defaultProxied: true,
+			existing:       listed(provider.RecordTypeA, "1.1.1.1", false),
+			desired:        wanted(provider.RecordTypeA, "1.1.1.1", nil),
+			want:           true,
+		},
+		{
+			name:           "default matches, proxied TTL 1 against configured TTL 300 is not a change",
+			defaultProxied: true,
+			existing:       listed(provider.RecordTypeA, "1.1.1.1", true),
+			desired:        wanted(provider.RecordTypeA, "1.1.1.1", nil),
+			want:           false,
+		},
+		{
+			name:           "CNAME honors the label",
+			defaultProxied: true,
+			existing:       listed(provider.RecordTypeCNAME, "origin.example.com", true),
+			desired:        wanted(provider.RecordTypeCNAME, "origin.example.com", map[string]string{"proxied": "false"}),
+			want:           true,
+		},
+		{
+			name:           "non-routable target demoted in both views",
+			defaultProxied: true,
+			existing:       listed(provider.RecordTypeA, "10.0.0.5", false),
+			desired:        wanted(provider.RecordTypeA, "10.0.0.5", nil),
+			want:           false,
+		},
+		{
+			name:           "non-routable target with explicit proxied=true demoted in both views",
+			defaultProxied: false,
+			existing:       listed(provider.RecordTypeA, "192.168.1.20", false),
+			desired:        wanted(provider.RecordTypeA, "192.168.1.20", map[string]string{"proxied": "true"}),
+			want:           false,
+		},
+		{
+			name:           "existing record without proxied metadata is never updated",
+			defaultProxied: true,
+			existing:       provider.Record{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "1.1.1.1", TTL: 300},
+			desired:        wanted(provider.RecordTypeA, "1.1.1.1", map[string]string{"proxied": "false"}),
+			want:           false,
+		},
+		{
+			name:           "TXT records carry no proxied state",
+			defaultProxied: true,
+			existing:       provider.Record{Hostname: "_dnsweaver.app.example.com", Type: provider.RecordTypeTXT, Target: "heritage=dnsweaver", TTL: 300},
+			desired:        provider.Record{Hostname: "_dnsweaver.app.example.com", Type: provider.RecordTypeTXT, Target: "heritage=dnsweaver", TTL: 300},
+			want:           false,
+		},
+		{
+			name:           "SRV records carry no proxied state",
+			defaultProxied: true,
+			existing:       provider.Record{Hostname: "_sip._tcp.example.com", Type: provider.RecordTypeSRV, Target: "sip.example.com", TTL: 300, SRV: &provider.SRVData{Priority: 10, Weight: 5, Port: 5060}},
+			desired:        provider.Record{Hostname: "_sip._tcp.example.com", Type: provider.RecordTypeSRV, Target: "sip.example.com", TTL: 300, SRV: &provider.SRVData{Priority: 10, Weight: 5, Port: 5060}},
+			want:           false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := newResolveProxiedProvider(tc.defaultProxied)
+			if got := p.RecordNeedsUpdate(tc.existing, tc.desired); got != tc.want {
+				t.Errorf("RecordNeedsUpdate() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestProvider_RecordNeedsUpdate_DoesNotLogDemotion(t *testing.T) {
+	// The comparison runs every reconcile pass; the non-routable demotion
+	// warning belongs to writes only, or it would repeat every interval.
+	var buf bytes.Buffer
+	p := &Provider{
+		name:    "test-cf",
+		proxied: true,
+		logger:  slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	}
+	existing := provider.Record{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "10.0.0.5", TTL: 300, Metadata: proxiedMetadata(false)}
+	desired := provider.Record{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "10.0.0.5", TTL: 300}
+
+	if p.RecordNeedsUpdate(existing, desired) {
+		t.Error("RecordNeedsUpdate() = true for a demoted target that is already DNS-only, want false")
+	}
+	if buf.Len() != 0 {
+		t.Errorf("comparison logged: %s", buf.String())
+	}
+
+	// The write path still warns.
+	if p.resolveProxied(desired) {
+		t.Error("resolveProxied() = true for a non-routable target, want false")
+	}
+	if !strings.Contains(buf.String(), "auto-disabling Cloudflare proxy") {
+		t.Errorf("resolveProxied did not log the demotion warning: %s", buf.String())
 	}
 }

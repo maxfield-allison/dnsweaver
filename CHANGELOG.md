@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Changing the Cloudflare proxied state did not reach existing records.** A
+  `dnsweaver.proxied` label (or `dnsweaver.dev/proxied` annotation) was honored
+  on creation and on a target change only; once a record existed with the
+  right target it was skipped, so flipping the label on a proxied record left
+  it proxied and no update was logged. The same was true of changing an
+  instance's `PROXIED` default. The reconciler now asks the provider whether it
+  would write different state for a record that already matches on hostname,
+  type and target, and updates it in place when so. For Cloudflare that is the
+  proxied flag, resolved exactly as a write resolves it (per-record override,
+  then instance default, then the non-routable-target demotion), so a changed
+  default is picked up as well as a changed label, and a record whose state
+  already matches is never rewritten. Cloudflare's TTL 1 ("automatic") on
+  proxied records is deliberately not compared, so steady state stays a no-op.
+  Only records dnsweaver manages are updated this way (its own records, or any
+  matching record with `ADOPT_EXISTING=true`); unmanaged records are left as
+  found. A target change now also carries the per-record metadata, so updating
+  a record that had `proxied=false` no longer re-proxies it. Providers other
+  than Cloudflare are unaffected.
+  ([GitHub #170](https://github.com/maxfield-allison/dnsweaver/issues/170))
 - **DHCP-configured LXC containers were skipped entirely.** IP resolution read
   the container's `net0` config and gave up when it found `ip=dhcp`, because a
   DHCP container's address exists only inside the running container. dnsweaver

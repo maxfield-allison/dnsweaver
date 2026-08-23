@@ -457,30 +457,83 @@ func (p *Provider) Update(ctx context.Context, existing, desired provider.Record
 	return nil
 }
 
+// RecordNeedsUpdate implements provider.RecordComparer. It reports whether the
+// proxied state this provider would write for desired differs from the state
+// existing was listed with, so that a changed dnsweaver.proxied label or a
+// changed PROXIED default reaches records that already exist (issue #170).
+//
+// Only the proxied flag is compared. TTL is deliberately left out: Cloudflare
+// reports TTL 1 ("automatic") for every proxied record regardless of what was
+// requested, so comparing it would rewrite each proxied record on every pass.
+// Records List did not annotate (TXT, SRV) never need an update here.
+func (p *Provider) RecordNeedsUpdate(existing, desired provider.Record) bool {
+	current, ok := existing.Metadata["proxied"]
+	if !ok {
+		return false
+	}
+	want, _, _ := p.proxiedFor(desired)
+	return parseBool(current) != want
+}
+
 // Ensure Provider implements provider.Provider at compile time.
 var _ provider.Provider = (*Provider)(nil)
 
 // Ensure Provider implements provider.Updater at compile time.
 var _ provider.Updater = (*Provider)(nil)
 
-// resolveProxied determines the effective proxied state for a record.
-// Priority order:
+// Ensure Provider implements provider.RecordComparer at compile time.
+var _ provider.RecordComparer = (*Provider)(nil)
+
+// resolveProxied determines the effective proxied state for a record and
+// warns when a requested proxy is refused. Priority order:
 //  1. TXT/SRV records are never proxied (Cloudflare limitation)
 //  2. Per-record Metadata["proxied"] override, else provider-level default
 //  3. A/AAAA records whose target is a non-routable IP are forced unproxied,
 //     because Cloudflare rejects proxying such targets with error 9003. This
 //     overrides both the default and an explicit proxied=true (a louder
 //     warning is logged in the explicit case).
+//
+// It is called once per write. Comparisons run every reconcile pass and use
+// proxiedFor directly so the demotion warning is not repeated every interval.
 func (p *Provider) resolveProxied(record provider.Record) bool {
+	proxied, demoted, explicit := p.proxiedFor(record)
+	if !demoted {
+		return proxied
+	}
+
+	// Cloudflare cannot proxy a non-routable target; honoring proxied=true here
+	// can only ever produce a 9003 API error. Demote to unproxied and explain.
+	if explicit {
+		p.logger.Warn("overriding explicit proxied=true: Cloudflare cannot proxy a non-routable target; creating record unproxied",
+			slog.String("provider", p.name),
+			slog.String("hostname", record.Hostname),
+			slog.String("type", string(record.Type)),
+			slog.String("target", record.Target),
+		)
+	} else {
+		p.logger.Warn("auto-disabling Cloudflare proxy: target is not publicly routable",
+			slog.String("provider", p.name),
+			slog.String("hostname", record.Hostname),
+			slog.String("type", string(record.Type)),
+			slog.String("target", record.Target),
+		)
+	}
+	return proxied
+}
+
+// proxiedFor applies the rules documented on resolveProxied without logging.
+// demoted reports that a requested proxy was refused because the target is
+// not routable; explicit reports that the request came from a per-record
+// Metadata["proxied"] hint rather than the provider default.
+func (p *Provider) proxiedFor(record provider.Record) (proxied, demoted, explicit bool) {
 	// TXT and SRV records cannot be proxied by Cloudflare
 	if record.Type == provider.RecordTypeTXT || record.Type == provider.RecordTypeSRV {
-		return false
+		return false, false, false
 	}
 
 	// Determine the requested proxied state and whether it was set explicitly
 	// via a per-record hint (vs inherited from the provider default).
-	proxied := p.proxied
-	explicit := false
+	proxied = p.proxied
 	if record.Metadata != nil {
 		if v, ok := record.Metadata["proxied"]; ok {
 			proxied = parseBool(v)
@@ -488,28 +541,11 @@ func (p *Provider) resolveProxied(record provider.Record) bool {
 		}
 	}
 
-	// Cloudflare cannot proxy a non-routable target; honoring proxied=true here
-	// can only ever produce a 9003 API error. Demote to unproxied and explain.
 	if proxied && isNonRoutableTarget(record) {
-		if explicit {
-			p.logger.Warn("overriding explicit proxied=true: Cloudflare cannot proxy a non-routable target; creating record unproxied",
-				slog.String("provider", p.name),
-				slog.String("hostname", record.Hostname),
-				slog.String("type", string(record.Type)),
-				slog.String("target", record.Target),
-			)
-		} else {
-			p.logger.Warn("auto-disabling Cloudflare proxy: target is not publicly routable",
-				slog.String("provider", p.name),
-				slog.String("hostname", record.Hostname),
-				slog.String("type", string(record.Type)),
-				slog.String("target", record.Target),
-			)
-		}
-		return false
+		return false, true, explicit
 	}
 
-	return proxied
+	return proxied, false, explicit
 }
 
 // isNonRoutableTarget reports whether the record's target is a literal IP that

@@ -77,6 +77,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   be routed by pool — the closest thing PVE has to a tenant boundary. Requires
   no new privilege; `Pool.Audit` was already required.
 
+### Security
+- **Go toolchain bumped to 1.26.6** (from 1.26.5) for five standard-library
+  advisories that `govulncheck` had started flagging on every pull request:
+  [GO-2026-6218](https://pkg.go.dev/vuln/GO-2026-6218) (`net/url`),
+  [GO-2026-6090](https://pkg.go.dev/vuln/GO-2026-6090) (`crypto/tls`),
+  [GO-2026-6089](https://pkg.go.dev/vuln/GO-2026-6089) (`net/http`),
+  [GO-2026-5972](https://pkg.go.dev/vuln/GO-2026-5972) (`encoding/asn1`) and
+  [GO-2026-5026](https://pkg.go.dev/vuln/GO-2026-5026) (`golang.org/x/net/idna`
+  via `net/http`). The `golang:1.26.6-alpine` pins in `.gitlab-ci.yml` and the
+  `Dockerfile` move with it, since neither reads `go.mod`.
+- **`golang.org/x/mod` bumped to 0.40.0** for CVE-2026-56864 and CVE-2026-56865
+  (a malicious GOSUMDB or GOPROXY could serve forged module data), which Trivy
+  flagged on the release pipeline. The same tidy moved `x/net`, `x/text`,
+  `x/tools` and `x/crypto` to their current releases.
+
 ## [2.7.3] - 2026-08-12
 
 ### Fixed

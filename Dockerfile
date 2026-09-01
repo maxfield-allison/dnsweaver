@@ -92,7 +92,6 @@ RUN chmod +x /usr/local/bin/dnsweaver /usr/local/bin/entrypoint.sh
 # Default environment variables (can be overridden)
 ENV DNSWEAVER_LOG_LEVEL="info" \
     DNSWEAVER_LOG_FORMAT="json" \
-    DNSWEAVER_DRY_RUN="false" \
     DNSWEAVER_HEALTH_PORT="8080"
 
 # Health check (using busybox nc — no wget needed)

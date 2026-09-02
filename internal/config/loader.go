@@ -251,12 +251,10 @@ func mergeGlobalConfig(base *GlobalConfig) (*GlobalConfig, []*ConfigError) {
 		}
 	}
 
-	if v := getEnv("DNSWEAVER_HEALTH_PORT"); v != "" {
-		if port, err := parseIntEnv(v); err == nil && port >= 1 && port <= 65535 {
-			cfg.HealthPort = port
-		} else {
-			errs = append(errs, configErrFull("DNSWEAVER_HEALTH_PORT", fmt.Sprintf("invalid value %q", v), "Must be a valid TCP port (1-65535)", "DNSWEAVER_HEALTH_PORT=8080"))
-		}
+	var healthPortErr *ConfigError
+	cfg.HealthPort, healthPortErr = healthPortFromEnvironment(cfg.HealthPort)
+	if healthPortErr != nil {
+		errs = append(errs, healthPortErr)
 	}
 
 	// Note: DNSWEAVER_SOURCE (singular) is deprecated. Source list is

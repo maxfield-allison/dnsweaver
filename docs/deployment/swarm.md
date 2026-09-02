@@ -136,7 +136,7 @@ services:
     secrets:
       - dns_token
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "/usr/local/bin/dnsweaver", "--healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3

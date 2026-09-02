@@ -368,17 +368,10 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	}
 
 	// Parse HEALTH_PORT
-	if portStr := getEnv("DNSWEAVER_HEALTH_PORT"); portStr != "" {
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			errs = append(errs, configErrFull("DNSWEAVER_HEALTH_PORT", fmt.Sprintf("invalid integer %q", portStr), "Must be a valid TCP port number", "DNSWEAVER_HEALTH_PORT=8080"))
-		} else if port < 1 || port > 65535 {
-			errs = append(errs, configErrFull("DNSWEAVER_HEALTH_PORT", fmt.Sprintf("must be between 1 and 65535, got %d", port), "Choose an unprivileged port (1024-65535)", "DNSWEAVER_HEALTH_PORT=8080"))
-		} else {
-			cfg.HealthPort = port
-		}
-	} else {
-		cfg.HealthPort = DefaultHealthPort
+	var healthPortErr *ConfigError
+	cfg.HealthPort, healthPortErr = healthPortFromEnvironment(DefaultHealthPort)
+	if healthPortErr != nil {
+		errs = append(errs, healthPortErr)
 	}
 
 	// Parse INSTANCE_ID

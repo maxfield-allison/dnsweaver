@@ -1,0 +1,24 @@
+platform: none
+
+server:
+  port: 18080
+
+sources:
+  - name: traefik
+    file_discovery:
+      paths:
+        - /tmp
+      pattern: "*.yml"
+      poll_interval: 60s
+      watch_method: poll
+
+providers:
+  - name: test
+    type: webhook
+    domains:
+      - "*.example.com"
+    target: 192.0.2.1
+    config:
+      url: http://127.0.0.1:9
+      timeout: 1s
+      retries: "0"

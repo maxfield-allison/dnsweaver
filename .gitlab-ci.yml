@@ -277,6 +277,7 @@ docker:build:amd64:
   script:
     - source build.env
     - docker build --pull --platform linux/amd64 --build-arg VERSION=$CI_COMMIT_SHORT_SHA --build-arg CACHE_BUST=$CI_PIPELINE_ID -t $IMAGE:$TAG-amd64 -t $IMAGE:sha-$CI_COMMIT_SHORT_SHA-amd64 .
+    - ./scripts/test-image-healthcheck.sh $IMAGE:$TAG-amd64
     - docker push $IMAGE:$TAG-amd64 && docker push $IMAGE:sha-$CI_COMMIT_SHORT_SHA-amd64
   artifacts:
     reports: { dotenv: build.env }

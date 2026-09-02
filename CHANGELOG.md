@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Container health checks now follow the configured server port.** The
+  official image no longer forces `DNSWEAVER_HEALTH_PORT=8080`, so
+  `server.port` in YAML works inside the container. Its built-in healthcheck
+  resolves the same YAML and environment precedence as the server, including
+  configs passed with `--config`, and probes the effective port without adding
+  `wget` or `curl` to the runtime image.
+  ([GitHub #187](https://github.com/maxfield-allison/dnsweaver/issues/187))
+
 ## [2.8.0] - 2026-08-23
 
 ### Fixed

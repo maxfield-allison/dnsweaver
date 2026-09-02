@@ -7,14 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-09-02
+
 ### Fixed
+
+- **Container image defaults no longer override YAML logging and dry-run
+  settings.** The official image no longer sets
+  `DNSWEAVER_DRY_RUN=false`, `DNSWEAVER_LOG_LEVEL=info`, or
+  `DNSWEAVER_LOG_FORMAT=json`. Those image defaults were treated as explicit
+  environment overrides, making `reconciler.dry_run`, `logging.level`, and
+  `logging.format` in configuration files unreachable. The compiled defaults
+  remain `false`, `info`, and `json`, while values set by the operator still
+  take precedence.
+  ([GitHub #184](https://github.com/maxfield-allison/dnsweaver/pull/184))
 - **Container health checks now follow the configured server port.** The
   official image no longer forces `DNSWEAVER_HEALTH_PORT=8080`, so
   `server.port` in YAML works inside the container. Its built-in healthcheck
   resolves the same YAML and environment precedence as the server, including
   configs passed with `--config`, and probes the effective port without adding
   `wget` or `curl` to the runtime image.
-  ([GitHub #187](https://github.com/maxfield-allison/dnsweaver/issues/187))
+  ([GitHub #187](https://github.com/maxfield-allison/dnsweaver/issues/187),
+  [#188](https://github.com/maxfield-allison/dnsweaver/pull/188))
+
+### Security
+
+- **`golang.org/x/crypto` bumped from 0.55.0 to 0.56.0** for
+  GO-2026-6354 and GO-2026-6355, which `govulncheck` found reachable through
+  dnsweaver's SSH call paths.
+  ([GitHub #186](https://github.com/maxfield-allison/dnsweaver/pull/186))
+
+### Dependencies
+
+- **DNS and Kubernetes modules updated.** `github.com/miekg/dns` moved from
+  1.1.72 to 1.1.73, while `k8s.io/api`, `k8s.io/apimachinery`, and
+  `k8s.io/client-go` moved from 0.36.3 to 0.37.0 along with their
+  transitive dependency graph.
+  ([GitHub #181](https://github.com/maxfield-allison/dnsweaver/pull/181))
+
+### CI
+
+- **CodeQL action bumped from 4.37.6 to 4.37.9.**
+  ([GitHub #169](https://github.com/maxfield-allison/dnsweaver/pull/169),
+  [#182](https://github.com/maxfield-allison/dnsweaver/pull/182))
+- **Built-image healthcheck coverage now runs in both CI systems.** The GitHub
+  Build job and GitLab amd64 image build start real images with YAML and
+  environment-selected non-default ports, then verify that the container
+  becomes healthy on the expected port.
+  ([GitHub #188](https://github.com/maxfield-allison/dnsweaver/pull/188))
 
 ## [2.8.0] - 2026-08-23
 
@@ -1558,7 +1597,8 @@ release workflow.
 - GitLab CI/CD pipeline with GitHub release automation
 - Docker Hub and GitHub Container Registry publishing
 
-[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.0...HEAD
+[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.1...HEAD
+[2.8.1]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/maxfield-allison/dnsweaver/compare/v2.7.3...v2.8.0
 [2.7.3]: https://github.com/maxfield-allison/dnsweaver/compare/v2.7.2...v2.7.3
 [2.7.2]: https://github.com/maxfield-allison/dnsweaver/compare/v2.7.1...v2.7.2

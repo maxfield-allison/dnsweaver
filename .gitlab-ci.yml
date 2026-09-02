@@ -8,7 +8,7 @@ variables:
   GOFLAGS: "-mod=readonly"
   BINARY_NAME: "dnsweaver"
   REGISTRY: "registry.probablyfine.dev"
-  IMAGE: "registry.probablyfine.dev/root/dnsweaver"
+  IMAGE: "$CI_REGISTRY_IMAGE"
   # Deploy target - set these as CI/CD variables or override here
   # DEPLOY_HOST: "swarm-manager.example.com"
   # DEPLOY_USER: "deploy"
@@ -34,7 +34,7 @@ workflow:
 .rules-docker: &rules-docker
   - if: $CI_COMMIT_TAG
   - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
-    changes: &docker-files ["{**/*.go,go.mod,go.sum,Dockerfile,.dockerignore}"]
+    changes: &docker-files ["{**/*.go,go.mod,go.sum,Dockerfile,.dockerignore,.gitlab-ci.yml,scripts/test-image-healthcheck.sh,testdata/image-healthcheck-config.yml}"]
   - if: $CI_COMMIT_BRANCH =~ /^(feature|bugfix|hotfix|fix)\//
     changes: *docker-files
 

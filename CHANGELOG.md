@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CI
+
+- **GitLab image jobs now use the current project registry path and work with
+  host-socket Docker runners.** Image names come from `CI_REGISTRY_IMAGE`, and
+  the built-image healthcheck test copies its fixture through the Docker API
+  instead of requiring the daemon to see the CI job's filesystem path.
+
 ## [2.8.1] - 2026-09-02
 
 ### Fixed

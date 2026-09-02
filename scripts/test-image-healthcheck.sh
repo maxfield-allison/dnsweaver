@@ -43,23 +43,28 @@ wait_for_healthy() {
     return 1
 }
 
+# Copy the fixture through the Docker API so this works when the Docker daemon
+# runs outside the CI job container (for example, through a mounted host socket).
+
 # YAML selected through the CLI must drive both the server and image healthcheck.
-docker run --detach \
+docker create \
     --name "$container_yaml" \
-    --mount "type=bind,source=$config_path,target=/etc/dnsweaver/config.yml,readonly" \
-    "$image" --config /etc/dnsweaver/config.yml >/dev/null
+    "$image" --config /tmp/dnsweaver-config.yml >/dev/null
+docker cp "$config_path" "$container_yaml:/tmp/dnsweaver-config.yml"
+docker start "$container_yaml" >/dev/null
 wait_for_healthy "$container_yaml"
 docker exec \
     --env DNSWEAVER_HEALTH_PORT=18080 \
     "$container_yaml" /usr/local/bin/dnsweaver --healthcheck
 
 # An environment override must take precedence over the YAML port for both.
-docker run --detach \
+docker create \
     --name "$container_env" \
-    --mount "type=bind,source=$config_path,target=/etc/dnsweaver/config.yml,readonly" \
-    --env DNSWEAVER_CONFIG=/etc/dnsweaver/config.yml \
+    --env DNSWEAVER_CONFIG=/tmp/dnsweaver-config.yml \
     --env DNSWEAVER_HEALTH_PORT=18081 \
     "$image" >/dev/null
+docker cp "$config_path" "$container_env:/tmp/dnsweaver-config.yml"
+docker start "$container_env" >/dev/null
 wait_for_healthy "$container_env"
 docker exec \
     --env DNSWEAVER_HEALTH_PORT=18081 \

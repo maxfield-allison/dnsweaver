@@ -89,12 +89,9 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 # Ensure binary and entrypoint are executable
 RUN chmod +x /usr/local/bin/dnsweaver /usr/local/bin/entrypoint.sh
 
-# Default environment variable (can be overridden)
-ENV DNSWEAVER_HEALTH_PORT="8080"
-
-# Health check (using busybox nc — no wget needed)
+# Health check (resolves the effective port from config)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["/bin/sh", "-c", "echo -e 'GET /health HTTP/1.0\r\nHost: localhost\r\n\r\n' | nc localhost 8080 | grep -q '200 OK' || exit 1"]
+    CMD ["/usr/local/bin/dnsweaver", "--healthcheck"]
 
 # Note: container starts as root so the entrypoint can detect the docker
 # socket GID and add the dnsweaver user to the matching group. The entrypoint

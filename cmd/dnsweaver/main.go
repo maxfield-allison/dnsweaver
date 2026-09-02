@@ -45,6 +45,7 @@ func main() {
 	configPath := flag.String("config", "", "Path to YAML configuration file")
 	showVersion := flag.Bool("version", false, "Show version and exit")
 	validateOnly := flag.Bool("validate", false, "Validate configuration and exit")
+	healthcheckOnly := flag.Bool("healthcheck", false, "Probe the running health endpoint and exit")
 	flag.Parse()
 
 	if *showVersion {
@@ -59,6 +60,14 @@ func main() {
 			slog.Error("failed to set DNSWEAVER_CONFIG", slog.String("error", err.Error()))
 			os.Exit(1)
 		}
+	}
+
+	if *healthcheckOnly {
+		if err := runHealthcheck(); err != nil {
+			fmt.Fprintf(os.Stderr, "Health check failed: %s\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
 	}
 
 	// Surface environment variables with a misspelled DNSWEAVER prefix (e.g.

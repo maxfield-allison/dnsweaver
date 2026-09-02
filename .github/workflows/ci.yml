@@ -72,6 +72,10 @@ jobs:
           cache: true
       - name: go build
         run: go build ./...
+      - name: Build container image
+        run: docker build --build-arg VERSION=ci -t dnsweaver:healthcheck-test .
+      - name: Test container healthcheck
+        run: ./scripts/test-image-healthcheck.sh dnsweaver:healthcheck-test
 
   govulncheck:
     name: Vulnerability Scan

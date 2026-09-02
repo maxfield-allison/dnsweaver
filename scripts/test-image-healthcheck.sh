@@ -49,6 +49,9 @@ docker run --detach \
     --mount "type=bind,source=$config_path,target=/etc/dnsweaver/config.yml,readonly" \
     "$image" --config /etc/dnsweaver/config.yml >/dev/null
 wait_for_healthy "$container_yaml"
+docker exec \
+    --env DNSWEAVER_HEALTH_PORT=18080 \
+    "$container_yaml" /usr/local/bin/dnsweaver --healthcheck
 
 # An environment override must take precedence over the YAML port for both.
 docker run --detach \
@@ -58,3 +61,6 @@ docker run --detach \
     --env DNSWEAVER_HEALTH_PORT=18081 \
     "$image" >/dev/null
 wait_for_healthy "$container_env"
+docker exec \
+    --env DNSWEAVER_HEALTH_PORT=18081 \
+    "$container_env" /usr/local/bin/dnsweaver --healthcheck

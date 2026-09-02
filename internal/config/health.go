@@ -2,7 +2,10 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strconv"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ResolveHealthPort returns the port used by the health and metrics server.
@@ -13,11 +16,11 @@ func ResolveHealthPort(configPath string) (int, error) {
 	port := DefaultHealthPort
 
 	if configPath != "" {
-		fileCfg, err := LoadFile(configPath)
+		filePort, err := healthPortFromFile(configPath)
 		if err != nil {
 			return 0, err
 		}
-		port = fileCfg.ToGlobalConfig().HealthPort
+		port = filePort
 	}
 
 	port, configErr := healthPortFromEnvironment(port)
@@ -26,6 +29,25 @@ func ResolveHealthPort(configPath string) (int, error) {
 	}
 
 	return port, nil
+}
+
+func healthPortFromFile(path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, fmt.Errorf("reading config file: %w", err)
+	}
+
+	var fileCfg struct {
+		Server *FileServerConfig `yaml:"server,omitempty"`
+	}
+	if err := yaml.Unmarshal(data, &fileCfg); err != nil {
+		return 0, fmt.Errorf("parsing YAML config: %w", err)
+	}
+
+	if fileCfg.Server != nil && fileCfg.Server.Port > 0 && fileCfg.Server.Port <= 65535 {
+		return fileCfg.Server.Port, nil
+	}
+	return DefaultHealthPort, nil
 }
 
 func healthPortFromEnvironment(fallback int) (int, *ConfigError) {

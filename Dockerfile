@@ -89,11 +89,8 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 # Ensure binary and entrypoint are executable
 RUN chmod +x /usr/local/bin/dnsweaver /usr/local/bin/entrypoint.sh
 
-# Default environment variables (can be overridden)
-ENV DNSWEAVER_LOG_LEVEL="info" \
-    DNSWEAVER_LOG_FORMAT="json" \
-    DNSWEAVER_DRY_RUN="false" \
-    DNSWEAVER_HEALTH_PORT="8080"
+# Default environment variable (can be overridden)
+ENV DNSWEAVER_HEALTH_PORT="8080"
 
 # Health check (using busybox nc — no wget needed)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

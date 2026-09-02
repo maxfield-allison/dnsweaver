@@ -7,12 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.2] - 2026-09-02
+
+`v2.8.1` was tagged, but its image pipeline stopped before the public release
+or multi-architecture images were published. `v2.8.2` contains the same
+application fixes and dependency updates, plus the release-pipeline correction
+below.
+
 ### CI
 
-- **GitLab image jobs now use the current project registry path and work with
-  host-socket Docker runners.** Image names come from `CI_REGISTRY_IMAGE`, and
-  the built-image healthcheck test copies its fixture through the Docker API
-  instead of requiring the daemon to see the CI job's filesystem path.
+- **Release image jobs now complete on GitLab runners.** The internal image
+  path follows `CI_REGISTRY_IMAGE`, and the built-image healthcheck test copies
+  its fixture through the Docker API so host-socket runners do not need to
+  resolve the job container's filesystem.
+  ([GitHub #190](https://github.com/maxfield-allison/dnsweaver/pull/190))
 
 ## [2.8.1] - 2026-09-02
 
@@ -1604,7 +1612,8 @@ release workflow.
 - GitLab CI/CD pipeline with GitHub release automation
 - Docker Hub and GitHub Container Registry publishing
 
-[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.1...HEAD
+[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.2...HEAD
+[2.8.2]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.1...v2.8.2
 [2.8.1]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/maxfield-allison/dnsweaver/compare/v2.7.3...v2.8.0
 [2.7.3]: https://github.com/maxfield-allison/dnsweaver/compare/v2.7.2...v2.7.3

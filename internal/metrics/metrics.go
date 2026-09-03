@@ -67,6 +67,15 @@ var (
 			Help:      "Number of hostnames discovered in the last reconciliation.",
 		},
 	)
+
+	// DesiredRecordMembers counts distinct provider-routed DNS members.
+	DesiredRecordMembers = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: Namespace,
+			Name:      "desired_record_members",
+			Help:      "Number of distinct provider-routed DNS record members in the last reconciliation.",
+		},
+	)
 )
 
 // Record operation metrics.

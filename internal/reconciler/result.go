@@ -93,6 +93,10 @@ type Result struct {
 	// HostnamesDiscovered is the number of unique valid hostnames found in labels.
 	HostnamesDiscovered int
 
+	// DesiredMembers is the number of distinct provider-routed DNS members in
+	// the compiled desired state.
+	DesiredMembers int
+
 	// HostnamesInvalid is the number of hostnames that failed validation.
 	HostnamesInvalid int
 
@@ -219,6 +223,7 @@ func (r *Result) Summary() string {
 	fmt.Fprintf(&sb, "Reconciliation complete (%s) in %s\n", mode, r.Duration().Round(time.Millisecond))
 	fmt.Fprintf(&sb, "  Workloads scanned: %d\n", r.WorkloadsScanned)
 	fmt.Fprintf(&sb, "  Hostnames discovered: %d\n", r.HostnamesDiscovered)
+	fmt.Fprintf(&sb, "  Desired record members: %d\n", r.DesiredMembers)
 	fmt.Fprintf(&sb, "  Records created: %d\n", r.CreatedCount())
 	fmt.Fprintf(&sb, "  Records updated: %d\n", r.UpdatedCount())
 	fmt.Fprintf(&sb, "  Records deleted: %d\n", r.DeletedCount())

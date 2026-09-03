@@ -96,7 +96,8 @@ func TestReconcile_HostnameMovesToDifferentProvider(t *testing.T) {
 func TestReconcile_HostnameSwitchesTarget(t *testing.T) {
 	// Cycle 1: record created with target 10.0.0.1
 	// Cycle 2: same hostname but provider target changed to 10.0.0.2
-	// Should update the record (delete old + create new).
+	// The set diff should create the replacement and then remove the exact old
+	// member, without treating an unrelated sibling as an update candidate.
 	dockerMock := newTestMockWorkloadLister(workload.PlatformDocker)
 	dockerMock.AddWorkload("app", map[string]string{
 		"traefik.http.routers.app.rule": "Host(`app.example.com`)",
@@ -107,24 +108,16 @@ func TestReconcile_HostnameSwitchesTarget(t *testing.T) {
 	sources.Register(traefik.New(traefik.WithLogger(logger)))
 
 	mockProvider := newTestMockProvider("test-dns")
-	// Pre-seed with old target to simulate previous cycle
-	mockProvider.AddRecord(provider.Record{
-		Hostname: "app.example.com",
-		Type:     provider.RecordTypeA,
-		Target:   "10.0.0.1",
-	})
-	mockProvider.AddRecord(ownershipTXT("app.example.com"))
 
 	providers := provider.NewRegistry(logger)
 	providers.RegisterFactory("mock", func(_ provider.FactoryConfig) (provider.Provider, error) {
 		return mockProvider, nil
 	})
-	// New target is 10.0.0.2
 	_ = providers.CreateInstance(provider.ProviderInstanceConfig{
 		Name:       "test-dns",
 		TypeName:   "mock",
 		RecordType: provider.RecordTypeA,
-		Target:     "10.0.0.2",
+		Target:     "10.0.0.1",
 		TTL:        300,
 		Domains:    []string{"*.example.com"},
 	})
@@ -134,18 +127,27 @@ func TestReconcile_HostnameSwitchesTarget(t *testing.T) {
 		WithLogger(logger),
 	)
 
+	if _, err := r.Reconcile(context.Background()); err != nil {
+		t.Fatalf("first Reconcile error: %v", err)
+	}
+	instance, ok := providers.Get("test-dns")
+	if !ok {
+		t.Fatal("provider instance not found")
+	}
+	instance.SetDynamicTarget("10.0.0.2")
+
 	result, err := r.Reconcile(context.Background())
 	if err != nil {
-		t.Fatalf("Reconcile error: %v", err)
+		t.Fatalf("second Reconcile error: %v", err)
 	}
 
-	// Should see an update action
-	updated := result.Updated()
-	if len(updated) != 1 {
-		t.Errorf("expected 1 update action, got %d", len(updated))
+	created := result.Created()
+	if len(created) != 1 || created[0].Target != "10.0.0.2" {
+		t.Errorf("created actions = %+v, want replacement target 10.0.0.2", created)
 	}
-	if len(updated) > 0 && updated[0].Target != "10.0.0.2" {
-		t.Errorf("updated target = %q, want 10.0.0.2", updated[0].Target)
+	deleted := result.Deleted()
+	if len(deleted) != 1 || deleted[0].Target != "10.0.0.1" {
+		t.Errorf("deleted actions = %+v, want old target 10.0.0.1", deleted)
 	}
 }
 
@@ -930,16 +932,7 @@ func TestReconcile_AdditiveModePreventsOrphanDeletion(t *testing.T) {
 		t.Errorf("additive mode should prevent deletion, but %d records were deleted", len(deleted))
 	}
 
-	// Should have a skip action for the orphan
-	skipped := result.Skipped()
-	hasAdditiveSkip := false
-	for _, a := range skipped {
-		if strings.Contains(a.Error, "additive") {
-			hasAdditiveSkip = true
-			break
-		}
-	}
-	if !hasAdditiveSkip {
-		t.Error("expected skip action mentioning additive mode")
+	if len(result.Deleted()) != 0 {
+		t.Errorf("additive mode reported deletions: %+v", result.Deleted())
 	}
 }

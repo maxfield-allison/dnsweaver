@@ -381,12 +381,8 @@ func TestReconcile_DryRunOrphanCleanupReportsActions(t *testing.T) {
 		Target:   "10.0.0.1",
 		TTL:      300,
 	})
-	// Also seed the ownership TXT record (managed mode requires it)
-	mockProvider.AddRecord(provider.Record{
-		Hostname: "_dnsweaver.orphan.example.com",
-		Type:     provider.RecordTypeTXT,
-		Target:   "heritage=dnsweaver",
-	})
+	// Also seed the exact ownership TXT record (managed mode requires it).
+	mockProvider.AddRecord(memberOwnershipTXT("orphan.example.com", "10.0.0.1"))
 
 	r := New([]workload.Lister{dockerMock}, sources, providers,
 		WithConfig(cfg),

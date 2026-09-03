@@ -199,6 +199,8 @@ func ParseMemberOwnershipValue(value string) (isOwned bool, instanceID string, m
 
 	record := &Record{Type: recordType, Target: target}
 	switch recordType {
+	case RecordTypeA, RecordTypeAAAA, RecordTypeCNAME, RecordTypeTXT:
+		// Target fully identifies these member types.
 	case RecordTypeSRV:
 		priority, priorityOK := parseOwnershipUint16(fields[keyRecordSRVPriority])
 		weight, weightOK := parseOwnershipUint16(fields[keyRecordSRVWeight])
@@ -234,6 +236,18 @@ func validOwnershipRecordType(recordType RecordType) bool {
 func MatchesMemberOwnership(value, instanceID string, record Record) bool {
 	isOwned, markerInstance, member, _ := ParseMemberOwnershipValue(value)
 	return isOwned && markerInstance == instanceID && member != nil && SameRecordMember(*member, record)
+}
+
+// MatchesLegacyOwnership reports whether value is a pre-member ownership
+// marker for the requested instance. Malformed versioned markers are not
+// treated as legacy because doing so would restore hostname-wide authority.
+func MatchesLegacyOwnership(value, instanceID string) bool {
+	isOwned, markerInstance, fields := ParseOwnershipValue(value)
+	if !isOwned || markerInstance != instanceID {
+		return false
+	}
+	_, versioned := fields[keyRecordVersion]
+	return !versioned
 }
 
 // SameRecordMember compares the fields that identify a member of an RRset.

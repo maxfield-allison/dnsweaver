@@ -93,3 +93,34 @@ func TestCompanionSkippedForCNAME(t *testing.T) {
 		t.Errorf("expected leftover companion cleanup for a CNAME, got %d delete call(s)", deleteCalls)
 	}
 }
+
+func TestDeleteCompanionHTTPSKeepsItWhileAddressSiblingRemains(t *testing.T) {
+	deleteCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/zones/records/get":
+			_, _ = w.Write([]byte(`{"status":"ok","response":{"zone":{"name":"zone"},"name":"app.example.com","records":[{"name":"app.example.com","type":"A","ttl":300,"rData":{"ipAddress":"192.0.2.11"}}]}}`))
+		case "/api/zones/records/delete":
+			deleteCalls++
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &Config{URL: server.URL, Token: "token", Zone: "zone", TTL: 300, AutoHTTPSRecords: true, AutoHTTPSALPN: "h2"}
+	p, err := New("inst", cfg)
+	if err != nil {
+		t.Fatalf("failed to create provider: %v", err)
+	}
+	p.client = NewClient(server.URL, "token")
+
+	if err := p.deleteCompanionHTTPS(context.Background(), "app.example.com", provider.RecordTypeA); err != nil {
+		t.Fatalf("deleteCompanionHTTPS failed: %v", err)
+	}
+	if deleteCalls != 0 {
+		t.Fatalf("deleted companion while an A sibling remained: %d delete call(s)", deleteCalls)
+	}
+}

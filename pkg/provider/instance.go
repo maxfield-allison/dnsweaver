@@ -379,6 +379,22 @@ func (pi *ProviderInstance) DeleteRecordByTarget(ctx context.Context, hostname s
 	return err
 }
 
+// DeleteMember removes the exact provider record supplied by a List snapshot,
+// preserving provider IDs and type-specific identity fields.
+func (pi *ProviderInstance) DeleteMember(ctx context.Context, record Record) error {
+	start := time.Now()
+	err := pi.Provider.Delete(ctx, record)
+	duration := time.Since(start).Seconds()
+
+	status := statusSuccess
+	if err != nil {
+		status = statusError
+	}
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete").Observe(duration)
+	return err
+}
+
 // DeleteSRVRecord removes a specific SRV record by hostname, target, and SRV data.
 // This is needed because multiple SRV records can have the same target but different
 // priority/weight/port values.

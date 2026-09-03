@@ -604,7 +604,10 @@ func TestProviderInstance_MemberOwnershipLifecycle(t *testing.T) {
 	if len(mock.created) != 1 || !MatchesMemberOwnership(mock.created[0].Target, "instance-a", member) {
 		t.Fatalf("created records = %+v", mock.created)
 	}
-	_, _, _, createdMetadata := ParseMemberOwnershipValue(mock.created[0].Target)
+	owned, instanceID, createdMember, createdMetadata := ParseMemberOwnershipValue(mock.created[0].Target)
+	if !owned || instanceID != "instance-a" || createdMember == nil {
+		t.Fatalf("created marker did not parse: owned=%v instance=%q member=%+v", owned, instanceID, createdMember)
+	}
 	if createdMetadata["proxied"] != "false" {
 		t.Fatalf("created metadata = %v", createdMetadata)
 	}

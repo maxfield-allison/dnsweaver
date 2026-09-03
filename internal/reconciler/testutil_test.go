@@ -241,6 +241,7 @@ func (m *testMockProvider) GetCreatedOwnershipRecords() []provider.Record {
 type testMockSource struct {
 	name      string
 	hostnames []source.Hostname
+	err       error
 }
 
 //nolint:unused // Reserved for future Reconcile() function tests
@@ -256,7 +257,7 @@ func (m *testMockSource) Name() string { return m.name }
 
 //nolint:unused // Reserved for future Reconcile() function tests
 func (m *testMockSource) Extract(_ context.Context, _ workload.Workload) ([]source.Hostname, error) {
-	return m.hostnames, nil
+	return m.hostnames, m.err
 }
 
 //nolint:unused // Reserved for future Reconcile() function tests

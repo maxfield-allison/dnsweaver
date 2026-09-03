@@ -117,12 +117,7 @@ func TestReconcile_CanceledContextDuringProviderDelete(t *testing.T) {
 		Type:     provider.RecordTypeA,
 		Target:   "10.0.0.1",
 	})
-	// Add ownership TXT at the correct hostname (_dnsweaver. prefix)
-	mockProvider.AddRecord(provider.Record{
-		Hostname: provider.OwnershipRecordName("orphan.example.com"),
-		Type:     provider.RecordTypeTXT,
-		Target:   "heritage=dnsweaver",
-	})
+	mockProvider.AddRecord(memberOwnershipTXT("orphan.example.com", "10.0.0.1"))
 
 	mockProvider.deleteFn = func(_ context.Context, _ provider.Record) error {
 		return context.Canceled
@@ -228,8 +223,8 @@ func TestReconcile_ProviderListFailureDuringCacheBuild(t *testing.T) {
 }
 
 func TestReconcile_ProviderDeleteFails(t *testing.T) {
-	// When provider.Delete() fails during ensureRecord (target change),
-	// the action should report failure.
+	// When deletion of the old member fails during a target change, the
+	// replacement stays created and the exact failed deletion is reported.
 	dockerMock := newTestMockWorkloadLister(workload.PlatformDocker)
 	dockerMock.AddWorkload("app", map[string]string{
 		"traefik.http.routers.app.rule": "Host(`app.example.com`)",
@@ -246,7 +241,13 @@ func TestReconcile_ProviderDeleteFails(t *testing.T) {
 		Type:     provider.RecordTypeA,
 		Target:   "10.0.0.99", // different from the 10.0.0.1 the provider instance wants
 	})
-	mockProvider.AddRecord(ownershipTXT("app.example.com"))
+	mockProvider.AddRecord(memberOwnershipTXT("app.example.com", "10.0.0.99"))
+	mockProvider.deleteFn = func(_ context.Context, record provider.Record) error {
+		if record.Type == provider.RecordTypeA {
+			return errors.New("provider delete failed")
+		}
+		return nil
+	}
 
 	providers := provider.NewRegistry(logger)
 	providers.RegisterFactory("mock", func(_ provider.FactoryConfig) (provider.Provider, error) {
@@ -271,10 +272,13 @@ func TestReconcile_ProviderDeleteFails(t *testing.T) {
 		t.Fatalf("Reconcile returned hard error: %v", err)
 	}
 
-	// Should have an update action (old target 10.0.0.99 → new target 10.0.0.1)
-	updated := result.Updated()
-	if len(updated) != 1 {
-		t.Errorf("expected 1 updated action, got %d", len(updated))
+	created := result.Created()
+	if len(created) != 1 || created[0].Target != "10.0.0.1" {
+		t.Errorf("created actions = %+v, want replacement member", created)
+	}
+	failed := result.Failed()
+	if len(failed) != 1 || failed[0].Type != ActionDelete || failed[0].Target != "10.0.0.99" {
+		t.Errorf("failed actions = %+v, want exact old-member deletion failure", failed)
 	}
 }
 

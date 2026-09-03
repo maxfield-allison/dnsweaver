@@ -774,6 +774,20 @@ func TestMatchesMemberOwnership(t *testing.T) {
 	}
 }
 
+func TestMatchesLegacyOwnershipRejectsVersionedMarkers(t *testing.T) {
+	if !MatchesLegacyOwnership("heritage=dnsweaver,instance=instance-a", "instance-a") {
+		t.Fatal("legacy marker did not match")
+	}
+	member := Record{Type: RecordTypeA, Target: "192.0.2.10"}
+	if MatchesLegacyOwnership(MakeMemberOwnershipValue("instance-a", member, nil), "instance-a") {
+		t.Fatal("member marker matched as legacy")
+	}
+	malformed := "heritage=dnsweaver,instance=instance-a,record-version=2,record-type=A,record-target=not+base64"
+	if MatchesLegacyOwnership(malformed, "instance-a") {
+		t.Fatal("malformed versioned marker matched as legacy")
+	}
+}
+
 func TestSameRecordMemberCanonicalizesDNSValues(t *testing.T) {
 	if !SameRecordMember(
 		Record{Type: RecordTypeAAAA, Target: "2001:0db8:0:0:0:0:0:1"},

@@ -215,3 +215,29 @@ func TestRecordCache_GetExistingRecords(t *testing.T) {
 		})
 	}
 }
+
+func TestRecordCache_DistinguishesMemberAndLegacyOwnership(t *testing.T) {
+	member := provider.Record{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "192.0.2.10"}
+	memberMarker := provider.MemberOwnershipRecord(member.Hostname, 300, "instance-a", member, map[string]string{"source": "native"})
+	legacyMarker := provider.OwnershipRecord(member.Hostname, 300, "instance-a", nil)
+	cache := &recordCache{
+		records: map[string]map[string][]provider.Record{
+			"dns": {
+				"_dnsweaver.app.example.com": {memberMarker, legacyMarker},
+			},
+		},
+		logger: slog.Default(),
+	}
+
+	gotMember, found := cache.memberOwnershipRecord("dns", member, "instance-a")
+	if !found || gotMember.Target != memberMarker.Target {
+		t.Fatalf("member marker = %+v, %v", gotMember, found)
+	}
+	gotLegacy, found := cache.legacyOwnershipRecord("dns", member.Hostname, "instance-a")
+	if !found || gotLegacy.Target != legacyMarker.Target {
+		t.Fatalf("legacy marker = %+v, %v", gotLegacy, found)
+	}
+	if _, found := cache.memberOwnershipRecord("dns", provider.Record{Hostname: member.Hostname, Type: member.Type, Target: "192.0.2.11"}, "instance-a"); found {
+		t.Fatal("member marker matched another target")
+	}
+}

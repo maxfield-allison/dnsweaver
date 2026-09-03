@@ -67,6 +67,25 @@ func TestProvider_Zone(t *testing.T) {
 	}
 }
 
+func TestFactory_PreservesBackendURLInIdentity(t *testing.T) {
+	p, err := Factory()(provider.FactoryConfig{
+		Name: "internal",
+		ProviderConfig: map[string]string{
+			"URL":   "http://dns-a:5380",
+			"TOKEN": "token",
+			"ZONE":  "example.com",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Factory() error = %v", err)
+	}
+
+	identity := provider.IdentityOf(p)
+	if identity.Endpoint != "http://dns-a:5380" || identity.Zone != "example.com" {
+		t.Fatalf("Identity() = %+v, want configured URL and zone", identity)
+	}
+}
+
 func TestProvider_New_NilConfig(t *testing.T) {
 	_, err := New("test", nil)
 	if err == nil {

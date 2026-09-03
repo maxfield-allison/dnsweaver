@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Provider-scoped record sets preserve every distinct A and AAAA member.**
+  Claims are deduplicated only after provider routing and target resolution, so
+  repeated claims for one target create one record while distinct Proxmox,
+  Incus, or named-record targets remain separate members. Ownership markers,
+  replacement, orphan cleanup, provider-route changes, restart recovery, and
+  the deletion circuit breaker now operate on exact members without removing
+  unrelated siblings. Built-in providers either delete an exact member or
+  retain their documented safe limitation.
+  ([GitHub #177](https://github.com/maxfield-allison/dnsweaver/issues/177))
 - **Existing-record adoption can now be scoped to a provider, workload, or
   named record.** `DNSWEAVER_{NAME}_ADOPT_EXISTING` overrides the global policy
   for one provider. `dnsweaver.adopt` and `dnsweaver.dev/adopt` apply to every

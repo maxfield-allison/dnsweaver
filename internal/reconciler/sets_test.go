@@ -196,3 +196,41 @@ func TestReconcileDesiredSet_RejectsMultipleCNAMEMembers(t *testing.T) {
 		t.Fatalf("ambiguous CNAME set mutated provider: created=%+v deleted=%+v", mock.GetCreated(), mock.GetDeleted())
 	}
 }
+
+func TestReconcileDesiredSet_RejectsSelfReferentialCNAMEBeforeMutation(t *testing.T) {
+	existing := provider.Record{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "192.0.2.10", TTL: 300}
+	desired := &source.Hostname{
+		Name:   "app.example.com",
+		Source: "native",
+		RecordHints: &source.RecordHints{
+			Type:   "CNAME",
+			Target: "app.example.com",
+		},
+	}
+	r, mock, set, cache := setTestHarness(t, provider.ModeAuthoritative, setTestCapabilities(true, true), []provider.Record{existing}, desired)
+
+	actions := r.reconcileDesiredSet(context.Background(), set, cache, nil)
+
+	if len(actions) != 1 || actions[0].Type != ActionSkip || actions[0].Error != errSelfReferentialCNAME {
+		t.Fatalf("actions = %+v, want self-referential CNAME skip", actions)
+	}
+	if len(mock.GetCreated()) != 0 || len(mock.GetDeleted()) != 0 {
+		t.Fatalf("self-referential CNAME mutated provider: created=%+v deleted=%+v", mock.GetCreated(), mock.GetDeleted())
+	}
+}
+
+func TestReconcileDesiredSet_RejectsMultipleCNAMEMembersBeforeConflictDeletion(t *testing.T) {
+	existing := provider.Record{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "192.0.2.10", TTL: 300}
+	first := &source.Hostname{Name: "app.example.com", Source: "native", RecordHints: &source.RecordHints{Type: "CNAME", Target: "one.example.com"}}
+	second := &source.Hostname{Name: "app.example.com", Source: "native", RecordHints: &source.RecordHints{Type: "CNAME", Target: "two.example.com"}}
+	r, mock, set, cache := setTestHarness(t, provider.ModeAuthoritative, setTestCapabilities(true, true), []provider.Record{existing}, first, second)
+
+	actions := r.reconcileDesiredSet(context.Background(), set, cache, nil)
+
+	if len(actions) != 2 || actions[0].Error != errMultipleCNAMEMembers || actions[1].Error != errMultipleCNAMEMembers {
+		t.Fatalf("actions = %+v, want both CNAME members rejected", actions)
+	}
+	if len(mock.GetCreated()) != 0 || len(mock.GetDeleted()) != 0 {
+		t.Fatalf("ambiguous CNAME set mutated provider: created=%+v deleted=%+v", mock.GetCreated(), mock.GetDeleted())
+	}
+}

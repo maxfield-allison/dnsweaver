@@ -189,6 +189,71 @@ func TestReconcile_ProviderRouteChangesAreExactLiveAndAfterRestart(t *testing.T)
 	}
 }
 
+func TestReconcile_MultiMemberProviderRouteChangeBypassesRemovalCircuitBreaker(t *testing.T) {
+	internal := newTestMockProvider("internal")
+	external := newTestMockProvider("external")
+	internalIdentity := provider.ProviderIdentity{Type: "mock", Endpoint: "internal", Zone: "example.com"}
+	externalIdentity := provider.ProviderIdentity{Type: "mock", Endpoint: "external", Zone: "example.com"}
+	internal.identity = &internalIdentity
+	external.identity = &externalIdentity
+
+	providers := testProviderRegistry(quietLogger(), internal, external)
+	providers.SetInstanceID("test-instance")
+	for _, name := range []string{"internal", "external"} {
+		if err := providers.CreateInstance(provider.ProviderInstanceConfig{
+			Name: name, TypeName: "mock", RecordType: provider.RecordTypeA,
+			Target: "192.0.2.1", TTL: 300, Mode: provider.ModeManaged, Domains: []string{"*.example.com"},
+		}); err != nil {
+			t.Fatalf("CreateInstance(%s) error = %v", name, err)
+		}
+	}
+
+	claims := source.Hostnames{
+		*hintedA("app.example.com", "192.0.2.10"),
+		*hintedA("app.example.com", "192.0.2.11"),
+		*hintedA("app.example.com", "192.0.2.12"),
+	}
+	for i := range claims {
+		claims[i].RecordHints.Provider = "internal"
+	}
+	sourceMock := newTestMockSource("native", claims...)
+	sources := testSourceRegistry(quietLogger(), sourceMock)
+	lister := newTestMockWorkloadLister(workload.PlatformDocker)
+	lister.workloads = []workload.Workload{{ID: "app", Name: "app", Platform: workload.PlatformDocker}}
+	cfg := DefaultConfig()
+	cfg.InstanceID = "test-instance"
+	r := New([]workload.Lister{lister}, sources, providers, WithConfig(cfg), WithLogger(quietLogger()))
+	if _, err := r.Reconcile(context.Background()); err != nil {
+		t.Fatalf("initial Reconcile() error = %v", err)
+	}
+
+	for i := range claims {
+		claims[i].RecordHints.Provider = "external"
+	}
+	sourceMock.hostnames = claims
+	restarted := New([]workload.Lister{lister}, sources, providers, WithConfig(cfg), WithLogger(quietLogger()))
+	result, err := restarted.Reconcile(context.Background())
+	if err != nil {
+		t.Fatalf("route Reconcile() error = %v", err)
+	}
+	if got := result.Created(); len(got) != 3 {
+		t.Fatalf("route creates = %+v, want all three external members", got)
+	}
+	if got := result.Deleted(); len(got) != 3 {
+		t.Fatalf("route deletes = %+v, want all three internal members", got)
+	}
+	for _, action := range result.Created() {
+		if action.Provider != "external" {
+			t.Fatalf("created on provider %q, want external", action.Provider)
+		}
+	}
+	for _, action := range result.Deleted() {
+		if action.Provider != "internal" {
+			t.Fatalf("deleted from provider %q, want internal", action.Provider)
+		}
+	}
+}
+
 func TestReconcile_ProxmoxDualStackReachesProvider(t *testing.T) {
 	sourceMock := newTestMockSource("proxmox",
 		source.Hostname{Name: "vm.example.com", Source: "proxmox", RecordHints: &source.RecordHints{Type: "A", Target: "192.0.2.10"}},

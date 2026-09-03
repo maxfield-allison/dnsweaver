@@ -219,7 +219,9 @@ func (r *Reconciler) rememberDesired(next map[desiredSetKey]previousDesiredSet) 
 
 func (r *Reconciler) memberRemovalsAllowed(compiled desiredCompilation, cache *recordCache, previous map[desiredSetKey]previousDesiredSet) bool {
 	current := make(map[desiredSetKey][]provider.Record, len(compiled.Sets))
+	currentHostnames := make(map[string]struct{}, len(compiled.Sets))
 	for _, set := range compiled.Sets {
+		currentHostnames[set.Key.Hostname] = struct{}{}
 		for _, member := range set.Members {
 			current[set.Key] = append(current[set.Key], member.Record)
 		}
@@ -257,6 +259,16 @@ func (r *Reconciler) memberRemovalsAllowed(compiled desiredCompilation, cache *r
 
 	removed := 0
 	for _, old := range baseline {
+		// A desired hostname moving away from this provider/type is an explicit
+		// route retirement, not evidence that discovery lost the hostname. The
+		// circuit breaker must not make multi-member route changes permanent by
+		// retaining every member on the old backend.
+		if _, stillRouted := current[old.key]; !stillRouted {
+			if _, hostnameStillDesired := currentHostnames[old.key.Hostname]; hostnameStillDesired {
+				continue
+			}
+		}
+
 		found := false
 		for _, record := range current[old.key] {
 			if provider.SameRecordMember(old.record, record) {

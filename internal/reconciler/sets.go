@@ -50,6 +50,22 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 	}
 
 	actions := make([]Action, 0, len(set.Members)+len(sameType)+len(conflicting))
+	// CNAME is single-valued in practice. Reject ambiguous or self-referential
+	// desired state before deleting any conflicting records at the name.
+	if set.Key.RecordType == provider.RecordTypeCNAME {
+		if len(set.Members) > 1 || len(sameType) > 1 {
+			for _, member := range set.Members {
+				actions = append(actions, memberAction(ActionSkip, StatusSkipped, instance, member.Record, errMultipleCNAMEMembers))
+			}
+			return actions, managed
+		}
+		if len(set.Members) == 1 && isSelfReferential(set.Members[0].Record.Hostname, set.Members[0].Record.Target, provider.RecordTypeCNAME) {
+			member := set.Members[0]
+			r.warnSelfReferentialOnce(member.Record.Hostname, instance.Name(), member.Record.Target)
+			return append(actions, memberAction(ActionSkip, StatusSkipped, instance, member.Record, errSelfReferentialCNAME)), managed
+		}
+	}
+
 	if len(conflicting) > 0 {
 		adopt := setAllowsAdoption(r, set)
 		for _, record := range conflicting {
@@ -77,16 +93,9 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 	legacyUpgradeComplete := hasLegacyOwnership && instance.Provider.Capabilities().SupportsOwnershipTXT
 	desiredWritesSucceeded := true
 
-	// CNAME is single-valued in practice. A target change must update the one
-	// exact existing CNAME instead of trying to create a second member first.
-	// Multiple desired or existing CNAMEs are ambiguous and are left alone.
+	// A CNAME target change must update the one exact existing CNAME instead of
+	// trying to create a second member first. Ambiguity was rejected above.
 	if set.Key.RecordType == provider.RecordTypeCNAME {
-		if len(set.Members) > 1 || len(sameType) > 1 {
-			for _, member := range set.Members {
-				actions = append(actions, memberAction(ActionSkip, StatusSkipped, instance, member.Record, errMultipleCNAMEMembers))
-			}
-			return actions, managed
-		}
 		if len(set.Members) == 1 && len(sameType) == 1 && !provider.SameRecordMember(sameType[0], set.Members[0].Record) {
 			return r.updateSingleValueMember(ctx, set, sameType[0], cache, previous, actions, managed, hasLegacyOwnership)
 		}

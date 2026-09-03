@@ -431,6 +431,28 @@ func (pi *ProviderInstance) CreateOwnershipRecord(ctx context.Context, hostname 
 	return err
 }
 
+// CreateMemberOwnershipRecord creates a versioned TXT marker for one logical
+// DNS record member.
+func (pi *ProviderInstance) CreateMemberOwnershipRecord(ctx context.Context, member Record, metadata map[string]string) error {
+	record := MemberOwnershipRecord(member.Hostname, pi.TTL, pi.InstanceID, member, metadata)
+
+	start := time.Now()
+	err := pi.Provider.Create(ctx, record)
+	duration := time.Since(start).Seconds()
+
+	status := statusSuccess
+	if err != nil {
+		if IsConflict(err) {
+			return nil
+		}
+		status = statusError
+	}
+
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "create_member_ownership", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "create_member_ownership").Observe(duration)
+	return err
+}
+
 // DeleteOwnershipRecord removes the TXT ownership record for a hostname.
 func (pi *ProviderInstance) DeleteOwnershipRecord(ctx context.Context, hostname string) error {
 	record := OwnershipRecord(hostname, pi.TTL, pi.InstanceID, nil)
@@ -447,6 +469,24 @@ func (pi *ProviderInstance) DeleteOwnershipRecord(ctx context.Context, hostname 
 	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete_ownership", status).Inc()
 	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete_ownership").Observe(duration)
 
+	return err
+}
+
+// DeleteMemberOwnershipRecord deletes the exact TXT marker for one logical DNS
+// record member, leaving markers for sibling values unchanged.
+func (pi *ProviderInstance) DeleteMemberOwnershipRecord(ctx context.Context, member Record, metadata map[string]string) error {
+	record := MemberOwnershipRecord(member.Hostname, pi.TTL, pi.InstanceID, member, metadata)
+
+	start := time.Now()
+	err := pi.Provider.Delete(ctx, record)
+	duration := time.Since(start).Seconds()
+
+	status := statusSuccess
+	if err != nil {
+		status = statusError
+	}
+	metrics.ProviderAPIRequestsTotal.WithLabelValues(pi.Name(), "delete_member_ownership", status).Inc()
+	metrics.ProviderAPIDuration.WithLabelValues(pi.Name(), "delete_member_ownership").Observe(duration)
 	return err
 }
 
@@ -480,6 +520,22 @@ func (pi *ProviderInstance) HasOwnershipRecord(ctx context.Context, hostname str
 	return false, nil
 }
 
+// HasMemberOwnershipRecord checks for an exact versioned ownership marker.
+func (pi *ProviderInstance) HasMemberOwnershipRecord(ctx context.Context, member Record) (bool, error) {
+	ownershipName := OwnershipRecordName(member.Hostname)
+	records, err := pi.Provider.List(ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, record := range records {
+		if record.Type == RecordTypeTXT && strings.EqualFold(record.Hostname, ownershipName) &&
+			MatchesMemberOwnership(record.Target, pi.InstanceID, member) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // RecoveredHostname represents a hostname recovered from ownership TXT records,
 // along with any metadata that was persisted in the ownership value.
 type RecoveredHostname struct {
@@ -489,6 +545,40 @@ type RecoveredHostname struct {
 	// Metadata contains key-value pairs recovered from the ownership TXT value.
 	// For old-format records (no metadata), this will be nil.
 	Metadata map[string]string
+}
+
+// RecoveredMember represents one exact DNS member recovered from a versioned
+// ownership marker.
+type RecoveredMember struct {
+	Record   Record
+	Metadata map[string]string
+}
+
+// RecoverOwnedMembers scans the provider for versioned member markers owned by
+// this dnsweaver instance. Legacy hostname-level markers are deliberately not
+// returned because they cannot identify a safe deletion target.
+func (pi *ProviderInstance) RecoverOwnedMembers(ctx context.Context) ([]RecoveredMember, error) {
+	records, err := pi.Provider.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var recovered []RecoveredMember
+	for _, record := range records {
+		if record.Type != RecordTypeTXT || !IsOwnershipRecord(record.Hostname) {
+			continue
+		}
+		owned, instanceID, member, metadata := ParseMemberOwnershipValue(record.Target)
+		if !owned || instanceID != pi.InstanceID || member == nil {
+			continue
+		}
+		member.Hostname = ExtractHostnameFromOwnership(record.Hostname)
+		if member.Hostname == "" {
+			continue
+		}
+		recovered = append(recovered, RecoveredMember{Record: *member, Metadata: metadata})
+	}
+	return recovered, nil
 }
 
 // RecoverOwnedHostnames scans the provider for ownership TXT records and returns

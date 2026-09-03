@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"testing"
 
 	"github.com/maxfield-allison/dnsweaver/internal/matcher"
@@ -588,5 +589,65 @@ func TestProviderInstance_RecordNeedsUpdate(t *testing.T) {
 				t.Errorf("comparer consulted %d times, want %d", cmp.calls, tt.wantCalls)
 			}
 		})
+	}
+}
+
+func TestProviderInstance_MemberOwnershipLifecycle(t *testing.T) {
+	mock := &mockProvider{name: "mock", typeName: "mock"}
+	inst := &ProviderInstance{Provider: mock, TTL: 300, InstanceID: "instance-a"}
+	member := Record{Hostname: "app.example.com", Type: RecordTypeA, Target: "192.0.2.10"}
+	metadata := map[string]string{"proxied": "false"}
+
+	if err := inst.CreateMemberOwnershipRecord(context.Background(), member, metadata); err != nil {
+		t.Fatalf("CreateMemberOwnershipRecord() error = %v", err)
+	}
+	if len(mock.created) != 1 || !MatchesMemberOwnership(mock.created[0].Target, "instance-a", member) {
+		t.Fatalf("created records = %+v", mock.created)
+	}
+	_, _, _, createdMetadata := ParseMemberOwnershipValue(mock.created[0].Target)
+	if createdMetadata["proxied"] != "false" {
+		t.Fatalf("created metadata = %v", createdMetadata)
+	}
+
+	if err := inst.DeleteMemberOwnershipRecord(context.Background(), member, metadata); err != nil {
+		t.Fatalf("DeleteMemberOwnershipRecord() error = %v", err)
+	}
+	if len(mock.deleted) != 1 || mock.deleted[0].Target != mock.created[0].Target {
+		t.Fatalf("deleted marker = %+v, want exact created marker %+v", mock.deleted, mock.created)
+	}
+}
+
+func TestProviderInstance_HasAndRecoversExactMemberOwnership(t *testing.T) {
+	member := Record{Hostname: "app.example.com", Type: RecordTypeA, Target: "192.0.2.10"}
+	other := Record{Hostname: "app.example.com", Type: RecordTypeA, Target: "192.0.2.11"}
+	mock := &mockProvider{
+		name:     "mock",
+		typeName: "mock",
+		records: []Record{
+			MemberOwnershipRecord(member.Hostname, 300, "instance-a", member, map[string]string{"source": "native"}),
+			MemberOwnershipRecord(other.Hostname, 300, "instance-b", other, nil),
+			OwnershipRecord(member.Hostname, 300, "instance-a", nil),
+		},
+	}
+	inst := &ProviderInstance{Provider: mock, InstanceID: "instance-a"}
+
+	hasMember, err := inst.HasMemberOwnershipRecord(context.Background(), member)
+	if err != nil || !hasMember {
+		t.Fatalf("HasMemberOwnershipRecord(member) = %v, %v", hasMember, err)
+	}
+	hasOther, err := inst.HasMemberOwnershipRecord(context.Background(), other)
+	if err != nil || hasOther {
+		t.Fatalf("HasMemberOwnershipRecord(other) = %v, %v", hasOther, err)
+	}
+
+	recovered, err := inst.RecoverOwnedMembers(context.Background())
+	if err != nil {
+		t.Fatalf("RecoverOwnedMembers() error = %v", err)
+	}
+	if len(recovered) != 1 || !SameRecordMember(recovered[0].Record, member) {
+		t.Fatalf("recovered = %+v, want only exact owned member", recovered)
+	}
+	if recovered[0].Record.Hostname != member.Hostname || recovered[0].Metadata["source"] != "native" {
+		t.Fatalf("recovered = %+v", recovered[0])
 	}
 }

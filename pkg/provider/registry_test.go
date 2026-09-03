@@ -13,14 +13,22 @@ type mockProvider struct {
 	typeName string
 	pingErr  error
 	records  []Record
+	created  []Record
+	deleted  []Record
 }
 
 func (m *mockProvider) Name() string                               { return m.name }
 func (m *mockProvider) Type() string                               { return m.typeName }
 func (m *mockProvider) Ping(ctx context.Context) error             { return m.pingErr }
 func (m *mockProvider) List(ctx context.Context) ([]Record, error) { return m.records, nil }
-func (m *mockProvider) Create(ctx context.Context, r Record) error { return nil }
-func (m *mockProvider) Delete(ctx context.Context, r Record) error { return nil }
+func (m *mockProvider) Create(ctx context.Context, r Record) error {
+	m.created = append(m.created, r)
+	return nil
+}
+func (m *mockProvider) Delete(ctx context.Context, r Record) error {
+	m.deleted = append(m.deleted, r)
+	return nil
+}
 func (m *mockProvider) Capabilities() Capabilities {
 	return Capabilities{
 		SupportsOwnershipTXT: true,

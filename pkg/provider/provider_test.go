@@ -702,3 +702,106 @@ func TestOwnershipRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestMemberOwnershipRoundTrip(t *testing.T) {
+	tests := []struct {
+		name   string
+		record Record
+	}{
+		{name: "A", record: Record{Type: RecordTypeA, Target: "192.0.2.10"}},
+		{name: "AAAA", record: Record{Type: RecordTypeAAAA, Target: "2001:db8::10"}},
+		{name: "CNAME", record: Record{Type: RecordTypeCNAME, Target: "target.example.com."}},
+		{name: "TXT with delimiter", record: Record{Type: RecordTypeTXT, Target: "one,two=three"}},
+		{name: "SRV", record: Record{Type: RecordTypeSRV, Target: "sip.example.com", SRV: &SRVData{Priority: 10, Weight: 20, Port: 5060}}},
+		{name: "HTTPS", record: Record{Type: RecordTypeHTTPS, Target: "", HTTPS: &HTTPSData{Priority: 1, TargetName: ".", ALPN: "h2,h3"}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value := MakeMemberOwnershipValue("instance-a", tt.record, map[string]string{"source": "traefik"})
+			owned, instanceID, member, metadata := ParseMemberOwnershipValue(value)
+			if !owned || instanceID != "instance-a" {
+				t.Fatalf("ownership parse = owned:%v instance:%q", owned, instanceID)
+			}
+			if member == nil || !SameRecordMember(*member, tt.record) {
+				t.Fatalf("member = %+v, want %+v", member, tt.record)
+			}
+			if metadata["source"] != "traefik" {
+				t.Fatalf("metadata = %v, want source=traefik", metadata)
+			}
+		})
+	}
+}
+
+func TestParseMemberOwnershipValue_LegacyIsAmbiguous(t *testing.T) {
+	owned, instanceID, member, metadata := ParseMemberOwnershipValue("heritage=dnsweaver,instance=instance-a,proxied=true")
+	if !owned || instanceID != "instance-a" {
+		t.Fatalf("ownership parse = owned:%v instance:%q", owned, instanceID)
+	}
+	if member != nil {
+		t.Fatalf("legacy marker produced member %+v", member)
+	}
+	if metadata["proxied"] != "true" {
+		t.Fatalf("metadata = %v, want proxied=true", metadata)
+	}
+}
+
+func TestParseMemberOwnershipValue_MalformedV2IsAmbiguous(t *testing.T) {
+	value := "heritage=dnsweaver,instance=instance-a,record-target=not+base64,record-type=A,record-version=2"
+	owned, instanceID, member, _ := ParseMemberOwnershipValue(value)
+	if !owned || instanceID != "instance-a" {
+		t.Fatalf("ownership parse = owned:%v instance:%q", owned, instanceID)
+	}
+	if member != nil {
+		t.Fatalf("malformed marker produced member %+v", member)
+	}
+}
+
+func TestMatchesMemberOwnership(t *testing.T) {
+	record := Record{Type: RecordTypeA, Target: "192.0.2.10"}
+	value := MakeMemberOwnershipValue("instance-a", record, nil)
+	if !MatchesMemberOwnership(value, "instance-a", record) {
+		t.Fatal("exact member ownership did not match")
+	}
+	if MatchesMemberOwnership(value, "instance-b", record) {
+		t.Fatal("member ownership matched another instance")
+	}
+	if MatchesMemberOwnership(value, "instance-a", Record{Type: RecordTypeA, Target: "192.0.2.11"}) {
+		t.Fatal("member ownership matched another target")
+	}
+	if MatchesMemberOwnership("heritage=dnsweaver,instance=instance-a", "instance-a", record) {
+		t.Fatal("legacy ownership marker matched an exact member")
+	}
+}
+
+func TestSameRecordMemberCanonicalizesDNSValues(t *testing.T) {
+	if !SameRecordMember(
+		Record{Type: RecordTypeAAAA, Target: "2001:0db8:0:0:0:0:0:1"},
+		Record{Type: RecordTypeAAAA, Target: "2001:db8::1"},
+	) {
+		t.Fatal("equivalent IPv6 values did not match")
+	}
+	if !SameRecordMember(
+		Record{Type: RecordTypeCNAME, Target: "Target.Example.COM."},
+		Record{Type: RecordTypeCNAME, Target: "target.example.com"},
+	) {
+		t.Fatal("equivalent CNAME values did not match")
+	}
+	if SameRecordMember(
+		Record{Type: RecordTypeSRV, Target: "sip.example.com", SRV: &SRVData{Priority: 10, Weight: 20, Port: 5060}},
+		Record{Type: RecordTypeSRV, Target: "sip.example.com", SRV: &SRVData{Priority: 20, Weight: 20, Port: 5060}},
+	) {
+		t.Fatal("different SRV members matched")
+	}
+}
+
+func TestMemberOwnershipRecord(t *testing.T) {
+	member := Record{Hostname: "app.example.com", Type: RecordTypeA, Target: "192.0.2.10"}
+	ownership := MemberOwnershipRecord(member.Hostname, 300, "instance-a", member, nil)
+	if ownership.Hostname != "_dnsweaver.app.example.com" || ownership.Type != RecordTypeTXT || ownership.TTL != 300 {
+		t.Fatalf("ownership record = %+v", ownership)
+	}
+	if !MatchesMemberOwnership(ownership.Target, "instance-a", member) {
+		t.Fatalf("ownership target does not identify member: %q", ownership.Target)
+	}
+}

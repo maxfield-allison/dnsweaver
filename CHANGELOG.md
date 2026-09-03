@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Technitium instances on different servers remain distinct backends.** The
+  normal provider factory discarded the configured API URL from its backend
+  identity, so instances serving the same zone on separate servers could be
+  grouped together and leave the previous route stale when selection changed.
 - **Kubernetes namespace filters now scope informer API requests.** Configured
   namespaces previously filtered the local cache only, so dnsweaver still
   required cluster-wide list/watch permissions. Each configured namespace now

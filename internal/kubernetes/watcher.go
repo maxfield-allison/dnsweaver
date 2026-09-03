@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
 	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -73,15 +75,17 @@ type Watcher struct {
 	logger      *slog.Logger
 	onReconcile ReconcileFunc
 
-	// Typed informer factory for core resources (Ingress, Service).
-	typedFactory informers.SharedInformerFactory
+	// One informer factory per configured namespace. A single all-namespace
+	// factory is used when no namespace filter is configured.
+	typedFactories []informers.SharedInformerFactory
 
-	// Dynamic informer factory for CRDs (IngressRoute, HTTPRoute).
-	dynamicFactory dynamicinformer.DynamicSharedInformerFactory
+	// Dynamic informer factories for CRDs (IngressRoute, HTTPRoute), aligned
+	// by index with typedFactories when CRD watching is enabled.
+	dynamicFactories []dynamicinformer.DynamicSharedInformerFactory
 
-	// Typed informers (nil if not watching that resource type).
-	ingressInformer networkinginformers.IngressInformer
-	serviceInformer coreinformers.ServiceInformer
+	// Typed informers (empty if not watching that resource type).
+	ingressInformers []networkinginformers.IngressInformer
+	serviceInformers []coreinformers.ServiceInformer
 
 	// CRD availability (detected at start time).
 	hasIngressRoute bool
@@ -150,16 +154,20 @@ func (w *Watcher) Start(ctx context.Context) error {
 	}
 
 	// Start factories.
-	w.typedFactory.Start(ctx.Done())
-	if w.dynamicFactory != nil {
-		w.dynamicFactory.Start(ctx.Done())
+	for _, factory := range w.typedFactories {
+		factory.Start(ctx.Done())
+	}
+	for _, factory := range w.dynamicFactories {
+		factory.Start(ctx.Done())
 	}
 
 	// Wait for initial cache sync.
 	w.logger.Info("waiting for kubernetes informer cache sync")
-	w.typedFactory.WaitForCacheSync(ctx.Done())
-	if w.dynamicFactory != nil {
-		w.dynamicFactory.WaitForCacheSync(ctx.Done())
+	for _, factory := range w.typedFactories {
+		factory.WaitForCacheSync(ctx.Done())
+	}
+	for _, factory := range w.dynamicFactories {
+		factory.WaitForCacheSync(ctx.Done())
 	}
 
 	w.logger.Info("kubernetes watcher started",
@@ -217,8 +225,8 @@ func (w *Watcher) ListWorkloads(ctx context.Context) ([]workload.Workload, error
 	}
 
 	// List Ingress resources.
-	if w.ingressInformer != nil {
-		ingresses, err := w.ingressInformer.Lister().List(selector)
+	for _, informer := range w.ingressInformers {
+		ingresses, err := informer.Lister().List(selector)
 		if err != nil {
 			return nil, fmt.Errorf("listing ingresses: %w", err)
 		}
@@ -230,8 +238,8 @@ func (w *Watcher) ListWorkloads(ctx context.Context) ([]workload.Workload, error
 	}
 
 	// List Service resources.
-	if w.serviceInformer != nil {
-		services, err := w.serviceInformer.Lister().List(selector)
+	for _, informer := range w.serviceInformers {
+		services, err := informer.Lister().List(selector)
 		if err != nil {
 			return nil, fmt.Errorf("listing services: %w", err)
 		}
@@ -243,8 +251,11 @@ func (w *Watcher) ListWorkloads(ctx context.Context) ([]workload.Workload, error
 	}
 
 	// List IngressRoute resources (dynamic/unstructured).
-	if w.hasIngressRoute && w.dynamicFactory != nil {
-		lister := w.dynamicFactory.ForResource(IngressRouteGVR).Lister()
+	for _, factory := range w.dynamicFactories {
+		if !w.hasIngressRoute {
+			break
+		}
+		lister := factory.ForResource(IngressRouteGVR).Lister()
 		items, err := lister.List(selector)
 		if err != nil {
 			return nil, fmt.Errorf("listing ingressroutes: %w", err)
@@ -261,8 +272,11 @@ func (w *Watcher) ListWorkloads(ctx context.Context) ([]workload.Workload, error
 	}
 
 	// List HTTPRoute resources (dynamic/unstructured).
-	if w.hasHTTPRoute && w.dynamicFactory != nil {
-		lister := w.dynamicFactory.ForResource(HTTPRouteGVR).Lister()
+	for _, factory := range w.dynamicFactories {
+		if !w.hasHTTPRoute {
+			break
+		}
+		lister := factory.ForResource(HTTPRouteGVR).Lister()
 		items, err := lister.List(selector)
 		if err != nil {
 			return nil, fmt.Errorf("listing httproutes: %w", err)
@@ -321,17 +335,59 @@ func (w *Watcher) detectCRDs() {
 
 // createFactories initializes the informer factories.
 func (w *Watcher) createFactories() {
-	w.typedFactory = informers.NewSharedInformerFactoryWithOptions(
-		w.clients.Typed, DefaultResyncInterval,
-		informers.WithTransform(stripManagedFields),
-	)
+	// Start may be called again after Stop. Informers themselves cannot be
+	// restarted, so build a fresh set of factories instead of appending to the
+	// stopped set from the previous run.
+	w.typedFactories = nil
+	w.dynamicFactories = nil
+	w.ingressInformers = nil
+	w.serviceInformers = nil
 
-	// Only create dynamic factory if CRDs are available.
-	if w.hasIngressRoute || w.hasHTTPRoute {
-		w.dynamicFactory = dynamicinformer.NewDynamicSharedInformerFactory(
-			w.clients.Dynamic, DefaultResyncInterval,
+	for _, namespace := range w.factoryNamespaces() {
+		w.typedFactories = append(w.typedFactories,
+			informers.NewSharedInformerFactoryWithOptions(
+				w.clients.Typed, DefaultResyncInterval,
+				informers.WithNamespace(namespace),
+				informers.WithTransform(stripManagedFields),
+			),
 		)
+
+		// Only create dynamic factories if CRDs are available.
+		if w.hasIngressRoute || w.hasHTTPRoute {
+			w.dynamicFactories = append(w.dynamicFactories,
+				dynamicinformer.NewFilteredDynamicSharedInformerFactory(
+					w.clients.Dynamic, DefaultResyncInterval, namespace, nil,
+				),
+			)
+		}
 	}
+}
+
+// factoryNamespaces returns the API namespaces each informer factory should
+// watch. Scoping the list/watch itself is required for namespace-only RBAC;
+// filtering a cluster-wide cache after the fact is both broader and noisier.
+func (w *Watcher) factoryNamespaces() []string {
+	if !w.config.HasNamespaceFilter() {
+		return []string{metav1.NamespaceAll}
+	}
+
+	seen := make(map[string]struct{}, len(w.config.Namespaces))
+	namespaces := make([]string, 0, len(w.config.Namespaces))
+	for _, configured := range w.config.Namespaces {
+		namespace := strings.TrimSpace(configured)
+		if namespace == "" {
+			continue
+		}
+		if _, exists := seen[namespace]; exists {
+			continue
+		}
+		seen[namespace] = struct{}{}
+		namespaces = append(namespaces, namespace)
+	}
+	if len(namespaces) == 0 {
+		return []string{metav1.NamespaceAll}
+	}
+	return namespaces
 }
 
 // setupInformers creates and registers event handlers for each resource type.
@@ -344,31 +400,37 @@ func (w *Watcher) setupInformers() error {
 		DeleteFunc: func(_ interface{}) { w.handleEvent("delete") },
 	}
 
-	if w.config.WatchIngress {
-		w.ingressInformer = w.typedFactory.Networking().V1().Ingresses()
-		if _, err := w.ingressInformer.Informer().AddEventHandler(handler); err != nil {
-			return fmt.Errorf("adding ingress event handler: %w", err)
+	for _, factory := range w.typedFactories {
+		if w.config.WatchIngress {
+			informer := factory.Networking().V1().Ingresses()
+			if _, err := informer.Informer().AddEventHandler(handler); err != nil {
+				return fmt.Errorf("adding ingress event handler: %w", err)
+			}
+			w.ingressInformers = append(w.ingressInformers, informer)
+		}
+
+		if w.config.WatchServices {
+			informer := factory.Core().V1().Services()
+			if _, err := informer.Informer().AddEventHandler(handler); err != nil {
+				return fmt.Errorf("adding service event handler: %w", err)
+			}
+			w.serviceInformers = append(w.serviceInformers, informer)
 		}
 	}
 
-	if w.config.WatchServices {
-		w.serviceInformer = w.typedFactory.Core().V1().Services()
-		if _, err := w.serviceInformer.Informer().AddEventHandler(handler); err != nil {
-			return fmt.Errorf("adding service event handler: %w", err)
+	for _, factory := range w.dynamicFactories {
+		if w.hasIngressRoute {
+			informer := factory.ForResource(IngressRouteGVR).Informer()
+			if _, err := informer.AddEventHandler(handler); err != nil {
+				return fmt.Errorf("adding ingressroute event handler: %w", err)
+			}
 		}
-	}
 
-	if w.hasIngressRoute {
-		informer := w.dynamicFactory.ForResource(IngressRouteGVR).Informer()
-		if _, err := informer.AddEventHandler(handler); err != nil {
-			return fmt.Errorf("adding ingressroute event handler: %w", err)
-		}
-	}
-
-	if w.hasHTTPRoute {
-		informer := w.dynamicFactory.ForResource(HTTPRouteGVR).Informer()
-		if _, err := informer.AddEventHandler(handler); err != nil {
-			return fmt.Errorf("adding httproute event handler: %w", err)
+		if w.hasHTTPRoute {
+			informer := factory.ForResource(HTTPRouteGVR).Informer()
+			if _, err := informer.AddEventHandler(handler); err != nil {
+				return fmt.Errorf("adding httproute event handler: %w", err)
+			}
 		}
 	}
 
@@ -403,7 +465,7 @@ func (w *Watcher) matchesFilters(namespace string, annotations map[string]string
 	if w.config.HasNamespaceFilter() {
 		found := false
 		for _, ns := range w.config.Namespaces {
-			if ns == namespace {
+			if strings.TrimSpace(ns) == namespace {
 				found = true
 				break
 			}

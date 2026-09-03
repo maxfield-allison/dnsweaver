@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Kubernetes namespace filters now scope informer API requests.** Configured
+  namespaces previously filtered the local cache only, so dnsweaver still
+  required cluster-wide list/watch permissions. Each configured namespace now
+  gets its own informer and can be authorized with namespace-scoped RBAC.
 - **Managed mode now leaves unowned same-type records untouched when adoption
   is disabled.** A pre-existing A, AAAA, CNAME, or SRV record with a different
   target could previously be updated even though `ADOPT_EXISTING=false`.

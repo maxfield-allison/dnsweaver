@@ -290,14 +290,7 @@ func (p *Provider) findRecord(ctx context.Context, record provider.Record) (*ovh
 
 	wantTarget, err := p.toOVHTarget(record)
 	if err != nil {
-		// Target could not be rendered (e.g. SRV without data); fall back to
-		// matching by subdomain and type alone.
-		wantTarget = ""
-	}
-
-	// With a single match, or no target to disambiguate, take the first.
-	if len(ids) == 1 || wantTarget == "" {
-		return p.client.GetRecord(ctx, p.zone, ids[0])
+		return nil, fmt.Errorf("rendering record target: %w", err)
 	}
 
 	for _, id := range ids {
@@ -305,13 +298,34 @@ func (p *Provider) findRecord(ctx context.Context, record provider.Record) (*ovh
 		if err != nil {
 			return nil, fmt.Errorf("getting record %d: %w", id, err)
 		}
-		if rec.Target == wantTarget {
+		if ovhTargetsEqual(record.Type, rec.Target, wantTarget) {
 			return rec, nil
 		}
 	}
 
-	// No target match; fall back to the first record of this name and type.
-	return p.client.GetRecord(ctx, p.zone, ids[0])
+	// A name and type may contain several record values. Falling back to the
+	// first one would mutate an unrelated sibling when the requested value is
+	// absent.
+	return nil, nil
+}
+
+func ovhTargetsEqual(recordType provider.RecordType, actual, desired string) bool {
+	switch recordType {
+	case provider.RecordTypeTXT:
+		return unquoteTXT(actual) == desired
+	case provider.RecordTypeCNAME:
+		return strings.EqualFold(strings.TrimSuffix(actual, "."), strings.TrimSuffix(desired, "."))
+	case provider.RecordTypeSRV:
+		actualSRV, actualTarget, actualOK := parseSRVTarget(actual)
+		desiredSRV, desiredTarget, desiredOK := parseSRVTarget(desired)
+		return actualOK && desiredOK &&
+			actualSRV.Priority == desiredSRV.Priority &&
+			actualSRV.Weight == desiredSRV.Weight &&
+			actualSRV.Port == desiredSRV.Port &&
+			strings.EqualFold(strings.TrimSuffix(actualTarget, "."), strings.TrimSuffix(desiredTarget, "."))
+	default:
+		return actual == desired
+	}
 }
 
 // toProviderRecord converts an OVH API record into a provider.Record.

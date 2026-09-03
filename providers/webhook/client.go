@@ -36,8 +36,10 @@ type SRVData struct {
 
 // DeleteRequest is the request body for delete operations.
 type DeleteRequest struct {
-	Hostname string `json:"hostname"`
-	Type     string `json:"type,omitempty"`
+	Hostname string   `json:"hostname"`
+	Type     string   `json:"type,omitempty"`
+	Value    string   `json:"value"`
+	SRV      *SRVData `json:"srv,omitempty"`
 }
 
 // RecordResponse represents a single DNS record returned by the webhook.
@@ -351,10 +353,12 @@ func (c *Client) CreateSRV(ctx context.Context, hostname string, priority, weigh
 
 // Delete sends a request to delete a DNS record.
 // Sends DELETE /delete with DeleteRequest body.
-func (c *Client) Delete(ctx context.Context, hostname, recordType string) error {
+func (c *Client) Delete(ctx context.Context, hostname, recordType, value string, srv *SRVData) error {
 	reqBody := DeleteRequest{
 		Hostname: hostname,
 		Type:     recordType,
+		Value:    value,
+		SRV:      srv,
 	}
 
 	bodyBytes, err := json.Marshal(reqBody)

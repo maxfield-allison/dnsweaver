@@ -361,8 +361,9 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 		return fmt.Errorf("getting zone ID: %w", err)
 	}
 
-	// Find the record to get its ID
-	apiRecord, err := p.client.FindRecord(ctx, zoneID, string(record.Type), record.Hostname)
+	// Resolve the exact member. A hostname and type can have multiple values,
+	// so selecting the first API result can delete an unrelated sibling.
+	apiRecord, err := p.findRecord(ctx, zoneID, record)
 	if err != nil {
 		return fmt.Errorf("finding record: %w", err)
 	}
@@ -397,8 +398,8 @@ func (p *Provider) Update(ctx context.Context, existing, desired provider.Record
 		return fmt.Errorf("getting zone ID: %w", err)
 	}
 
-	// Find the existing record to get its ID
-	apiRecord, err := p.client.FindRecord(ctx, zoneID, string(existing.Type), existing.Hostname)
+	// Resolve the exact existing member before updating it.
+	apiRecord, err := p.findRecord(ctx, zoneID, existing)
 	if err != nil {
 		return fmt.Errorf("finding record: %w", err)
 	}
@@ -455,6 +456,54 @@ func (p *Provider) Update(ctx context.Context, existing, desired provider.Record
 	)
 
 	return nil
+}
+
+// findRecord resolves the Cloudflare API record for one logical DNS member.
+// ProviderID is authoritative when the record came from List. Records built by
+// cleanup paths may not carry an ID, so those are matched by their full value.
+func (p *Provider) findRecord(ctx context.Context, zoneID string, record provider.Record) (*dnsRecord, error) {
+	if record.ProviderID != "" {
+		return &dnsRecord{ID: record.ProviderID}, nil
+	}
+
+	records, err := p.client.FindRecords(ctx, zoneID, string(record.Type), record.Hostname)
+	if err != nil {
+		return nil, err
+	}
+	for i := range records {
+		if cloudflareRecordMatches(records[i], record) {
+			return &records[i], nil
+		}
+	}
+	return nil, nil
+}
+
+func cloudflareRecordMatches(apiRecord dnsRecord, record provider.Record) bool {
+	if !strings.EqualFold(strings.TrimSuffix(apiRecord.Name, "."), strings.TrimSuffix(record.Hostname, ".")) ||
+		!strings.EqualFold(apiRecord.Type, string(record.Type)) {
+		return false
+	}
+
+	if record.Type == provider.RecordTypeSRV {
+		if apiRecord.Data == nil || record.SRV == nil {
+			return false
+		}
+		return strings.EqualFold(strings.TrimSuffix(apiRecord.Data.Target, "."), strings.TrimSuffix(record.Target, ".")) &&
+			apiRecord.Data.Priority == record.SRV.Priority &&
+			apiRecord.Data.Weight == record.SRV.Weight &&
+			apiRecord.Data.Port == record.SRV.Port
+	}
+
+	if record.Type == provider.RecordTypeA || record.Type == provider.RecordTypeAAAA {
+		apiIP, recordIP := net.ParseIP(apiRecord.Content), net.ParseIP(record.Target)
+		return apiIP != nil && recordIP != nil && apiIP.Equal(recordIP)
+	}
+
+	if record.Type == provider.RecordTypeCNAME {
+		return strings.EqualFold(strings.TrimSuffix(apiRecord.Content, "."), strings.TrimSuffix(record.Target, "."))
+	}
+
+	return apiRecord.Content == record.Target
 }
 
 // RecordNeedsUpdate implements provider.RecordComparer. It reports whether the

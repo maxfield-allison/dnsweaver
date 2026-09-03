@@ -210,7 +210,7 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 
 		// Query common record types for this hostname
 		hostnameFQDN := p.ensureFQDN(hostname)
-		for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeCNAME, dns.TypeSRV} {
+		for _, qtype := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeCNAME, dns.TypeTXT, dns.TypeSRV} {
 			dnsRecords, err := p.client.Query(ctx, hostnameFQDN, qtype)
 			if err != nil {
 				p.logger.Debug("query failed for hostname",
@@ -278,9 +278,9 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 	return nil
 }
 
-// Delete removes a DNS record.
-// For non-TXT records (data records), the hostname is also removed from the catalog.
-// Ownership TXT records are not tracked in the catalog.
+// Delete removes one exact DNS record. A data hostname remains in the catalog
+// while any other supported member still exists at that name. Ownership TXT
+// records are not tracked in the catalog.
 func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 	dnsRecord, err := p.toRFC2136Record(record)
 	if err != nil {
@@ -291,15 +291,25 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 		return fmt.Errorf("deleting record %s: %w", record.Hostname, err)
 	}
 
-	// Remove from catalog if this is NOT an ownership TXT record
+	// Remove the hostname from the catalog only after confirming that the exact
+	// deletion removed its final supported data member. Keeping the catalog
+	// entry is required for List to rediscover surviving siblings after restart.
 	if p.catalog != nil && !provider.IsOwnershipRecord(record.Hostname) {
-		if err := p.catalog.Remove(ctx, record.Hostname); err != nil {
-			// Log but don't fail - the DNS record was deleted successfully
-			// Catalog can be repaired later
-			p.logger.Warn("failed to remove hostname from catalog",
+		hasSiblings, err := p.hasDataRecords(ctx, record.Hostname)
+		if err != nil {
+			p.logger.Warn("failed to verify whether hostname has surviving records; keeping catalog entry",
 				slog.String("hostname", record.Hostname),
 				slog.String("error", err.Error()),
 			)
+		} else if !hasSiblings {
+			if err := p.catalog.Remove(ctx, record.Hostname); err != nil {
+				// Log but don't fail - the DNS record was deleted successfully
+				// Catalog can be repaired later
+				p.logger.Warn("failed to remove hostname from catalog",
+					slog.String("hostname", record.Hostname),
+					slog.String("error", err.Error()),
+				)
+			}
 		}
 	}
 
@@ -310,6 +320,20 @@ func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
 	)
 
 	return nil
+}
+
+func (p *Provider) hasDataRecords(ctx context.Context, hostname string) (bool, error) {
+	name := p.ensureFQDN(hostname)
+	for _, recordType := range []uint16{dns.TypeA, dns.TypeAAAA, dns.TypeCNAME, dns.TypeTXT, dns.TypeSRV} {
+		records, err := p.client.Query(ctx, name, recordType)
+		if err != nil {
+			return false, fmt.Errorf("querying %s records: %w", dns.TypeToString[recordType], err)
+		}
+		if len(records) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Update modifies an existing DNS record in place.

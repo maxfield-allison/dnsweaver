@@ -381,6 +381,66 @@ func TestProvider_Delete_Success(t *testing.T) {
 	}
 }
 
+func TestProvider_Delete_SelectsMatchingTarget(t *testing.T) {
+	var deletedID string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/zones/zone-123/dns_records":
+			_ = json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{
+				{"id": "sibling", "type": "A", "name": "app.example.com", "content": "10.0.0.2"},
+				{"id": "wanted", "type": "A", "name": "app.example.com", "content": "10.0.0.1"},
+			}))
+		case r.Method == http.MethodDelete:
+			deletedID = strings.TrimPrefix(r.URL.Path, "/zones/zone-123/dns_records/")
+			_ = json.NewEncoder(w).Encode(successProviderResponse(map[string]interface{}{"id": deletedID}))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	p := newTestProvider(t, server.URL)
+	err := p.Delete(context.Background(), provider.Record{
+		Hostname: "app.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deletedID != "wanted" {
+		t.Fatalf("deleted record %q, want exact target record %q", deletedID, "wanted")
+	}
+}
+
+func TestProvider_Delete_DoesNotDeleteWhenTargetMissing(t *testing.T) {
+	deleteCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodDelete {
+			deleteCalled = true
+		}
+		_ = json.NewEncoder(w).Encode(successProviderResponse([]map[string]interface{}{
+			{"id": "sibling", "type": "A", "name": "app.example.com", "content": "10.0.0.2"},
+		}))
+	}))
+	defer server.Close()
+
+	p := newTestProvider(t, server.URL)
+	err := p.Delete(context.Background(), provider.Record{
+		Hostname: "app.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deleteCalled {
+		t.Fatal("Delete() removed a sibling when the requested target was absent")
+	}
+}
+
 func TestProvider_Delete_NotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

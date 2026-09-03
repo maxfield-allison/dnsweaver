@@ -399,9 +399,8 @@ func (c *Client) UpdateRecord(ctx context.Context, zoneID, recordID, recordType,
 	return nil
 }
 
-// FindRecord finds a DNS record by name and type in the given zone.
-// Returns the record if found, nil otherwise.
-func (c *Client) FindRecord(ctx context.Context, zoneID, recordType, name string) (*dnsRecord, error) {
+// FindRecords finds DNS records by name and type in the given zone.
+func (c *Client) FindRecords(ctx context.Context, zoneID, recordType, name string) ([]dnsRecord, error) {
 	params := url.Values{}
 	params.Set("type", recordType)
 	params.Set("name", name)
@@ -417,9 +416,21 @@ func (c *Client) FindRecord(ctx context.Context, zoneID, recordType, name string
 		return nil, fmt.Errorf("parsing records response: %w", err)
 	}
 
-	if len(records.Result) == 0 {
+	return records.Result, nil
+}
+
+// FindRecord finds the first DNS record by name and type in the given zone.
+// Callers that need to distinguish members of a multi-value RRset must use
+// FindRecords and match the record value before mutating it.
+func (c *Client) FindRecord(ctx context.Context, zoneID, recordType, name string) (*dnsRecord, error) {
+	records, err := c.FindRecords(ctx, zoneID, recordType, name)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(records) == 0 {
 		return nil, nil // Not found
 	}
 
-	return &records.Result[0], nil
+	return &records[0], nil
 }

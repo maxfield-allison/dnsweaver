@@ -213,14 +213,14 @@ func (p *Provider) Identity() provider.ProviderIdentity {
 
 // Capabilities returns the provider's feature support.
 // Pi-hole capabilities depend on the operating mode:
-// - API mode: full TXT support and native update via the Pi-hole API
+// - API mode: no TXT ownership or native update support
 // - File mode: no TXT ownership (uses dnsmasq file format), no native update
 func (p *Provider) Capabilities() provider.Capabilities {
 	switch p.mode {
 	case ModeAPI:
 		return provider.Capabilities{
-			SupportsOwnershipTXT: true,
-			SupportsNativeUpdate: true,
+			SupportsOwnershipTXT: false,
+			SupportsNativeUpdate: false,
 			SupportedRecordTypes: []provider.RecordType{
 				provider.RecordTypeA,
 				provider.RecordTypeCNAME,

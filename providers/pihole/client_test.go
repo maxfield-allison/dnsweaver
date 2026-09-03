@@ -500,6 +500,20 @@ func TestProvider_Mode(t *testing.T) {
 	}
 }
 
+func TestProvider_CapabilitiesDoNotClaimTXTSupport(t *testing.T) {
+	p := &Provider{mode: ModeAPI}
+	caps := p.Capabilities()
+	if caps.SupportsOwnershipTXT {
+		t.Fatal("Pi-hole API mode claims ownership TXT support but Create and Delete skip TXT records")
+	}
+	if caps.SupportsRecordType(provider.RecordTypeTXT) {
+		t.Fatal("Pi-hole API mode advertises TXT as a supported record type")
+	}
+	if caps.SupportsNativeUpdate {
+		t.Fatal("Pi-hole API mode claims native update support but does not implement provider.Updater")
+	}
+}
+
 func TestProvider_UnsupportedRecordTypes(t *testing.T) {
 	config := &Config{
 		Mode:       ModeAPI,

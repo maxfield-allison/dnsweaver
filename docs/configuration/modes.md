@@ -144,7 +144,21 @@ These global settings interact with operational modes:
 | `DNSWEAVER_CLEANUP_ORPHANS` | If `false`, disables deletion globally (overrides managed/authoritative) |
 | `DNSWEAVER_CLEANUP_ON_STOP` | If `false`, only delete records when containers are removed, not stopped |
 | `DNSWEAVER_OWNERSHIP_TRACKING` | If `false`, dnsweaver can't distinguish its own records from others |
-| `DNSWEAVER_ADOPT_EXISTING` | If `true`, dnsweaver claims ownership of pre-existing records, and replaces a pre-existing record of a conflicting type (for example a CNAME where an A is configured) instead of skipping it. Managed mode without it skips the record and logs once; additive mode never replaces it |
+| `DNSWEAVER_ADOPT_EXISTING` | Global default for claiming pre-existing records. Managed mode without adoption leaves unowned records untouched, including records with the wrong target or a conflicting type. |
+| `DNSWEAVER_{NAME}_ADOPT_EXISTING` | Overrides the global adoption policy for one provider instance. |
+| `DNSWEAVER_{NAME}_ADOPT_EXISTING_ALLOW_OVERRIDES` | Lets workload labels enable adoption for one provider instance. Defaults to `false`. Workload labels may always disable adoption. |
+
+### Adoption precedence and workload trust
+
+The effective adoption policy is global, then provider instance, then workload,
+then named record. `dnsweaver.adopt` applies to hostnames found by any source on
+the workload. `dnsweaver.records.<name>.adopt` is more specific and wins for
+that named record.
+
+Workload configuration is not trusted to claim existing DNS records by
+default. An `adopt=true` label or annotation is ignored unless the matching
+provider sets `ADOPT_EXISTING_ALLOW_OVERRIDES=true`. An `adopt=false` value is
+always honored because it only narrows dnsweaver's authority.
 
 ## Choosing the Right Mode
 

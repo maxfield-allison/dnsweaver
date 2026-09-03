@@ -37,7 +37,7 @@ dnsweaver --config /etc/dnsweaver/config.yml
 | `DNSWEAVER_CLEANUP_ORPHANS` | `true` | Delete DNS records when workloads are removed |
 | `DNSWEAVER_CLEANUP_ON_STOP` | `true` | Delete DNS records when containers stop |
 | `DNSWEAVER_OWNERSHIP_TRACKING` | `true` | Use TXT records to track record ownership |
-| `DNSWEAVER_ADOPT_EXISTING` | `false` | Adopt existing DNS records by creating ownership TXT; also replaces a pre-existing record of a conflicting type (for example a CNAME where an A is configured) instead of skipping it |
+| `DNSWEAVER_ADOPT_EXISTING` | `false` | Global default for adopting existing DNS records. In managed mode, adoption permits ownership creation and updates or replacement of matching unowned records. |
 | `DNSWEAVER_DEFAULT_TTL` | `300` | Default TTL for DNS records (seconds) |
 | `DNSWEAVER_RECONCILE_INTERVAL` | `60s` | Periodic reconciliation interval |
 | `DNSWEAVER_SHUTDOWN_TIMEOUT` | `30s` | Graceful shutdown timeout for in-flight updates |
@@ -143,6 +143,8 @@ Replace `{NAME}` with your instance name. For example, instance `internal-dns` u
 | `DNSWEAVER_{NAME}_ENTRYPOINTS` | No | Comma-separated Traefik entrypoint allowlist for this instance (e.g. `webA,webB`). Only routers bound to one of these entrypoints will be matched. Routers without entrypoint metadata always match (wildcard). See [Traefik source](../sources/swarm.md#per-entrypoint-routing). |
 | `DNSWEAVER_{NAME}_TTL` | No | Per-instance TTL override |
 | `DNSWEAVER_{NAME}_MODE` | No | Operational mode: `managed` (default), `authoritative`, `additive` |
+| `DNSWEAVER_{NAME}_ADOPT_EXISTING` | No | Override `DNSWEAVER_ADOPT_EXISTING` for this provider instance. When unset, the global setting is inherited. |
+| `DNSWEAVER_{NAME}_ADOPT_EXISTING_ALLOW_OVERRIDES` | No | Allow workload `adopt=true` labels or annotations to enable adoption for this provider. Default: `false`. Workloads may always disable adoption. |
 | `DNSWEAVER_{NAME}_TLS_CA_FILE` | No | Path to a PEM CA bundle appended to system roots (private CAs). Supports `_FILE` suffix. |
 | `DNSWEAVER_{NAME}_TLS_CERT_FILE` | No | Path to PEM client certificate for mutual TLS. Must be set with `TLS_KEY_FILE`. |
 | `DNSWEAVER_{NAME}_TLS_KEY_FILE` | No | Path to PEM client private key for mutual TLS. Must be set with `TLS_CERT_FILE`. |
@@ -150,6 +152,25 @@ Replace `{NAME}` with your instance name. For example, instance `internal-dns` u
 | `DNSWEAVER_{NAME}_TLS_MIN_VERSION` | No | Minimum TLS protocol version: `1.2` (default) or `1.3`. |
 | `DNSWEAVER_{NAME}_TLS_SKIP_VERIFY` | No | Skip TLS certificate verification (`true`/`false`, default: `false`). **Warning:** disables MITM protection — prefer `TLS_CA_FILE`. |
 | `DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY` | No | **Deprecated** — alias of `TLS_SKIP_VERIFY`. Will be removed in a future major release. |
+
+### Existing-record adoption
+
+Adoption is resolved for each hostname and provider in this order:
+
+1. `DNSWEAVER_ADOPT_EXISTING` supplies the global default.
+2. `DNSWEAVER_{NAME}_ADOPT_EXISTING` overrides it for one provider.
+3. `dnsweaver.adopt` or `dnsweaver.dev/adopt` overrides it for every hostname discovered from that workload, including hostnames found by Traefik.
+4. `dnsweaver.records.<record>.adopt` overrides the workload value for one named record.
+
+A workload value of `false` is always honored. A workload or record value of
+`true` can raise an effective `false` value only when
+`DNSWEAVER_{NAME}_ADOPT_EXISTING_ALLOW_OVERRIDES=true` for that provider. This
+gate is per provider so access to one DNS backend does not grant workloads
+permission to claim records in every configured backend.
+
+These settings govern adoption in managed mode. Authoritative mode already
+controls every record in its configured scope. Additive mode never deletes a
+conflicting record.
 
 ### Dynamic Targets
 

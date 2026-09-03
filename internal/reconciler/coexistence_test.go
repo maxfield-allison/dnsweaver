@@ -83,6 +83,7 @@ func TestEnsureRecord_CompanionHTTPSDoesNotBlockUpdate(t *testing.T) {
 	r, cache, mock := newCoexistenceReconciler(t, provider.RecordTypeA, "10.0.0.1",
 		provider.Record{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "10.0.0.99", TTL: 300},
 		provider.Record{Hostname: "app.example.com", Type: provider.RecordTypeHTTPS, Target: ".", TTL: 300},
+		ownershipTXT("app.example.com"),
 	)
 
 	actions := r.ensureRecord(context.Background(), &source.Hostname{Name: "app.example.com", Source: "test"}, cache)

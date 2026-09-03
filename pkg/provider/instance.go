@@ -84,6 +84,14 @@ type ProviderInstance struct {
 	// Defaults to ModeManaged if not set.
 	Mode OperationalMode
 
+	// AdoptExisting overrides the reconciler's global adoption policy for this
+	// provider. nil inherits the global setting.
+	AdoptExisting *bool
+
+	// AdoptExistingAllowOverrides permits workload-controlled adopt=true hints
+	// to enable adoption for this provider.
+	AdoptExistingAllowOverrides bool
+
 	// InstanceID is the unique identifier for the dnsweaver instance.
 	// Used for multi-instance coordination to scope ownership records.
 	// Empty string means single-instance mode (legacy behavior).
@@ -575,6 +583,14 @@ type ProviderInstanceConfig struct {
 	// Mode is the operational mode (managed, authoritative, additive).
 	// Defaults to "managed" if not set.
 	Mode OperationalMode
+
+	// AdoptExisting overrides the global adoption policy for this provider.
+	// nil inherits the global setting.
+	AdoptExisting *bool
+
+	// AdoptExistingAllowOverrides permits workload-controlled adopt=true hints
+	// to enable adoption for this provider.
+	AdoptExistingAllowOverrides bool
 
 	// Domains is a list of glob patterns for matching hostnames.
 	// At least one is required.

@@ -49,6 +49,14 @@ type ProviderInstanceConfig struct {
 	// Defaults to "managed" if not set.
 	Mode provider.OperationalMode
 
+	// AdoptExisting overrides the global adoption policy for this provider.
+	// nil inherits the global DNSWEAVER_ADOPT_EXISTING setting.
+	AdoptExisting *bool
+
+	// AdoptExistingAllowOverrides permits workload-controlled adopt=true hints
+	// to enable adoption for this provider. adopt=false hints are always honored.
+	AdoptExistingAllowOverrides bool
+
 	// Domain matching patterns
 	Domains             []string // Glob patterns (default)
 	DomainsRegex        []string // Regex patterns (opt-in)
@@ -69,19 +77,21 @@ type ProviderInstanceConfig struct {
 // ToProviderConfig converts this config to the provider package's config type.
 func (c *ProviderInstanceConfig) ToProviderConfig() provider.ProviderInstanceConfig {
 	return provider.ProviderInstanceConfig{
-		Name:                c.Name,
-		TypeName:            c.TypeName,
-		RecordType:          c.RecordType,
-		Target:              c.Target,
-		TargetMode:          c.TargetMode,
-		TTL:                 c.TTL,
-		Mode:                c.Mode,
-		Domains:             c.Domains,
-		DomainsRegex:        c.DomainsRegex,
-		ExcludeDomains:      c.ExcludeDomains,
-		ExcludeDomainsRegex: c.ExcludeDomainsRegex,
-		MetadataFilters:     c.MetadataFilters,
-		ProviderConfig:      c.ProviderConfig,
+		Name:                        c.Name,
+		TypeName:                    c.TypeName,
+		RecordType:                  c.RecordType,
+		Target:                      c.Target,
+		TargetMode:                  c.TargetMode,
+		TTL:                         c.TTL,
+		Mode:                        c.Mode,
+		AdoptExisting:               c.AdoptExisting,
+		AdoptExistingAllowOverrides: c.AdoptExistingAllowOverrides,
+		Domains:                     c.Domains,
+		DomainsRegex:                c.DomainsRegex,
+		ExcludeDomains:              c.ExcludeDomains,
+		ExcludeDomainsRegex:         c.ExcludeDomainsRegex,
+		MetadataFilters:             c.MetadataFilters,
+		ProviderConfig:              c.ProviderConfig,
 	}
 }
 
@@ -194,6 +204,25 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 		}
 	} else {
 		cfg.Mode = provider.ModeManaged
+	}
+
+	// ADOPT_EXISTING (optional) overrides the global setting for this instance.
+	if value := getEnv(prefix + "ADOPT_EXISTING"); value != "" {
+		if parsed, ok := parseBoolValue(value); ok {
+			cfg.AdoptExisting = &parsed
+		} else {
+			errs = append(errs, configErrFull(prefix+"ADOPT_EXISTING", fmt.Sprintf("invalid boolean %q", value), "Use true or false", prefix+"ADOPT_EXISTING=false"))
+		}
+	}
+
+	// Workload labels may only elevate adoption when the operator explicitly
+	// enables that capability for this provider instance.
+	if value := getEnv(prefix + "ADOPT_EXISTING_ALLOW_OVERRIDES"); value != "" {
+		if parsed, ok := parseBoolValue(value); ok {
+			cfg.AdoptExistingAllowOverrides = parsed
+		} else {
+			errs = append(errs, configErrFull(prefix+"ADOPT_EXISTING_ALLOW_OVERRIDES", fmt.Sprintf("invalid boolean %q", value), "Use true or false", prefix+"ADOPT_EXISTING_ALLOW_OVERRIDES=false"))
+		}
 	}
 
 	// Domain patterns - either DOMAINS or DOMAINS_REGEX, not both
@@ -351,7 +380,8 @@ var providerConfigFields = []struct {
 // For secrets, DNSWEAVER_{PROVIDER_NAME}_{FIELD}_FILE is also checked.
 //
 // Any env var that is set will override the corresponding YAML value.
-func mergeProviderEnvOverrides(cfg *ProviderInstanceConfig) {
+func mergeProviderEnvOverrides(cfg *ProviderInstanceConfig) []*ConfigError {
+	var errs []*ConfigError
 	prefix := envPrefix(cfg.Name)
 
 	// Ensure ProviderConfig map exists
@@ -409,9 +439,27 @@ func mergeProviderEnvOverrides(cfg *ProviderInstanceConfig) {
 		}
 	}
 
+	if value := getEnv(prefix + "ADOPT_EXISTING"); value != "" {
+		if parsed, ok := parseBoolValue(value); ok {
+			cfg.AdoptExisting = &parsed
+		} else {
+			errs = append(errs, configErrFull(prefix+"ADOPT_EXISTING", fmt.Sprintf("invalid boolean %q", value), "Use true or false", prefix+"ADOPT_EXISTING=false"))
+		}
+	}
+
+	if value := getEnv(prefix + "ADOPT_EXISTING_ALLOW_OVERRIDES"); value != "" {
+		if parsed, ok := parseBoolValue(value); ok {
+			cfg.AdoptExistingAllowOverrides = parsed
+		} else {
+			errs = append(errs, configErrFull(prefix+"ADOPT_EXISTING_ALLOW_OVERRIDES", fmt.Sprintf("invalid boolean %q", value), "Use true or false", prefix+"ADOPT_EXISTING_ALLOW_OVERRIDES=false"))
+		}
+	}
+
 	// Migrate the legacy INSECURE_SKIP_VERIFY alias (whether it arrived
 	// from YAML or env vars) to the canonical TLS_SKIP_VERIFY key.
 	resolveLegacyTLSSkipVerify(cfg.ProviderConfig, cfg.Name)
+
+	return errs
 }
 
 // splitPatterns splits a comma-separated pattern string into individual patterns.

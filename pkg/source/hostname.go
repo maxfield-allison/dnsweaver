@@ -265,6 +265,11 @@ type RecordHints struct {
 	// Empty means use domain matching as usual.
 	Provider string
 
+	// AdoptExisting overrides adoption for this hostname. nil inherits the
+	// provider-instance/global policy. Enabling is subject to the provider's
+	// explicit workload-override gate.
+	AdoptExisting *bool
+
 	// SRV contains SRV-specific fields when Type is "SRV".
 	SRV *SRVHints
 
@@ -295,9 +300,15 @@ type Hostname struct {
 	Router string
 
 	// RecordHints contains optional hints for DNS record creation.
-	// These allow per-hostname overrides for record type, target, TTL, and provider.
+	// These allow per-hostname overrides for record type, target, TTL, provider,
+	// and existing-record adoption.
 	// nil means use provider defaults for everything.
 	RecordHints *RecordHints
+
+	// AdoptExisting is the workload-wide adoption hint applied to hostnames
+	// discovered from any source. A record-specific RecordHints.AdoptExisting
+	// value takes precedence.
+	AdoptExisting *bool
 
 	// Metadata carries arbitrary key-value pairs from sources for use by
 	// instance-level filtering (e.g. "traefik.entrypoint" -> "webA"). Unlike

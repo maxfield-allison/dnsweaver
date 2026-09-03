@@ -101,7 +101,7 @@ func Load() (*Config, error) {
 		for _, fp := range fileProviders {
 			providerNames = append(providerNames, fp.Name)
 			// Apply env var overrides to file-based provider config
-			mergeProviderEnvOverrides(fp)
+			allErrors = append(allErrors, mergeProviderEnvOverrides(fp)...)
 			instances = append(instances, fp)
 		}
 	} else {

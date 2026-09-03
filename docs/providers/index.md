@@ -196,3 +196,7 @@ To adopt existing records (and take ownership):
 ```bash
 DNSWEAVER_ADOPT_EXISTING=true
 ```
+
+The global policy can be narrowed per provider or workload. Workload requests
+to enable adoption require an explicit per-provider gate. See
+[Existing-record adoption](../configuration/environment.md#existing-record-adoption).

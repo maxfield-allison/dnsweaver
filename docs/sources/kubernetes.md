@@ -70,6 +70,7 @@ The Kubernetes source reads `dnsweaver.dev/*` annotations from resources to over
 | `dnsweaver.dev/ttl` | `int` | _(from provider)_ | Override TTL in seconds |
 | `dnsweaver.dev/provider` | `string` | _(auto-matched)_ | Route to a specific DNS provider by name |
 | `dnsweaver.dev/proxied` | `bool` | _(from provider)_ | Enable Cloudflare proxy for this record |
+| `dnsweaver.dev/adopt` | `bool` | _(from provider/global policy)_ | Enable or disable existing-record adoption for every hostname on this resource. Enabling requires the matching provider's `ADOPT_EXISTING_ALLOW_OVERRIDES` gate. Disabling is always honored. |
 
 ### Behavior
 

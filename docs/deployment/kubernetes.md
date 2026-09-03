@@ -130,6 +130,7 @@ dnsweaver supports per-resource annotation overrides using the `dnsweaver.dev/` 
 | `dnsweaver.dev/ttl` | seconds (e.g., `300`) | Override the TTL |
 | `dnsweaver.dev/provider` | provider name | Route to a specific provider |
 | `dnsweaver.dev/proxied` | `true` / `false` | Enable Cloudflare proxy |
+| `dnsweaver.dev/adopt` | `true` / `false` | Enable or disable existing-record adoption. Enabling requires the matching provider's `ADOPT_EXISTING_ALLOW_OVERRIDES` gate. Disabling is always honored. |
 
 ### Example: Ingress with Annotations
 

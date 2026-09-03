@@ -50,13 +50,15 @@ func convertFileProvider(fp FileProviderConfig, defaultTTL int) (*ProviderInstan
 	var errs []*ConfigError
 
 	cfg := &ProviderInstanceConfig{
-		Name:                fp.Name,
-		TypeName:            strings.ToLower(fp.Type),
-		Domains:             fp.Domains,
-		DomainsRegex:        fp.DomainsRegex,
-		ExcludeDomains:      fp.ExcludeDomains,
-		ExcludeDomainsRegex: fp.ExcludeDomainsRegex,
-		ProviderConfig:      make(map[string]string),
+		Name:                        fp.Name,
+		TypeName:                    strings.ToLower(fp.Type),
+		Domains:                     fp.Domains,
+		DomainsRegex:                fp.DomainsRegex,
+		ExcludeDomains:              fp.ExcludeDomains,
+		ExcludeDomainsRegex:         fp.ExcludeDomainsRegex,
+		AdoptExisting:               fp.AdoptExisting,
+		AdoptExistingAllowOverrides: fp.AdoptExistingAllowOverrides,
+		ProviderConfig:              make(map[string]string),
 	}
 
 	// Validate name

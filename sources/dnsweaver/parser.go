@@ -40,6 +40,7 @@ const (
 	FieldWeight   = "weight"
 	FieldEnabled  = "enabled"
 	FieldProxied  = "proxied"
+	FieldAdopt    = "adopt"
 )
 
 const (
@@ -95,6 +96,9 @@ type Extraction struct {
 	// Zero means use provider default.
 	TTL int
 
+	// AdoptExisting overrides existing-record adoption for this record.
+	AdoptExisting *bool
+
 	// SRV contains SRV-specific fields when Type is "SRV".
 	SRV *SRVData
 
@@ -106,7 +110,7 @@ type Extraction struct {
 
 // HasHints returns true if any hint fields are set.
 func (e Extraction) HasHints() bool {
-	return e.Type != "" || e.Target != "" || e.Provider != "" || e.TTL > 0 || e.SRV != nil || len(e.Metadata) > 0
+	return e.Type != "" || e.Target != "" || e.Provider != "" || e.TTL > 0 || e.AdoptExisting != nil || e.SRV != nil || len(e.Metadata) > 0
 }
 
 // Parser extracts hostnames from dnsweaver labels.
@@ -153,9 +157,7 @@ func (p *Parser) ExtractHostnames(labels map[string]string) []Extraction {
 	if hostname, ok := labels[SimpleHostnameLabel]; ok {
 		hostname = strings.TrimSpace(hostname)
 		if hostname != "" {
-			extraction := Extraction{
-				Hostname: hostname,
-			}
+			extraction := Extraction{Hostname: hostname}
 
 			// Parse TTL for simple hostname
 			if ttlStr, ok := labels[TTLLabel]; ok && ttlStr != "" {
@@ -281,6 +283,13 @@ func (p *Parser) ExtractHostnames(labels map[string]string) []Extraction {
 			Provider:   fields[FieldProvider],
 		}
 
+		// A named-record adoption hint overrides the workload-wide hint later in
+		// reconciliation. The workload hint is applied source-independently by
+		// the source registry.
+		if value, ok := fields[FieldAdopt]; ok {
+			extraction.AdoptExisting = p.parseAdoptExisting(value, "record "+name)
+		}
+
 		// Parse TTL
 		if ttlStr, ok := fields[FieldTTL]; ok && ttlStr != "" {
 			if ttl, err := strconv.Atoi(ttlStr); err == nil && ttl > 0 {
@@ -385,4 +394,25 @@ func (p *Parser) ExtractHostnames(labels map[string]string) []Extraction {
 	}
 
 	return extractions
+}
+
+func (p *Parser) parseAdoptExisting(value, scope string) *bool {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case boolTrue:
+		parsed := true
+		return &parsed
+	case boolFalse:
+		parsed := false
+		return &parsed
+	default:
+		p.logger.Warn("invalid adopt value (must be true/false)",
+			slog.String("scope", scope),
+			slog.String("adopt", value),
+		)
+		return nil
+	}
 }

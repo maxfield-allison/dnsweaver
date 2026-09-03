@@ -1231,6 +1231,7 @@ func TestReconcile_ProviderCreateFailsAfterDelete(t *testing.T) {
 		Target:   "10.0.0.99", // Old target - will be deleted
 		TTL:      300,
 	})
+	mockProvider.AddRecord(ownershipTXT("app.example.com"))
 
 	// Make Create fail
 	createCallCount := 0

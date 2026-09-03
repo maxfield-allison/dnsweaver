@@ -41,7 +41,7 @@ labels:
   - "dnsweaver.hostnames=app1.example.com,app2.example.com,app3.example.com"
 ```
 
-Whitespace around commas is trimmed and empty values are skipped. This can be combined with `dnsweaver.ttl` and `dnsweaver.proxied`, which apply to all hostnames in the list.
+Whitespace around commas is trimmed and empty values are skipped. This can be combined with `dnsweaver.ttl`, `dnsweaver.proxied`, and `dnsweaver.adopt`, which apply to all hostnames in the list.
 
 Both `dnsweaver.hostname` (singular) and `dnsweaver.hostnames` (plural) can be used together — all hostnames are processed.
 
@@ -82,6 +82,7 @@ labels:
 | `dnsweaver.enabled` | `true` | Enable/disable processing |
 | `dnsweaver.ttl` | - | Override TTL for this container |
 | `dnsweaver.proxied` | provider default | Cloudflare proxy (orange-cloud) override — `true` or `false`. Applies to every hostname on the container. Ignored by non-Cloudflare providers. |
+| `dnsweaver.adopt` | provider/global policy | Enable or disable existing-record adoption for every hostname discovered from this workload, including hostnames found by Traefik. Enabling requires the matching provider's `ADOPT_EXISTING_ALLOW_OVERRIDES` gate. Disabling is always honored. |
 
 ### Named Record Labels
 
@@ -99,7 +100,35 @@ For advanced use cases, use the named record format: `dnsweaver.records.<name>.<
 | `dnsweaver.records.<name>.weight` | - | Weight (for SRV records) |
 | `dnsweaver.records.<name>.enabled` | `true` | Enable/disable this record |
 | `dnsweaver.records.<name>.proxied` | provider default | Cloudflare proxy (orange-cloud) override for this record — `true` or `false`. Ignored by non-Cloudflare providers. |
+| `dnsweaver.records.<name>.adopt` | workload/provider/global policy | Override existing-record adoption for this named record. Enabling requires the matching provider's `ADOPT_EXISTING_ALLOW_OVERRIDES` gate. Disabling is always honored. |
 | `dnsweaver.records.<name>.meta.<key>` | - | Arbitrary provider metadata passed through to the target provider (advanced). |
+
+### Existing-record adoption
+
+```yaml
+services:
+  app:
+    labels:
+      - "traefik.http.routers.app.rule=Host(`app.example.com`)"
+      - "dnsweaver.adopt=true"
+```
+
+The workload label applies even when Traefik, rather than the native source,
+discovers the hostname. The matching provider must explicitly allow the
+request:
+
+```bash
+DNSWEAVER_PUBLIC_ADOPT_EXISTING_ALLOW_OVERRIDES=true
+```
+
+Use a named record to narrow or override the workload setting:
+
+```yaml
+labels:
+  - "dnsweaver.adopt=true"
+  - "dnsweaver.records.manual.hostname=manual.example.com"
+  - "dnsweaver.records.manual.adopt=false"
+```
 
 ## Examples
 

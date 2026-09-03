@@ -246,6 +246,7 @@ func TestReconcile_ProviderDeleteFails(t *testing.T) {
 		Type:     provider.RecordTypeA,
 		Target:   "10.0.0.99", // different from the 10.0.0.1 the provider instance wants
 	})
+	mockProvider.AddRecord(ownershipTXT("app.example.com"))
 
 	providers := provider.NewRegistry(logger)
 	providers.RegisterFactory("mock", func(_ provider.FactoryConfig) (provider.Provider, error) {

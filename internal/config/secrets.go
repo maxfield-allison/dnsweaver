@@ -56,14 +56,24 @@ func getEnvWithFileFallback(prefix, key string) string {
 // parseBool parses a boolean string, returning defaultValue on parse failure.
 // Accepts: true/false, 1/0, yes/no, on/off (case-insensitive).
 func parseBool(s string, defaultValue bool) bool {
+	if value, ok := parseBoolValue(s); ok {
+		return value
+	}
+	return defaultValue
+}
+
+// parseBoolValue parses the accepted boolean spellings and reports whether
+// the input was valid. Callers for new safety-sensitive settings use the ok
+// result to fail fast instead of silently falling back.
+func parseBoolValue(s string) (bool, bool) {
 	s = strings.ToLower(strings.TrimSpace(s))
 	switch s {
 	case "true", "1", "yes", "on":
-		return true
+		return true, true
 	case "false", "0", "no", "off":
-		return false
+		return false, true
 	default:
-		return defaultValue
+		return false, false
 	}
 }
 

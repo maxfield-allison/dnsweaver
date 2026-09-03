@@ -44,6 +44,10 @@ By default, dnsweaver only manages records it creates (tracked via ownership TXT
 !!! warning
     This will modify existing records. Test with `DRY_RUN=true` first.
 
+You can override the policy for one provider or workload. Workload labels may
+only enable adoption when the matching provider explicitly allows it. See
+[Existing-record adoption](configuration/environment.md#existing-record-adoption).
+
 ## Configuration
 
 ### Why aren't my container labels being detected?

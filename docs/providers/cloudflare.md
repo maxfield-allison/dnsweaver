@@ -112,8 +112,9 @@ the instance's `PROXIED` default.
 Changing either setting updates records that already exist: when a record's
 proxied state differs from what the label or the `PROXIED` default now asks
 for, dnsweaver updates it in place on the next reconciliation. This applies to
-records dnsweaver manages (its own records, or any matching record when
-`DNSWEAVER_ADOPT_EXISTING=true`); records it does not manage are left as found.
+records dnsweaver manages (its own records, or matching records allowed by the
+effective [adoption policy](../configuration/environment.md#existing-record-adoption)).
+Records it does not manage are left as found.
 
 ## Split-Horizon with Cloudflare
 

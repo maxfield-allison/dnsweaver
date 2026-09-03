@@ -124,6 +124,7 @@ func TestEnsureRecord_UpdatesChangedTarget(t *testing.T) {
 		Target:   "10.0.0.99", // Old target
 		TTL:      300,
 	})
+	mock.AddRecord(ownershipTXT("app.example.com"))
 
 	logger := quietLogger()
 	providers := provider.NewRegistry(logger)

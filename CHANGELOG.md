@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Existing-record adoption can now be scoped to a provider, workload, or
+  named record.** `DNSWEAVER_{NAME}_ADOPT_EXISTING` overrides the global policy
+  for one provider. `dnsweaver.adopt` and `dnsweaver.dev/adopt` apply to every
+  hostname found on a workload, including hostnames discovered through
+  Traefik, while `dnsweaver.records.<name>.adopt` can narrow one named record.
+  Workloads may always disable adoption. Enabling it from a workload requires
+  `DNSWEAVER_{NAME}_ADOPT_EXISTING_ALLOW_OVERRIDES=true` on each provider that
+  permits the takeover, so one label cannot grant itself access to every DNS
+  backend.
+  ([GitHub #178](https://github.com/maxfield-allison/dnsweaver/issues/178))
+
+### Fixed
+
+- **Managed mode now leaves unowned same-type records untouched when adoption
+  is disabled.** A pre-existing A, AAAA, CNAME, or SRV record with a different
+  target could previously be updated even though `ADOPT_EXISTING=false`.
+  Adoption policy now guards ownership creation, provider-state updates,
+  target changes, type-conflict replacement, and create-race conflicts through
+  one decision path.
+
 ## [2.8.2] - 2026-09-03
 
 `v2.8.1` was tagged, but its image pipeline stopped before the public release

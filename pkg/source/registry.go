@@ -107,6 +107,14 @@ func (r *Registry) ExtractAll(ctx context.Context, w workload.Workload) Hostname
 		return nil
 	}
 
+	workloadAdopt, adoptKey, adoptValid := workloadAdoptExistingHint(w)
+	if !adoptValid {
+		r.logger.Warn("invalid workload adoption hint (must be true/false); ignoring",
+			slog.String("workload", w.Name),
+			slog.String("key", adoptKey),
+		)
+	}
+
 	r.mu.RLock()
 	sources := make([]Source, len(r.sources))
 	copy(sources, r.sources)
@@ -130,6 +138,7 @@ func (r *Registry) ExtractAll(ctx context.Context, w workload.Workload) Hostname
 		}
 
 		if len(hostnames) > 0 {
+			applyWorkloadAdoptionHint(hostnames, workloadAdopt)
 			r.logger.Debug("source extracted hostnames",
 				slog.String("source", src.Name()),
 				slog.Int("count", len(hostnames)),
@@ -249,7 +258,67 @@ func (r *Registry) ExtractFrom(ctx context.Context, sourceName string, w workloa
 		return nil, ErrSourceNotFound(sourceName)
 	}
 
-	return src.Extract(ctx, w)
+	hostnames, err := src.Extract(ctx, w)
+	if err != nil {
+		return nil, err
+	}
+	workloadAdopt, adoptKey, valid := workloadAdoptExistingHint(w)
+	if !valid {
+		r.logger.Warn("invalid workload adoption hint (must be true/false); ignoring",
+			slog.String("workload", w.Name),
+			slog.String("key", adoptKey),
+		)
+	} else {
+		applyWorkloadAdoptionHint(hostnames, workloadAdopt)
+	}
+	return hostnames, nil
+}
+
+// workloadAdoptExistingHint reads the workload-wide adoption hint. Docker
+// labels take precedence over Kubernetes annotations, matching native-label
+// conversion behavior. The third return value reports whether a present value
+// was valid; absence is valid and returns nil.
+func workloadAdoptExistingHint(w workload.Workload) (*bool, string, bool) {
+	const (
+		dockerKey = "dnsweaver.adopt"
+		k8sKey    = "dnsweaver.dev/adopt"
+	)
+
+	value, ok := w.Labels[dockerKey]
+	key := dockerKey
+	if !ok {
+		value, ok = w.Annotations[k8sKey]
+		key = k8sKey
+	}
+	if !ok {
+		return nil, "", true
+	}
+
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true":
+		parsed := true
+		return &parsed, key, true
+	case "false":
+		parsed := false
+		return &parsed, key, true
+	default:
+		return nil, key, false
+	}
+}
+
+// applyWorkloadAdoptionHint applies a workload-wide hint to hostnames found by
+// every source, including Traefik. A record-specific hint already attached by
+// the native source takes precedence.
+func applyWorkloadAdoptionHint(hostnames Hostnames, adopt *bool) {
+	if adopt == nil {
+		return
+	}
+	for i := range hostnames {
+		if hostnames[i].AdoptExisting == nil {
+			value := *adopt
+			hostnames[i].AdoptExisting = &value
+		}
+	}
 }
 
 // DiscoverFrom queries a specific source by name for file-based discovery.

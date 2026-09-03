@@ -107,17 +107,19 @@ type FileFileDiscoveryConfig struct {
 
 // FileProviderConfig holds configuration for a DNS provider instance.
 type FileProviderConfig struct {
-	Name                string            `yaml:"name"`                            // Unique instance name
-	Type                string            `yaml:"type"`                            // technitium, cloudflare, pihole, etc.
-	Domains             []string          `yaml:"domains,omitempty"`               // Glob patterns
-	DomainsRegex        []string          `yaml:"domains_regex,omitempty"`         // Regex patterns
-	ExcludeDomains      []string          `yaml:"exclude_domains,omitempty"`       // Glob exclude patterns
-	ExcludeDomainsRegex []string          `yaml:"exclude_domains_regex,omitempty"` // Regex exclude patterns
-	RecordType          string            `yaml:"record_type,omitempty"`           // A, AAAA, CNAME
-	Target              string            `yaml:"target"`                          // IP or hostname
-	TTL                 int               `yaml:"ttl,omitempty"`                   // Default TTL
-	Mode                string            `yaml:"mode,omitempty"`                  // managed, authoritative, additive
-	Config              map[string]string `yaml:"config,omitempty"`                // Provider-specific settings
+	Name                        string            `yaml:"name"`                                     // Unique instance name
+	Type                        string            `yaml:"type"`                                     // technitium, cloudflare, pihole, etc.
+	Domains                     []string          `yaml:"domains,omitempty"`                        // Glob patterns
+	DomainsRegex                []string          `yaml:"domains_regex,omitempty"`                  // Regex patterns
+	ExcludeDomains              []string          `yaml:"exclude_domains,omitempty"`                // Glob exclude patterns
+	ExcludeDomainsRegex         []string          `yaml:"exclude_domains_regex,omitempty"`          // Regex exclude patterns
+	RecordType                  string            `yaml:"record_type,omitempty"`                    // A, AAAA, CNAME
+	Target                      string            `yaml:"target"`                                   // IP or hostname
+	TTL                         int               `yaml:"ttl,omitempty"`                            // Default TTL
+	Mode                        string            `yaml:"mode,omitempty"`                           // managed, authoritative, additive
+	AdoptExisting               *bool             `yaml:"adopt_existing,omitempty"`                 // Override global adoption policy
+	AdoptExistingAllowOverrides bool              `yaml:"adopt_existing_allow_overrides,omitempty"` // Permit workload hints to enable adoption
+	Config                      map[string]string `yaml:"config,omitempty"`                         // Provider-specific settings
 }
 
 // FileServerConfig holds health/metrics server settings.

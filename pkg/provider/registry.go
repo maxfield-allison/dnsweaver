@@ -150,15 +150,17 @@ func (r *Registry) CreateInstance(cfg ProviderInstanceConfig) error {
 
 	// Create provider instance
 	instance := &ProviderInstance{
-		Provider:        provider,
-		Matcher:         domainMatcher,
-		RecordType:      cfg.RecordType,
-		Target:          cfg.Target,
-		TTL:             cfg.TTL,
-		Mode:            cfg.Mode,
-		InstanceID:      r.instanceID,
-		MetadataFilters: cfg.MetadataFilters,
-		Identity:        IdentityOf(provider),
+		Provider:                    provider,
+		Matcher:                     domainMatcher,
+		RecordType:                  cfg.RecordType,
+		Target:                      cfg.Target,
+		TTL:                         cfg.TTL,
+		Mode:                        cfg.Mode,
+		AdoptExisting:               cfg.AdoptExisting,
+		AdoptExistingAllowOverrides: cfg.AdoptExistingAllowOverrides,
+		InstanceID:                  r.instanceID,
+		MetadataFilters:             cfg.MetadataFilters,
+		Identity:                    IdentityOf(provider),
 	}
 
 	// Default to managed mode if not set

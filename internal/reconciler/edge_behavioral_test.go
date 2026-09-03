@@ -113,6 +113,7 @@ func TestReconcile_HostnameSwitchesTarget(t *testing.T) {
 		Type:     provider.RecordTypeA,
 		Target:   "10.0.0.1",
 	})
+	mockProvider.AddRecord(ownershipTXT("app.example.com"))
 
 	providers := provider.NewRegistry(logger)
 	providers.RegisterFactory("mock", func(_ provider.FactoryConfig) (provider.Provider, error) {

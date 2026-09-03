@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.8.2] - 2026-09-02
+## [2.8.2] - 2026-09-03
 
 `v2.8.1` was tagged, but its image pipeline stopped before the public release
 or multi-architecture images were published. `v2.8.2` contains the same

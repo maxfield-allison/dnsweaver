@@ -298,6 +298,98 @@ func TestProvider_Delete_NotFound(t *testing.T) {
 	}
 }
 
+func TestProvider_Delete_SelectsMatchingTarget(t *testing.T) {
+	var deletedPath string
+	srv := ovhMux(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/refresh"):
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/record"):
+			_ = json.NewEncoder(w).Encode([]int64{41, 42})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/record/41"):
+			_ = json.NewEncoder(w).Encode(ovhRecord{ID: 41, SubDomain: "app", FieldType: "A", Target: "10.0.0.2"})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/record/42"):
+			_ = json.NewEncoder(w).Encode(ovhRecord{ID: 42, SubDomain: "app", FieldType: "A", Target: "10.0.0.1"})
+		case r.Method == http.MethodDelete:
+			deletedPath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Errorf("unexpected call: %s %s", r.Method, r.URL.Path)
+		}
+	})
+	defer srv.Close()
+
+	p := testProvider(t, srv.URL)
+	err := p.Delete(context.Background(), provider.Record{
+		Hostname: "app.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if !strings.HasSuffix(deletedPath, "/record/42") {
+		t.Fatalf("deleted path %q, want exact target record 42", deletedPath)
+	}
+}
+
+func TestProvider_Delete_DoesNotDeleteWhenTargetMissing(t *testing.T) {
+	deleteCalled := false
+	refreshCalled := false
+	srv := ovhMux(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/refresh"):
+			refreshCalled = true
+			w.WriteHeader(http.StatusOK)
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/record"):
+			_ = json.NewEncoder(w).Encode([]int64{41})
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/record/41"):
+			_ = json.NewEncoder(w).Encode(ovhRecord{ID: 41, SubDomain: "app", FieldType: "A", Target: "10.0.0.2"})
+		case r.Method == http.MethodDelete:
+			deleteCalled = true
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Errorf("unexpected call: %s %s", r.Method, r.URL.Path)
+		}
+	})
+	defer srv.Close()
+
+	p := testProvider(t, srv.URL)
+	err := p.Delete(context.Background(), provider.Record{
+		Hostname: "app.example.com",
+		Type:     provider.RecordTypeA,
+		Target:   "10.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if deleteCalled || refreshCalled {
+		t.Fatal("Delete() mutated the zone when the requested target was absent")
+	}
+}
+
+func TestOVHTargetsEqual(t *testing.T) {
+	tests := []struct {
+		name       string
+		recordType provider.RecordType
+		actual     string
+		desired    string
+		want       bool
+	}{
+		{name: "quoted TXT", recordType: provider.RecordTypeTXT, actual: `"heritage=dnsweaver"`, desired: "heritage=dnsweaver", want: true},
+		{name: "CNAME trailing dot", recordType: provider.RecordTypeCNAME, actual: "target.example.com.", desired: "target.example.com", want: true},
+		{name: "SRV trailing dot", recordType: provider.RecordTypeSRV, actual: "10 20 5060 sip.example.com.", desired: "10 20 5060 sip.example.com", want: true},
+		{name: "different SRV member", recordType: provider.RecordTypeSRV, actual: "10 20 5060 sip-2.example.com.", desired: "10 20 5060 sip-1.example.com", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ovhTargetsEqual(tt.recordType, tt.actual, tt.desired); got != tt.want {
+				t.Fatalf("ovhTargetsEqual(%q, %q) = %v, want %v", tt.actual, tt.desired, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestProvider_Update(t *testing.T) {
 	var updated recordUpdateRequest
 	updateCalled := false

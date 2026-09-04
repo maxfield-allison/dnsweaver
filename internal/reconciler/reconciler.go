@@ -22,6 +22,7 @@ const (
 	errRecordTypeConflict   = "record type conflict"
 	errNoMatchingProvider   = "no matching provider"
 	errSelfReferentialCNAME = "self-referential CNAME (target equals hostname)"
+	errMultipleCNAMEMembers = "CNAME record set cannot contain multiple members"
 )
 
 // Reconciliation-level outcome labels used for the reconciliations_total metric.
@@ -114,6 +115,11 @@ type Reconciler struct {
 	// from the correct provider even when domain patterns have changed (#51).
 	hostnameProviders map[string][]string
 
+	// previousDesired retains the last complete provider-routed member set.
+	// Providers without durable TXT ownership use it to make safe removals
+	// during this process lifetime; it is deliberately empty after restart.
+	previousDesired map[desiredSetKey]previousDesiredSet
+
 	// reconcileMu serializes full Reconcile() calls to prevent concurrent
 	// reconciliation cycles from interleaving (e.g., periodic timer firing
 	// while a Docker/K8s event-triggered reconciliation is still running).
@@ -163,6 +169,7 @@ func New(
 		logger:            slog.Default(),
 		knownHostnames:    make(map[string]struct{}),
 		hostnameProviders: make(map[string][]string),
+		previousDesired:   make(map[desiredSetKey]previousDesiredSet),
 	}
 
 	for _, opt := range opts {
@@ -230,49 +237,70 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	}
 	result.WorkloadsScanned = len(allWorkloads)
 
-	// Step 2: Extract hostnames from each workload
-	discoveredHostnames := r.extractHostnames(ctx, allWorkloads, result)
-
-	result.HostnamesDiscovered = len(discoveredHostnames)
+	// Step 2: Extract source claims without collapsing distinct DNS members.
+	extracted := r.extractClaims(ctx, allWorkloads, result)
+	result.HostnamesDiscovered = len(extracted.Unique)
 
 	r.logger.Info("hostname extraction complete",
 		slog.Int("workloads", len(allWorkloads)),
-		slog.Int("hostnames", len(discoveredHostnames)),
+		slog.Int("hostnames", len(extracted.Unique)),
+		slog.Int("claims", len(extracted.Claims)),
+		slog.Bool("complete", extracted.Complete),
 	)
 
 	// Step 3: Build record cache for all providers (single List() call per provider).
 	// Built even in dry-run mode so orphan cleanup can report accurate record counts.
 	cache := newRecordCache(ctx, r.providers, r.logger)
 
-	// Step 4: Ensure records exist for all discovered hostnames.
-	// Track which providers each hostname is routed to for orphan cleanup (#51).
-	currentProviderMapping := make(map[string][]string, len(discoveredHostnames))
-	for _, hostname := range discoveredHostnames {
-		actions := r.ensureRecord(ctx, hostname, cache)
+	// Step 4: Compile provider-routed desired sets, then reconcile every set
+	// once. Previous in-memory sets and durable member markers contribute empty
+	// desired sets so removed routes and post-restart orphans are handled by the
+	// same exact-member diff.
+	compiled := r.compileDesiredRecordSets(extracted.Claims)
+	result.DesiredMembers = desiredMemberCount(compiled)
+	for _, action := range compiled.Skipped {
+		result.AddAction(action)
+	}
+	sets, previous := r.reconciliationSets(compiled, cache)
+	nextPrevious := make(map[desiredSetKey]previousDesiredSet, len(previous)+len(compiled.Sets))
+	for key, prior := range previous {
+		nextPrevious[key] = prior
+	}
+	allowRemovals := r.config.CleanupOrphans && extracted.Complete
+	if allowRemovals {
+		allowRemovals = r.memberRemovalsAllowed(compiled, cache, previous)
+	} else if r.config.CleanupOrphans && !extracted.Complete {
+		r.logger.Warn("desired-state snapshot is partial; suppressing member removals")
+	}
+	for _, set := range sets {
+		prior := previous[set.Key]
+		actions, managed := r.reconcileDesiredSetWithState(ctx, set, cache, prior.Records, allowRemovals)
 		for _, action := range actions {
 			result.AddAction(action)
-			if action.Provider != "" && action.Type != ActionSkip {
-				currentProviderMapping[hostname.Name] = appendUnique(currentProviderMapping[hostname.Name], action.Provider)
-			}
 		}
-	}
-
-	// Step 5: Orphan cleanup (if enabled)
-	if r.config.CleanupOrphans {
-		orphanActions := r.cleanupOrphans(ctx, discoveredHostnames, cache)
-		for _, action := range orphanActions {
-			result.AddAction(action)
+		if !dryRun {
+			if len(managed) == 0 {
+				delete(nextPrevious, set.Key)
+			} else {
+				nextPrevious[set.Key] = previousDesiredSet{
+					ProviderName: set.Instance.Name(),
+					Records:      managed,
+				}
+			}
 		}
 	}
 
 	// Update known hostnames and provider mapping for next orphan check
 	r.mu.Lock()
-	r.knownHostnames = make(map[string]struct{}, len(discoveredHostnames))
-	for name := range discoveredHostnames {
+	r.knownHostnames = make(map[string]struct{}, len(extracted.Unique))
+	for name := range extracted.Unique {
 		r.knownHostnames[name] = struct{}{}
 	}
-	r.hostnameProviders = currentProviderMapping
+	r.hostnameProviders = compiled.HostnameProviders
 	r.mu.Unlock()
+	if extracted.Complete && !dryRun {
+		r.rememberDesired(nextPrevious)
+	}
 
 	result.Complete()
 
@@ -289,119 +317,6 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	)
 
 	return result, nil
-}
-
-// extractHostnames extracts hostnames from workloads and file sources.
-// Returns a map of normalized hostname -> source.Hostname.
-func (r *Reconciler) extractHostnames(ctx context.Context, workloads []workload.Workload, result *Result) map[string]*source.Hostname {
-	// Track hostname -> first workload that defined it (for duplicate detection)
-	// Use map to source.Hostname to preserve RecordHints from native labels
-	discoveredHostnames := make(map[string]*source.Hostname)
-	hostnameOrigins := make(map[string]string) // hostname -> workload name
-
-	for _, w := range workloads {
-		hostnames := r.sources.ExtractAll(ctx, w)
-
-		// Validate hostnames and log warnings for invalid ones
-		validation := hostnames.ValidateAll()
-		for _, inv := range validation.Invalid {
-			r.logger.Warn("skipping invalid hostname from workload",
-				slog.String("workload", w.Name),
-				slog.String("hostname", inv.Hostname.Name),
-				slog.String("source", inv.Hostname.Source),
-				slog.String("error", inv.Error.Error()),
-			)
-			result.HostnamesInvalid++
-		}
-		hostnames = validation.Valid
-
-		if len(hostnames) > 0 {
-			r.logger.Debug("extracted hostnames from workload",
-				slog.String("workload", w.Name),
-				slog.Int("count", len(hostnames)),
-				slog.Any("hostnames", hostnames.Names()),
-			)
-		}
-
-		for i := range hostnames {
-			hostname := &hostnames[i]
-			// Use normalized (lowercase) name as key for case-insensitive comparison (RFC 1035)
-			normalizedName := hostname.NormalizedName()
-			existingWorkload, exists := hostnameOrigins[normalizedName]
-			if !exists {
-				hostnameOrigins[normalizedName] = w.Name
-				discoveredHostnames[normalizedName] = hostname
-				continue
-			}
-
-			// A hostname collision. Resolve it by explicit precedence rather than
-			// by source-registration order: a candidate carrying per-record hints
-			// (e.g. native dnsweaver labels with proxied=false) wins over one that
-			// carries none (e.g. a Traefik router rule), so the more specific
-			// declaration is never silently dropped. See issue #159.
-			winner := mergeDuplicateHostname(discoveredHostnames[normalizedName], hostname)
-			discoveredHostnames[normalizedName] = winner
-
-			if existingWorkload != w.Name {
-				// Genuine cross-workload collision: two different workloads claim
-				// the same hostname. This usually signals a misconfiguration.
-				r.logger.Warn("duplicate hostname found in multiple workloads",
-					slog.String("hostname", hostname.Name),
-					slog.String("first_workload", existingWorkload),
-					slog.String("duplicate_workload", w.Name),
-					slog.String("selected_source", winner.Source),
-				)
-				result.HostnamesDuplicate++
-			} else {
-				// The same workload declared this hostname via multiple sources
-				// (e.g. a Traefik rule and a native dnsweaver record). This is a
-				// supported pattern, not an error — hint precedence decides which
-				// declaration wins.
-				r.logger.Debug("hostname declared by multiple sources on one workload; applying hint precedence",
-					slog.String("hostname", hostname.Name),
-					slog.String("workload", w.Name),
-					slog.String("selected_source", winner.Source),
-				)
-			}
-		}
-	}
-
-	// Discover hostnames from static config files (Traefik YAML, etc.)
-	fileHostnames := r.sources.DiscoverAll(ctx)
-	if len(fileHostnames) > 0 {
-		// Validate file-discovered hostnames
-		validation := fileHostnames.ValidateAll()
-		for _, inv := range validation.Invalid {
-			r.logger.Warn("skipping invalid hostname from file",
-				slog.String("hostname", inv.Hostname.Name),
-				slog.String("source", inv.Hostname.Source),
-				slog.String("router", inv.Hostname.Router),
-				slog.String("error", inv.Error.Error()),
-			)
-			result.HostnamesInvalid++
-		}
-		fileHostnames = validation.Valid
-
-		r.logger.Debug("discovered hostnames from files",
-			slog.Int("count", len(fileHostnames)),
-			slog.Any("hostnames", fileHostnames.Names()),
-		)
-		for i := range fileHostnames {
-			hostname := &fileHostnames[i]
-			// Use normalized (lowercase) name as key for case-insensitive comparison (RFC 1035)
-			normalizedName := hostname.NormalizedName()
-			if existing, exists := discoveredHostnames[normalizedName]; !exists {
-				discoveredHostnames[normalizedName] = hostname
-			} else {
-				// Apply the same hint precedence as workload extraction so a
-				// file-declared record with explicit hints is not shadowed by a
-				// hint-less label collision (and vice versa). See issue #159.
-				discoveredHostnames[normalizedName] = mergeDuplicateHostname(existing, hostname)
-			}
-		}
-	}
-
-	return discoveredHostnames
 }
 
 // mergeDuplicateHostname resolves a collision between an already-selected
@@ -684,6 +599,7 @@ func (r *Reconciler) recordMetrics(result *Result) {
 	// Record workload and hostname counts
 	metrics.WorkloadsScanned.Set(float64(result.WorkloadsScanned))
 	metrics.HostnamesDiscovered.Set(float64(result.HostnamesDiscovered))
+	metrics.DesiredRecordMembers.Set(float64(result.DesiredMembers))
 
 	// Record per-action metrics
 	for _, action := range result.Actions {

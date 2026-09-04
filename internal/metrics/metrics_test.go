@@ -131,6 +131,7 @@ func TestMetricNames(t *testing.T) {
 		ReconciliationDuration,
 		WorkloadsScanned,
 		HostnamesDiscovered,
+		DesiredRecordMembers,
 		RecordsCreatedTotal,
 		RecordsDeletedTotal,
 		RecordsSkippedTotal,

@@ -201,6 +201,14 @@ func TestRegistry_ExtractAll_WithErrors(t *testing.T) {
 	if hostnames[1].Name != "good2.example.com" {
 		t.Errorf("hostnames[1].Name = %q, want %q", hostnames[1].Name, "good2.example.com")
 	}
+
+	statusHostnames, complete := r.ExtractAllWithStatus(context.Background(), w)
+	if complete {
+		t.Fatal("ExtractAllWithStatus reported a complete snapshot after a source failed")
+	}
+	if len(statusHostnames) != 2 {
+		t.Fatalf("ExtractAllWithStatus returned %d hostnames, want 2 partial results", len(statusHostnames))
+	}
 }
 
 func TestRegistry_ExtractAll_Empty(t *testing.T) {
@@ -312,6 +320,14 @@ func TestRegistry_DiscoverAll_ErrorHandling(t *testing.T) {
 
 	if len(hostnames) != 1 {
 		t.Errorf("DiscoverAll returned %d hostnames, want 1 (from ok source)", len(hostnames))
+	}
+
+	statusHostnames, complete := r.DiscoverAllWithStatus(context.Background())
+	if complete {
+		t.Fatal("DiscoverAllWithStatus reported a complete snapshot after a source failed")
+	}
+	if len(statusHostnames) != 1 {
+		t.Fatalf("DiscoverAllWithStatus returned %d hostnames, want 1 partial result", len(statusHostnames))
 	}
 }
 

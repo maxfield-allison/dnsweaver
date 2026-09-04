@@ -53,6 +53,7 @@ func NewWithHTTPClient(name string, config *Config, httpClient *http.Client, log
 
 	p := &Provider{
 		name:             name,
+		url:              config.URL,
 		zone:             config.Zone,
 		ttl:              config.TTL,
 		autoHTTPSRecords: config.AutoHTTPSRecords,

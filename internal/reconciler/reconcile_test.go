@@ -497,13 +497,8 @@ func TestReconcile_OrphanCleanup(t *testing.T) {
 		Target:   "10.0.0.1",
 		TTL:      300,
 	})
-	// Add ownership record for current app (correct format: _dnsweaver.hostname)
-	mockProvider.AddRecord(provider.Record{
-		Hostname: "_dnsweaver.current.example.com",
-		Type:     provider.RecordTypeTXT,
-		Target:   "heritage=dnsweaver",
-		TTL:      300,
-	})
+	// Add exact ownership record for current app.
+	mockProvider.AddRecord(memberOwnershipTXT("current.example.com", "10.0.0.1"))
 	// Add orphan record (workload no longer exists)
 	mockProvider.AddRecord(provider.Record{
 		Hostname: "orphan.example.com",
@@ -511,13 +506,8 @@ func TestReconcile_OrphanCleanup(t *testing.T) {
 		Target:   "10.0.0.1",
 		TTL:      300,
 	})
-	// Add ownership record for orphan (so it can be deleted)
-	mockProvider.AddRecord(provider.Record{
-		Hostname: "_dnsweaver.orphan.example.com",
-		Type:     provider.RecordTypeTXT,
-		Target:   "heritage=dnsweaver",
-		TTL:      300,
-	})
+	// Add exact ownership record for orphan (so it can be deleted).
+	mockProvider.AddRecord(memberOwnershipTXT("orphan.example.com", "10.0.0.1"))
 
 	providers := provider.NewRegistry(logger)
 	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {
@@ -1207,12 +1197,9 @@ func TestReconcile_CaseSensitivity(t *testing.T) {
 	}
 }
 
-// TestReconcile_ProviderCreateFailsAfterDelete tests the scenario where:
-// 1. Old record exists with wrong target
-// 2. Old record is deleted successfully
-// 3. New record creation FAILS
-// Result: Hostname has NO DNS record - partial failure state
-func TestReconcile_ProviderCreateFailsAfterDelete(t *testing.T) {
+// TestReconcile_ProviderCreateFailurePreservesOldMember verifies that a target
+// change does not delete the working old member when its replacement fails.
+func TestReconcile_ProviderCreateFailurePreservesOldMember(t *testing.T) {
 	dockerMock := newTestMockWorkloadLister(workload.PlatformDocker)
 	dockerMock.AddWorkload("my-app", map[string]string{
 		"traefik.http.routers.myapp.rule": "Host(`app.example.com`)",
@@ -1231,7 +1218,7 @@ func TestReconcile_ProviderCreateFailsAfterDelete(t *testing.T) {
 		Target:   "10.0.0.99", // Old target - will be deleted
 		TTL:      300,
 	})
-	mockProvider.AddRecord(ownershipTXT("app.example.com"))
+	mockProvider.AddRecord(memberOwnershipTXT("app.example.com", "10.0.0.99"))
 
 	// Make Create fail
 	createCallCount := 0
@@ -1269,10 +1256,10 @@ func TestReconcile_ProviderCreateFailsAfterDelete(t *testing.T) {
 		t.Fatalf("Reconcile returned error: %v", err)
 	}
 
-	// Old record should have been deleted
+	// The old record must remain until the replacement exists.
 	deleted := mockProvider.GetDeleted()
-	if len(deleted) < 1 {
-		t.Errorf("expected old record to be deleted, got %d deletions", len(deleted))
+	if len(deleted) != 0 {
+		t.Errorf("replacement failure deleted existing records: %+v", deleted)
 	}
 
 	// Create should have been attempted and failed
@@ -1285,10 +1272,6 @@ func TestReconcile_ProviderCreateFailsAfterDelete(t *testing.T) {
 	if len(failed) != 1 {
 		t.Errorf("expected 1 failed action, got %d", len(failed))
 	}
-
-	// The concerning state: old record deleted, new record not created
-	// This is a known limitation - the test documents it
-	t.Log("Note: After this failure, the hostname has no DNS record (old deleted, new failed)")
 }
 
 // TestReconcile_FirstRunAfterRestart verifies that the first reconciliation
@@ -1312,12 +1295,7 @@ func TestReconcile_FirstRunAfterRestart(t *testing.T) {
 		Target:   "10.0.0.1",
 		TTL:      300,
 	})
-	mockProvider.AddRecord(provider.Record{
-		Hostname: "_dnsweaver.app.example.com",
-		Type:     provider.RecordTypeTXT,
-		Target:   "heritage=dnsweaver",
-		TTL:      300,
-	})
+	mockProvider.AddRecord(memberOwnershipTXT("app.example.com", "10.0.0.1"))
 
 	providers := provider.NewRegistry(logger)
 	providers.RegisterFactory("mock", func(cfg provider.FactoryConfig) (provider.Provider, error) {

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Provider-scoped record sets preserve every distinct A and AAAA member.**
+  Claims are deduplicated only after provider routing and target resolution, so
+  repeated claims for one target create one record while distinct Proxmox,
+  Incus, or named-record targets remain separate members. Ownership markers,
+  replacement, orphan cleanup, provider-route changes, restart recovery, and
+  the deletion circuit breaker now operate on exact members without removing
+  unrelated siblings. Built-in providers either delete an exact member or
+  retain their documented safe limitation.
+  ([GitHub #177](https://github.com/maxfield-allison/dnsweaver/issues/177))
 - **Existing-record adoption can now be scoped to a provider, workload, or
   named record.** `DNSWEAVER_{NAME}_ADOPT_EXISTING` overrides the global policy
   for one provider. `dnsweaver.adopt` and `dnsweaver.dev/adopt` apply to every
@@ -22,6 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Technitium instances on different servers remain distinct backends.** The
+  normal provider factory discarded the configured API URL from its backend
+  identity, so instances serving the same zone on separate servers could be
+  grouped together and leave the previous route stale when selection changed.
+- **Kubernetes namespace filters now scope informer API requests.** Configured
+  namespaces previously filtered the local cache only, so dnsweaver still
+  required cluster-wide list/watch permissions. Each configured namespace now
+  gets its own informer and can be authorized with namespace-scoped RBAC.
 - **Managed mode now leaves unowned same-type records untouched when adoption
   is disabled.** A pre-existing A, AAAA, CNAME, or SRV record with a different
   target could previously be updated even though `ADOPT_EXISTING=false`.

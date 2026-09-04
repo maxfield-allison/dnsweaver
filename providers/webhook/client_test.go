@@ -240,7 +240,7 @@ func TestClient_Delete(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, 5*time.Second, "", "", WithRetries(0))
-		err := client.Delete(context.Background(), "app.example.com", "A")
+		err := client.Delete(context.Background(), "app.example.com", "A", "10.0.0.1", nil)
 		if err != nil {
 			t.Errorf("Delete() unexpected error: %v", err)
 		}
@@ -253,7 +253,7 @@ func TestClient_Delete(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, 5*time.Second, "", "", WithRetries(0))
-		err := client.Delete(context.Background(), "app.example.com", "A")
+		err := client.Delete(context.Background(), "app.example.com", "A", "10.0.0.1", nil)
 		if err != nil {
 			t.Errorf("Delete() unexpected error: %v", err)
 		}
@@ -266,7 +266,7 @@ func TestClient_Delete(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, 5*time.Second, "", "", WithRetries(0))
-		err := client.Delete(context.Background(), "nonexistent.example.com", "A")
+		err := client.Delete(context.Background(), "nonexistent.example.com", "A", "10.0.0.1", nil)
 		if err != nil {
 			t.Errorf("Delete() unexpected error for 404: %v", err)
 		}
@@ -283,7 +283,7 @@ func TestClient_Delete(t *testing.T) {
 		defer server.Close()
 
 		client := NewClient(server.URL, 5*time.Second, "", "", WithRetries(0))
-		err := client.Delete(context.Background(), "app.example.com", "A")
+		err := client.Delete(context.Background(), "app.example.com", "A", "10.0.0.1", nil)
 		if err == nil {
 			t.Error("Delete() expected error, got nil")
 		}

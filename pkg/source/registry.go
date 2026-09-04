@@ -98,13 +98,22 @@ func (r *Registry) Count() int {
 // If a source returns an error, extraction continues with remaining sources.
 // Errors are logged but not returned to allow partial results.
 func (r *Registry) ExtractAll(ctx context.Context, w workload.Workload) Hostnames {
+	hostnames, _ := r.ExtractAllWithStatus(ctx, w)
+	return hostnames
+}
+
+// ExtractAllWithStatus is ExtractAll plus a completeness signal. complete is
+// false when any applicable source failed, even when other sources returned
+// usable claims. Reconciliation uses this to suppress removals from a partial
+// desired-state snapshot.
+func (r *Registry) ExtractAllWithStatus(ctx context.Context, w workload.Workload) (hostnames Hostnames, complete bool) {
 	// Global opt-out: dnsweaver.enabled=false skips ALL sources.
 	// Check Docker labels first, then K8s annotations.
 	if isWorkloadDisabled(w) {
 		r.logger.Debug("workload disabled via dnsweaver.enabled=false, skipping all sources",
 			slog.String("workload", w.Name),
 		)
-		return nil
+		return nil, true
 	}
 
 	workloadAdopt, adoptKey, adoptValid := workloadAdoptExistingHint(w)
@@ -121,6 +130,7 @@ func (r *Registry) ExtractAll(ctx context.Context, w workload.Workload) Hostname
 	r.mu.RUnlock()
 
 	var allHostnames Hostnames
+	complete = true
 
 	for _, src := range sources {
 		// Skip sources that don't support this workload's platform
@@ -130,6 +140,7 @@ func (r *Registry) ExtractAll(ctx context.Context, w workload.Workload) Hostname
 
 		hostnames, err := src.Extract(ctx, w)
 		if err != nil {
+			complete = false
 			r.logger.Warn("source extraction failed",
 				slog.String("source", src.Name()),
 				slog.String("error", err.Error()),
@@ -148,7 +159,7 @@ func (r *Registry) ExtractAll(ctx context.Context, w workload.Workload) Hostname
 		}
 	}
 
-	return allHostnames
+	return allHostnames, complete
 }
 
 // sourceSupports returns true if the source supports the given platform.
@@ -199,12 +210,20 @@ func isWorkloadDisabled(w workload.Workload) bool {
 // If a source returns an error, discovery continues with remaining sources.
 // Errors are logged but not returned to allow partial results.
 func (r *Registry) DiscoverAll(ctx context.Context) Hostnames {
+	hostnames, _ := r.DiscoverAllWithStatus(ctx)
+	return hostnames
+}
+
+// DiscoverAllWithStatus is DiscoverAll plus a completeness signal. complete
+// is false when any discoverable source failed.
+func (r *Registry) DiscoverAllWithStatus(ctx context.Context) (hostnames Hostnames, complete bool) {
 	r.mu.RLock()
 	sources := make([]Source, len(r.sources))
 	copy(sources, r.sources)
 	r.mu.RUnlock()
 
 	var allHostnames Hostnames
+	complete = true
 
 	for _, src := range sources {
 		if !src.SupportsDiscovery() {
@@ -213,6 +232,7 @@ func (r *Registry) DiscoverAll(ctx context.Context) Hostnames {
 
 		hostnames, err := src.Discover(ctx)
 		if err != nil {
+			complete = false
 			r.logger.Warn("source file discovery failed",
 				slog.String("source", src.Name()),
 				slog.String("error", err.Error()),
@@ -230,7 +250,7 @@ func (r *Registry) DiscoverAll(ctx context.Context) Hostnames {
 		}
 	}
 
-	return allHostnames
+	return allHostnames, complete
 }
 
 // DiscoverableSources returns sources that have file discovery configured.

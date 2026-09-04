@@ -38,12 +38,14 @@ type fakeCFRecord struct {
 }
 
 type fakeCloudflareAPI struct {
-	mu      sync.Mutex
-	nextID  int
-	records []fakeCFRecord
-	patches []fakeCFRecord // bodies of PATCH requests, in order
-	posts   int
-	deletes int
+	mu          sync.Mutex
+	nextID      int
+	records     []fakeCFRecord
+	patches     []fakeCFRecord // bodies of PATCH requests, in order
+	posts       int
+	deletes     int
+	postTypes   []string
+	deleteTypes []string
 }
 
 func (f *fakeCloudflareAPI) add(recordType, name, content string, ttl int, proxied bool) {
@@ -107,6 +109,7 @@ func (f *fakeCloudflareAPI) handler() http.Handler {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		f.mu.Lock()
 		f.posts++
+		f.postTypes = append(f.postTypes, body.Type)
 		f.mu.Unlock()
 		f.add(body.Type, body.Name, body.Content, body.TTL, body.Proxied)
 		rec, _ := f.find(body.Type, body.Name)
@@ -144,15 +147,33 @@ func (f *fakeCloudflareAPI) handler() http.Handler {
 		id := r.PathValue("id")
 		kept := f.records[:0]
 		for _, rec := range f.records {
-			if rec.ID != id {
-				kept = append(kept, rec)
+			if rec.ID == id {
+				f.deleteTypes = append(f.deleteTypes, rec.Type)
+				continue
 			}
+			kept = append(kept, rec)
 		}
 		f.records = kept
 		writeCFResult(w, map[string]string{"id": id})
 	})
 
 	return mux
+}
+
+func (f *fakeCloudflareAPI) mutationCount(method, recordType string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	types := f.postTypes
+	if method == http.MethodDelete {
+		types = f.deleteTypes
+	}
+	count := 0
+	for _, current := range types {
+		if current == recordType {
+			count++
+		}
+	}
+	return count
 }
 
 // rewriteTransport sends every request to base instead of the Cloudflare API,
@@ -269,8 +290,17 @@ func TestReconcile_CloudflareProxiedLabelUpdatesExistingRecord(t *testing.T) {
 	if got := api.patchCount(); got != len(hosts) {
 		t.Errorf("second pass issued %d extra PATCH requests", got-len(hosts))
 	}
-	if api.posts != 0 || api.deletes != 0 {
-		t.Errorf("expected no creates or deletes, got %d POST and %d DELETE", api.posts, api.deletes)
+	if got := api.mutationCount(http.MethodPost, "TXT"); got != len(hosts) {
+		t.Errorf("ownership marker creates = %d, want %d for one-time legacy migration", got, len(hosts))
+	}
+	if got := api.mutationCount(http.MethodDelete, "TXT"); got != len(hosts) {
+		t.Errorf("ownership marker deletes = %d, want %d for one-time legacy migration", got, len(hosts))
+	}
+	if got := api.mutationCount(http.MethodPost, "A"); got != 0 {
+		t.Errorf("A record creates = %d, want 0", got)
+	}
+	if got := api.mutationCount(http.MethodDelete, "A"); got != 0 {
+		t.Errorf("A record deletes = %d, want 0", got)
 	}
 }
 
@@ -310,7 +340,19 @@ func TestReconcile_CloudflareProxiedSteadyStateIsNotChurn(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			api := &fakeCloudflareAPI{}
 			api.add("A", host, target, 300, tt.recordProxied)
-			api.add("TXT", provider.OwnershipRecordName(host), provider.OwnershipValue, 300, false)
+			var metadata map[string]string
+			if proxied, ok := tt.labels["dnsweaver.proxied"]; ok {
+				metadata = map[string]string{"proxied": proxied}
+			}
+			member := provider.Record{
+				Hostname: host,
+				Type:     provider.RecordTypeA,
+				Target:   target,
+				TTL:      300,
+				Metadata: metadata,
+			}
+			marker := provider.MemberOwnershipRecord(host, 300, "", member, metadata)
+			api.add("TXT", marker.Hostname, marker.Target, marker.TTL, false)
 
 			r, lister := newCloudflareStateFixture(t, api, tt.proxiedDefault, target)
 			lister.AddWorkload("app", tt.labels)

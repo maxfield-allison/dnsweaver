@@ -320,6 +320,38 @@ func TestProvider_Delete(t *testing.T) {
 		if received.Type != "A" {
 			t.Errorf("received.Type = %q, want %q", received.Type, "A")
 		}
+		if received.Value != "10.0.0.1" {
+			t.Errorf("received.Value = %q, want %q", received.Value, "10.0.0.1")
+		}
+	})
+
+	t.Run("includes complete SRV member identity", func(t *testing.T) {
+		var received DeleteRequest
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewDecoder(r.Body).Decode(&received)
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		defer server.Close()
+
+		p, err := New("test", &Config{URL: server.URL, Timeout: 5 * time.Second, Retries: 0})
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+		record := provider.Record{
+			Hostname: "_sip._tcp.example.com",
+			Type:     provider.RecordTypeSRV,
+			Target:   "sip-1.example.com",
+			SRV:      &provider.SRVData{Priority: 10, Weight: 20, Port: 5060},
+		}
+		if err := p.Delete(context.Background(), record); err != nil {
+			t.Fatalf("Delete() error = %v", err)
+		}
+		if received.Value != record.Target || received.SRV == nil {
+			t.Fatalf("delete request = %+v, want target and SRV identity", received)
+		}
+		if received.SRV.Priority != 10 || received.SRV.Weight != 20 || received.SRV.Port != 5060 {
+			t.Fatalf("delete SRV data = %+v, want priority=10 weight=20 port=5060", received.SRV)
+		}
 	})
 }
 

@@ -3,7 +3,10 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
+	"net"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -33,6 +36,17 @@ const ownershipHeritage = "heritage=dnsweaver"
 const (
 	keyHeritage = "heritage"
 	keyInstance = "instance"
+
+	memberOwnershipVersion   = "2"
+	keyRecordVersion         = "record-version"
+	keyRecordType            = "record-type"
+	keyRecordTarget          = "record-target"
+	keyRecordSRVPriority     = "record-srv-priority"
+	keyRecordSRVWeight       = "record-srv-weight"
+	keyRecordSRVPort         = "record-srv-port"
+	keyRecordHTTPSPriority   = "record-https-priority"
+	keyRecordHTTPSTargetName = "record-https-target-name"
+	keyRecordHTTPSALPN       = "record-https-alpn"
 )
 
 // MakeOwnershipValue returns the ownership TXT record value for the given instance ID and metadata.
@@ -129,6 +143,190 @@ func MatchesOwnership(value, ourInstanceID string) bool {
 func IsDnsweaverOwned(value string) bool {
 	isOwned, _, _ := ParseOwnershipValue(value)
 	return isOwned
+}
+
+// MakeMemberOwnershipValue returns a versioned ownership marker for one DNS
+// record member. Target-like strings are base64url encoded so commas and other
+// TXT metadata delimiters cannot make the marker ambiguous.
+func MakeMemberOwnershipValue(instanceID string, record Record, metadata map[string]string) string {
+	fields := make(map[string]string, len(metadata)+8)
+	for key, value := range metadata {
+		fields[key] = value
+	}
+	fields[keyRecordVersion] = memberOwnershipVersion
+	fields[keyRecordType] = string(record.Type)
+	fields[keyRecordTarget] = encodeOwnershipField(record.Target)
+
+	if record.Type == RecordTypeSRV && record.SRV != nil {
+		fields[keyRecordSRVPriority] = strconv.FormatUint(uint64(record.SRV.Priority), 10)
+		fields[keyRecordSRVWeight] = strconv.FormatUint(uint64(record.SRV.Weight), 10)
+		fields[keyRecordSRVPort] = strconv.FormatUint(uint64(record.SRV.Port), 10)
+	}
+	if record.Type == RecordTypeHTTPS && record.HTTPS != nil {
+		fields[keyRecordHTTPSPriority] = strconv.FormatUint(uint64(record.HTTPS.Priority), 10)
+		fields[keyRecordHTTPSTargetName] = encodeOwnershipField(record.HTTPS.TargetName)
+		fields[keyRecordHTTPSALPN] = encodeOwnershipField(record.HTTPS.ALPN)
+	}
+
+	return MakeOwnershipValue(instanceID, fields)
+}
+
+// ParseMemberOwnershipValue parses a versioned member marker. Legacy or
+// malformed markers remain recognizable as dnsweaver ownership but return a
+// nil member, which forces callers to treat them as ambiguous.
+func ParseMemberOwnershipValue(value string) (isOwned bool, instanceID string, member *Record, metadata map[string]string) {
+	isOwned, instanceID, fields := ParseOwnershipValue(value)
+	if !isOwned {
+		return false, "", nil, nil
+	}
+	if fields[keyRecordVersion] != memberOwnershipVersion {
+		return true, instanceID, nil, fields
+	}
+
+	recordTypeValue, hasRecordType := fields[keyRecordType]
+	recordType := RecordType(recordTypeValue)
+	if !hasRecordType || !validOwnershipRecordType(recordType) {
+		return true, instanceID, nil, stripMemberOwnershipFields(fields)
+	}
+	encodedTarget, hasTarget := fields[keyRecordTarget]
+	if !hasTarget {
+		return true, instanceID, nil, stripMemberOwnershipFields(fields)
+	}
+	target, err := decodeOwnershipField(encodedTarget)
+	if err != nil {
+		return true, instanceID, nil, stripMemberOwnershipFields(fields)
+	}
+
+	record := &Record{Type: recordType, Target: target}
+	switch recordType {
+	case RecordTypeA, RecordTypeAAAA, RecordTypeCNAME, RecordTypeTXT:
+		// Target fully identifies these member types.
+	case RecordTypeSRV:
+		priority, priorityOK := parseOwnershipUint16(fields[keyRecordSRVPriority])
+		weight, weightOK := parseOwnershipUint16(fields[keyRecordSRVWeight])
+		port, portOK := parseOwnershipUint16(fields[keyRecordSRVPort])
+		if !priorityOK || !weightOK || !portOK {
+			return true, instanceID, nil, stripMemberOwnershipFields(fields)
+		}
+		record.SRV = &SRVData{Priority: priority, Weight: weight, Port: port}
+	case RecordTypeHTTPS:
+		priority, priorityOK := parseOwnershipUint16(fields[keyRecordHTTPSPriority])
+		targetName, targetErr := decodeOwnershipField(fields[keyRecordHTTPSTargetName])
+		alpn, alpnErr := decodeOwnershipField(fields[keyRecordHTTPSALPN])
+		if !priorityOK || targetErr != nil || alpnErr != nil {
+			return true, instanceID, nil, stripMemberOwnershipFields(fields)
+		}
+		record.HTTPS = &HTTPSData{Priority: priority, TargetName: targetName, ALPN: alpn}
+	}
+
+	return true, instanceID, record, stripMemberOwnershipFields(fields)
+}
+
+func validOwnershipRecordType(recordType RecordType) bool {
+	switch recordType {
+	case RecordTypeA, RecordTypeAAAA, RecordTypeCNAME, RecordTypeTXT, RecordTypeSRV, RecordTypeHTTPS:
+		return true
+	default:
+		return false
+	}
+}
+
+// MatchesMemberOwnership reports whether value is a valid member marker for
+// the requested dnsweaver instance and logical DNS record member.
+func MatchesMemberOwnership(value, instanceID string, record Record) bool {
+	isOwned, markerInstance, member, _ := ParseMemberOwnershipValue(value)
+	return isOwned && markerInstance == instanceID && member != nil && SameRecordMember(*member, record)
+}
+
+// MatchesLegacyOwnership reports whether value is a pre-member ownership
+// marker for the requested instance. Malformed versioned markers are not
+// treated as legacy because doing so would restore hostname-wide authority.
+func MatchesLegacyOwnership(value, instanceID string) bool {
+	isOwned, markerInstance, fields := ParseOwnershipValue(value)
+	if !isOwned || markerInstance != instanceID {
+		return false
+	}
+	_, versioned := fields[keyRecordVersion]
+	return !versioned
+}
+
+// SameRecordMember compares the fields that identify a member of an RRset.
+// Hostname and TTL are intentionally excluded: ownership record names carry
+// the hostname, and TTL is mutable state rather than member identity.
+func SameRecordMember(a, b Record) bool {
+	if a.Type != b.Type || canonicalRecordTarget(a) != canonicalRecordTarget(b) {
+		return false
+	}
+	if a.Type == RecordTypeSRV {
+		return sameSRVData(a.SRV, b.SRV)
+	}
+	if a.Type == RecordTypeHTTPS {
+		return sameHTTPSData(a.HTTPS, b.HTTPS)
+	}
+	return true
+}
+
+func canonicalRecordTarget(record Record) string {
+	if record.Type == RecordTypeA || record.Type == RecordTypeAAAA {
+		if ip := net.ParseIP(strings.TrimSpace(record.Target)); ip != nil {
+			return ip.String()
+		}
+	}
+	if record.Type == RecordTypeCNAME || record.Type == RecordTypeSRV {
+		return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(record.Target), "."))
+	}
+	return record.Target
+}
+
+func sameSRVData(a, b *SRVData) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Priority == b.Priority && a.Weight == b.Weight && a.Port == b.Port
+}
+
+func sameHTTPSData(a, b *HTTPSData) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Priority == b.Priority &&
+		strings.EqualFold(strings.TrimSuffix(a.TargetName, "."), strings.TrimSuffix(b.TargetName, ".")) &&
+		a.ALPN == b.ALPN
+}
+
+func encodeOwnershipField(value string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(value))
+}
+
+func decodeOwnershipField(value string) (string, error) {
+	decoded, err := base64.RawURLEncoding.DecodeString(value)
+	return string(decoded), err
+}
+
+func parseOwnershipUint16(value string) (uint16, bool) {
+	parsed, err := strconv.ParseUint(value, 10, 16)
+	return uint16(parsed), err == nil
+}
+
+func stripMemberOwnershipFields(fields map[string]string) map[string]string {
+	if len(fields) == 0 {
+		return nil
+	}
+	metadata := make(map[string]string, len(fields))
+	for key, value := range fields {
+		switch key {
+		case keyRecordVersion, keyRecordType, keyRecordTarget,
+			keyRecordSRVPriority, keyRecordSRVWeight, keyRecordSRVPort,
+			keyRecordHTTPSPriority, keyRecordHTTPSTargetName, keyRecordHTTPSALPN:
+			continue
+		default:
+			metadata[key] = value
+		}
+	}
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata
 }
 
 // SRVData contains SRV record-specific fields.
@@ -344,6 +542,17 @@ func OwnershipRecord(hostname string, ttl int, instanceID string, metadata map[s
 		Hostname: OwnershipRecordName(hostname),
 		Type:     RecordTypeTXT,
 		Target:   MakeOwnershipValue(instanceID, metadata),
+		TTL:      ttl,
+	}
+}
+
+// MemberOwnershipRecord creates a versioned TXT ownership record for one
+// logical DNS record member.
+func MemberOwnershipRecord(hostname string, ttl int, instanceID string, member Record, metadata map[string]string) Record {
+	return Record{
+		Hostname: OwnershipRecordName(hostname),
+		Type:     RecordTypeTXT,
+		Target:   MakeMemberOwnershipValue(instanceID, member, metadata),
 		TTL:      ttl,
 	}
 }

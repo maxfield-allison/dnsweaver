@@ -107,6 +107,18 @@ func (p *Provider) deleteCompanionHTTPS(ctx context.Context, hostname string, re
 	if !hadCompanionHTTPS(recordType) {
 		return nil
 	}
+	if needsCompanionHTTPS(recordType) {
+		hasAddress, err := p.hasAddressRecord(ctx, hostname)
+		if err != nil {
+			return err
+		}
+		if hasAddress {
+			p.logger.Debug("keeping companion HTTPS record for remaining address member",
+				slog.String("hostname", hostname),
+			)
+			return nil
+		}
+	}
 
 	svcParams := buildSvcParams(p.autoHTTPSALPN)
 	if err := p.client.DeleteHTTPSRecord(ctx, p.zone, hostname, companionHTTPSSvcPriority, companionHTTPSTargetName, svcParams); err != nil {
@@ -119,6 +131,22 @@ func (p *Provider) deleteCompanionHTTPS(ctx context.Context, hostname string, re
 	)
 
 	return nil
+}
+
+// hasAddressRecord reports whether an A or AAAA member remains at hostname.
+// Companion HTTPS records belong to the address RRsets as a whole, so deleting
+// one round-robin member must not remove the companion while a sibling remains.
+func (p *Provider) hasAddressRecord(ctx context.Context, hostname string) (bool, error) {
+	records, err := p.client.GetRecords(ctx, p.zone, hostname)
+	if err != nil {
+		return false, fmt.Errorf("checking remaining address records for %s: %w", hostname, err)
+	}
+	for _, record := range records {
+		if record.Type == string(provider.RecordTypeA) || record.Type == string(provider.RecordTypeAAAA) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // hasHTTPSRecord checks whether any HTTPS record exists for the given hostname.

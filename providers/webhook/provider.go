@@ -265,7 +265,15 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 
 // Delete removes a DNS record via the webhook.
 func (p *Provider) Delete(ctx context.Context, record provider.Record) error {
-	err := p.client.Delete(ctx, record.Hostname, string(record.Type))
+	var srv *SRVData
+	if record.SRV != nil {
+		srv = &SRVData{
+			Priority: record.SRV.Priority,
+			Weight:   record.SRV.Weight,
+			Port:     record.SRV.Port,
+		}
+	}
+	err := p.client.Delete(ctx, record.Hostname, string(record.Type), record.Target, srv)
 	if err != nil {
 		return fmt.Errorf("deleting %s record: %w", record.Type, err)
 	}

@@ -135,6 +135,17 @@ func ownershipTXT(hostname string) provider.Record {
 	return provider.OwnershipRecord(hostname, 300, "", nil)
 }
 
+// memberOwnershipTXT builds a versioned ownership record for one A member.
+func memberOwnershipTXT(hostname, target string) provider.Record {
+	record := provider.Record{
+		Hostname: hostname,
+		Type:     provider.RecordTypeA,
+		Target:   target,
+		TTL:      300,
+	}
+	return provider.MemberOwnershipRecord(hostname, 300, "", record, nil)
+}
+
 // newStateTestRegistry wires prov as the only instance of a registry:
 // A records pointing at stateTestTarget for *.example.com, TTL 300.
 func newStateTestRegistry(t *testing.T, prov provider.Provider) *provider.Registry {

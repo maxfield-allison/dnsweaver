@@ -244,6 +244,10 @@ With this configuration, when `app.example.com` starts:
 
 Contributions are welcome! See [CONTRIBUTING](https://maxfield-allison.github.io/dnsweaver/contributing/) for guidelines.
 
+## Support
+
+dnsweaver is free and MIT-licensed. If it saves you time, you can support ProbablyFine through [GitHub Sponsors](https://github.com/sponsors/maxfield-allison). Sponsorship helps cover code-signing and other development costs. It doesn't buy priority support, roadmap influence, or promised features.
+
 ## Star History
 
 If dnsweaver saves you time, a ⭐ helps others find it.

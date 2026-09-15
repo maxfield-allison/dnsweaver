@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Complete guide to configuring dnsweaver across all seven sources and eleven DNS providers
+description: Complete guide to configuring dnsweaver across all seven sources and twelve DNS providers
 icon: material/cog
 ---
 

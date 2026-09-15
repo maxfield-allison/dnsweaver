@@ -24,6 +24,7 @@ import (
 	"github.com/maxfield-allison/dnsweaver/providers/powerdns"
 	"github.com/maxfield-allison/dnsweaver/providers/rfc2136"
 	"github.com/maxfield-allison/dnsweaver/providers/technitium"
+	"github.com/maxfield-allison/dnsweaver/providers/unifi"
 	"github.com/maxfield-allison/dnsweaver/providers/webhook"
 	"github.com/maxfield-allison/dnsweaver/sources/caddy"
 	dnsweaversource "github.com/maxfield-allison/dnsweaver/sources/dnsweaver"
@@ -323,6 +324,9 @@ func registerProviderFactories(registry *provider.Registry) {
 
 	// Register pfSense provider factory (Unbound/Dnsmasq host overrides via REST API)
 	registry.RegisterFactory("pfsense", pfsense.Factory())
+
+	// Register UniFi provider factory (DNS policies via the Network Integration API)
+	registry.RegisterFactory("unifi", unifi.Factory())
 }
 
 // initializeProviders initializes all configured providers using the manager.

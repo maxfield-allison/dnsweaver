@@ -1,8 +1,10 @@
 """Exercise promotion failures without credentials, a daemon or public writes."""
 import copy
 import json
+import os
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 from unittest.mock import patch
 import urllib.error
@@ -211,6 +213,62 @@ class QualificationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.check()
                 path.write_text('{}\n')
+
+
+class SourceIdentityTests(unittest.TestCase):
+    def test_dirty_or_untracked_build_input_is_rejected(self):
+        for status in (" M Dockerfile", "?? injected.go"):
+            with self.subTest(status=status):
+                results = [subprocess.CompletedProcess([], 0, SOURCE + "\n", ""),
+                           subprocess.CompletedProcess([], 0, status + "\n", "")]
+                with patch.dict(os.environ, {"CI_COMMIT_SHA": SOURCE, "CI_COMMIT_TAG": ""}):
+                    with patch.object(r, "run", side_effect=results):
+                        with self.assertRaises(ValueError):
+                            r.source_identity()
+
+    def test_clean_source_reports_the_bound_branch_version(self):
+        results = [subprocess.CompletedProcess([], 0, SOURCE + "\n", ""),
+                   subprocess.CompletedProcess([], 0, "", "")]
+        with patch.dict(os.environ, {"CI_COMMIT_SHA": SOURCE, "CI_COMMIT_TAG": ""}):
+            with patch.object(r, "run", side_effect=results):
+                self.assertEqual(r.source_identity(), (SOURCE, "sha-" + SOURCE[:12]))
+
+
+class RuntimeOwnershipTests(unittest.TestCase):
+    def test_failed_create_never_removes_an_existing_container(self):
+        calls = []
+
+        def fake_run(*args, **kwargs):
+            calls.append(args)
+            if args[:2] == ("docker", "create"):
+                raise RuntimeError("container name already exists")
+            output = ""
+            if args[:3] == ("docker", "image", "inspect"):
+                output = "amd64\n"
+            elif args[-1] == "--version":
+                output = "dnsweaver v3.0.0 (built test)\n"
+            return subprocess.CompletedProcess(args, 0, output, "")
+
+        with patch.object(r, "run", side_effect=fake_run):
+            with self.assertRaises(RuntimeError):
+                r.runtime_checks("test@" + NEW, "amd64", "v3.0.0")
+        self.assertFalse(any(c[:2] == ("docker", "rm") for c in calls))
+
+
+    def test_shell_healthcheck_does_not_clean_up_failed_create(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            docker = folder / "docker"
+            log = folder / "calls.log"
+            docker.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_DOCKER_LOG"\nexit 1\n')
+            docker.chmod(0o755)
+            environment = {**os.environ, "PATH": str(folder) + os.pathsep + os.environ["PATH"], "TEST_DOCKER_LOG": str(log)}
+            result = subprocess.run(["sh", str(r.ROOT / "scripts/test-image-healthcheck.sh"), "fixture"],
+                                    env=environment, capture_output=True, text=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            calls = log.read_text().splitlines()
+            self.assertEqual(len(calls), 1)
+            self.assertTrue(calls[0].startswith("create "))
 
 
 class GitHubAPITests(unittest.TestCase):

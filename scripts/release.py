@@ -17,6 +17,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "release"
@@ -58,6 +59,8 @@ def source_identity():
     sha = env("CI_COMMIT_SHA")
     if not re.fullmatch(r"[0-9a-f]{40}", sha) or run("git", "rev-parse", "HEAD").stdout.strip() != sha:
         raise ValueError("build source does not match CI_COMMIT_SHA")
+    if run("git", "status", "--porcelain", "--untracked-files=normal").stdout.strip():
+        raise ValueError("release source contains modified or untracked files")
     version = os.environ.get("CI_COMMIT_TAG") or "sha-" + sha[:12]
     if os.environ.get("CI_COMMIT_TAG") and not VERSION.fullmatch(version):
         raise ValueError("release tag must be a semantic version")
@@ -101,13 +104,15 @@ def runtime_checks(ref, arch, version):
     # Verify the actual kernel listener on each architecture, not just config
     # parsing. Use the Docker API copy path for remote runner daemons.
     for network in (False, True):
-        name = f"dnsweaver-release-{os.getpid()}-{arch}-{int(network)}"
+        name = f"dnsweaver-release-{arch}-{uuid.uuid4().hex}-{int(network)}"
         args = ["docker", "create", "--name", name, "--network", "none"]
         if network:
             args += ["--env", "DNSWEAVER_HEALTH_ADDRESS=0.0.0.0", "--env", "DNSWEAVER_HEALTH_ALLOW_NETWORK=true"]
         args += [ref, "--config", "/tmp/probe.yml"]
+        created = False
         try:
             run(*args)
+            created = True
             run("docker", "cp", "testdata/image-healthcheck-config.yml", name + ":/tmp/probe.yml")
             run("docker", "start", name)
             for _ in range(30):
@@ -129,7 +134,8 @@ def runtime_checks(ref, arch, version):
             if json.loads(body) != {"status": "degraded"}:
                 raise RuntimeError("pending-provider readiness was not aggregate degraded")
         finally:
-            run("docker", "rm", "-f", name, check=False)
+            if created:
+                run("docker", "rm", "-f", name, check=False)
     return {"architecture": arch, "version": version, "health": "passed", "pending_provider_readiness": "passed", "loopback_and_network_opt_in": "passed"}
 
 

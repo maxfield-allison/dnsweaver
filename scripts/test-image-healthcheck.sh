@@ -8,12 +8,19 @@ if [ "$#" -gt 0 ]; then
     image=$1
 fi
 config_path="$repo_root/testdata/image-healthcheck-config.yml"
-container_prefix="dnsweaver-healthcheck-$$"
+container_prefix="dnsweaver-healthcheck-${CI_JOB_ID:-local}-$$"
 container_yaml="$container_prefix-yaml"
 container_env="$container_prefix-env"
+created_yaml=false
+created_env=false
 
 cleanup() {
-    docker rm -f "$container_yaml" "$container_env" >/dev/null 2>&1 || true
+    if [ "$created_yaml" = true ]; then
+        docker rm -f "$container_yaml" >/dev/null 2>&1 || true
+    fi
+    if [ "$created_env" = true ]; then
+        docker rm -f "$container_env" >/dev/null 2>&1 || true
+    fi
 }
 trap cleanup EXIT INT TERM
 
@@ -50,6 +57,7 @@ wait_for_healthy() {
 docker create \
     --name "$container_yaml" \
     "$image" --config /tmp/dnsweaver-config.yml >/dev/null
+created_yaml=true
 docker cp "$config_path" "$container_yaml:/tmp/dnsweaver-config.yml"
 docker start "$container_yaml" >/dev/null
 wait_for_healthy "$container_yaml"
@@ -63,6 +71,7 @@ docker create \
     --env DNSWEAVER_CONFIG=/tmp/dnsweaver-config.yml \
     --env DNSWEAVER_HEALTH_PORT=18081 \
     "$image" >/dev/null
+created_env=true
 docker cp "$config_path" "$container_env:/tmp/dnsweaver-config.yml"
 docker start "$container_env" >/dev/null
 wait_for_healthy "$container_env"

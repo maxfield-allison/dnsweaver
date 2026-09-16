@@ -49,4 +49,5 @@ site/
 .artifacts/
 .docker-auth/
 /release/
+/public/
 __pycache__/

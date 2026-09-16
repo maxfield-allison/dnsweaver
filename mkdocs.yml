@@ -1,6 +1,6 @@
 site_name: dnsweaver
 site_url: https://maxfield-allison.github.io/dnsweaver/
-site_description: Automatic DNS records for containers, VMs and clusters. Seven sources, eleven DNS providers, split-horizon out of the box.
+site_description: Automatic DNS records for containers, VMs and clusters. Seven sources, twelve DNS providers, split-horizon out of the box.
 site_author: Maxfield Allison
 
 repo_name: maxfield-allison/dnsweaver
@@ -138,6 +138,7 @@ nav:
       - AdGuard Home: providers/adguard.md
       - OPNsense: providers/opnsense.md
       - pfSense: providers/pfsense.md
+      - UniFi Network: providers/unifi.md
       - dnsmasq: providers/dnsmasq.md
       - Webhook: providers/webhook.md
   - Sources:

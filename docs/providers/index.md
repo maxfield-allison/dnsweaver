@@ -100,6 +100,14 @@ dnsweaver supports multiple DNS providers, each with different capabilities and 
 
     [:octicons-arrow-right-24: Configuration](pfsense.md)
 
+-   :material-access-point-network:{ .lg .middle } **UniFi Network**
+
+    ---
+
+    DNS policies on UniFi OS consoles and UniFi OS Server via the official Integration API. REST API.
+
+    [:octicons-arrow-right-24: Configuration](unifi.md)
+
 </div>
 
 ## Provider Comparison
@@ -115,6 +123,7 @@ dnsweaver supports multiple DNS providers, each with different capabilities and 
 | [AdGuard Home](adguard.md) | REST API | A, AAAA, CNAME | Existing AdGuard Home setups |
 | [OPNsense](opnsense.md) | REST API | A, AAAA | Unbound or Dnsmasq host overrides on OPNsense |
 | [pfSense](pfsense.md) | REST API | A, AAAA | Unbound or Dnsmasq host overrides on pfSense |
+| [UniFi Network](unifi.md) | REST API | A, AAAA, CNAME, SRV, TXT | UniFi OS consoles and UniFi OS Server (Network 10.1+) |
 | [dnsmasq](dnsmasq.md) | File | A, CNAME | Simple file-based DNS |
 | [Webhook](webhook.md) | HTTP Callback | Any | Custom integrations |
 

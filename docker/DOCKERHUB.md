@@ -4,7 +4,7 @@
 
 **Automatic DNS records for containers, VMs & clusters.**
 
-dnsweaver reads hostnames from seven sources and writes records to eleven DNS providers. A container starts with a Traefik label or a Proxmox VM boots, and the record appears; when they go away, so does it. Think of it as **external-dns for the homelab**.
+dnsweaver reads hostnames from seven sources and writes records to twelve DNS providers. A container starts with a Traefik label or a Proxmox VM boots, and the record appears; when they go away, so does it. Think of it as **external-dns for the homelab**.
 
 📚 **[Documentation](https://maxfield-allison.github.io/dnsweaver/)** · 🐙 **[GitHub](https://github.com/maxfield-allison/dnsweaver)** · 🔖 **[Releases](https://github.com/maxfield-allison/dnsweaver/releases)**
 

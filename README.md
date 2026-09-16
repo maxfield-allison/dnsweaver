@@ -12,7 +12,7 @@
 
 **Automatic DNS records for containers, VMs & clusters.**
 
-dnsweaver reads hostnames from seven sources and writes records to eleven DNS providers. A container starts with a Traefik label or a Proxmox VM boots, and the record appears; when they go away, so does it. Internal and external records come from the same labels, so split-horizon costs nothing extra.
+dnsweaver reads hostnames from seven sources and writes records to twelve DNS providers. A container starts with a Traefik label or a Proxmox VM boots, and the record appears; when they go away, so does it. Internal and external records come from the same labels, so split-horizon costs nothing extra.
 
 📚 **[Full Documentation](https://maxfield-allison.github.io/dnsweaver/)**
 
@@ -68,6 +68,7 @@ Providers are where records get written. Run several at once to split internal a
 | [AdGuard Home](https://maxfield-allison.github.io/dnsweaver/providers/adguard/) | A, AAAA, CNAME | DNS rewrite management |
 | [OPNsense](https://maxfield-allison.github.io/dnsweaver/providers/opnsense/) | A, AAAA | Unbound or Dnsmasq host overrides via REST API |
 | [pfSense](https://maxfield-allison.github.io/dnsweaver/providers/pfsense/) | A, AAAA | Unbound or Dnsmasq host overrides via REST API (community pfSense-pkg-RESTAPI) |
+| [UniFi Network](https://maxfield-allison.github.io/dnsweaver/providers/unifi/) | A, AAAA, CNAME, SRV, TXT | DNS policies via the official Integration API (Network 10.1+) |
 | [dnsmasq](https://maxfield-allison.github.io/dnsweaver/providers/dnsmasq/) | A, CNAME | File-based configuration |
 | [Webhook](https://maxfield-allison.github.io/dnsweaver/providers/webhook/) | Any | Custom integrations |
 
@@ -131,7 +132,7 @@ flowchart LR
         W["Watch<br/>events"] --> M["Match hostname<br/>to domain patterns"] --> R["Reconcile<br/>desired vs. live"]
     end
 
-    subgraph providers["11 providers · split-horizon"]
+    subgraph providers["12 providers · split-horizon"]
         direction TB
         INT["Internal instance<br/>e.g. technitium · pi-hole · adguard"]
         EXT["External instance<br/>e.g. cloudflare · ovhcloud"]

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **UniFi Network provider.** A new `unifi` provider type manages DNS records
+  on UniFi OS consoles (Dream Machine, Cloud Gateway, Cloud Key) and UniFi OS
+  Server through the official Integration API, using only an API key. Supports
+  A, AAAA, CNAME, TXT and SRV records with standard TXT ownership tracking and
+  native in-place updates. Only user-defined DNS policies are managed, so
+  console-derived entries are never touched. Requires UniFi Network 10.1 or
+  later; the legacy standalone Network Application does not expose the
+  Integration API and is not supported. See
+  [docs/providers/unifi.md](docs/providers/unifi.md).
 - **Provider-scoped record sets preserve every distinct A and AAAA member.**
   Claims are deduplicated only after provider routing and target resolution, so
   repeated claims for one target create one record while distinct Proxmox,

@@ -132,7 +132,7 @@ Replace `{NAME}` with your instance name. For example, instance `internal-dns` u
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `DNSWEAVER_{NAME}_TYPE` | Yes | Provider type: `technitium`, `cloudflare`, `ovh`, `rfc2136`, `powerdns`, `pihole`, `dnsmasq`, `adguard`, `webhook` |
+| `DNSWEAVER_{NAME}_TYPE` | Yes | Provider type: `technitium`, `cloudflare`, `ovh`, `rfc2136`, `powerdns`, `pihole`, `dnsmasq`, `adguard`, `opnsense`, `pfsense`, `unifi`, `webhook` |
 | `DNSWEAVER_{NAME}_RECORD_TYPE` | No | Record type: `A`, `AAAA`, `CNAME` (default: `A`) |
 | `DNSWEAVER_{NAME}_TARGET` | Cond. | Record target (IPv4, IPv6, or hostname). Required unless `TARGET_MODE` is set, in which case it is an optional fallback. |
 | `DNSWEAVER_{NAME}_TARGET_MODE` | No | Resolve the target dynamically instead of using a literal `TARGET`. One of `public` or `interface:<name>`. See [Dynamic Targets](#dynamic-targets). |
@@ -340,6 +340,7 @@ See the individual provider documentation for complete settings:
 - [PowerDNS](../providers/powerdns.md)
 - [Pi-hole](../providers/pihole.md)
 - [AdGuard Home](../providers/adguard.md)
+- [UniFi Network](../providers/unifi.md)
 - [dnsmasq](../providers/dnsmasq.md)
 - [Webhook](../providers/webhook.md)
 

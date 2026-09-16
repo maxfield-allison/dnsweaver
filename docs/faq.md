@@ -9,10 +9,10 @@ description: Frequently asked questions about dnsweaver — how it compares to e
 
 ### What's the difference between dnsweaver and external-dns?
 
-external-dns is primarily designed for Kubernetes and cloud DNS providers. dnsweaver reads from seven sources and writes to eleven providers:
+external-dns is primarily designed for Kubernetes and cloud DNS providers. dnsweaver reads from seven sources and writes to twelve providers:
 
 - Seven sources as peers: Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, and Incus
-- Self-hosted DNS provider focus (Technitium, Pi-hole, AdGuard Home, dnsmasq, OPNsense, pfSense)
+- Self-hosted DNS provider focus (Technitium, Pi-hole, AdGuard Home, dnsmasq, OPNsense, pfSense, UniFi Network)
 - Multi-provider for split-horizon DNS
 - Run any combination of sources simultaneously, set with `DNSWEAVER_SOURCES`
 - Simpler configuration via environment variables or YAML

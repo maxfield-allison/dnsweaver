@@ -968,3 +968,39 @@ func TestLoadInstanceConfig_AdGuardPasswordFile(t *testing.T) {
 		t.Errorf("ProviderConfig[PASSWORD] = %q, want %q (from _FILE)", got, "file-password")
 	}
 }
+
+// TestLoadInstanceConfig_UniFiFields verifies that the SITE env var is
+// propagated into ProviderConfig for the UniFi provider, alongside the shared
+// API_KEY secret loaded from a _FILE.
+func TestLoadInstanceConfig_UniFiFields(t *testing.T) {
+	const instanceName = "unifi"
+	clearInstanceEnv(t, instanceName)
+	defer clearInstanceEnv(t, instanceName)
+
+	tmpDir := t.TempDir()
+	keyFile := filepath.Join(tmpDir, "api_key")
+	if err := os.WriteFile(keyFile, []byte("file-api-key\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	prefix := envPrefix(instanceName)
+	os.Setenv(prefix+"TYPE", "unifi")
+	os.Setenv(prefix+"URL", "https://192.168.1.1")
+	os.Setenv(prefix+"API_KEY_FILE", keyFile)
+	os.Setenv(prefix+"SITE", "branch")
+	os.Setenv(prefix+"TARGET", "192.0.2.100")
+	os.Setenv(prefix+"DOMAINS", "*.example.com")
+	defer os.Unsetenv(prefix + "API_KEY_FILE")
+	defer os.Unsetenv(prefix + "SITE")
+
+	cfg, errs := loadInstanceConfig(instanceName, 300)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if got := cfg.ProviderConfig["API_KEY"]; got != "file-api-key" {
+		t.Errorf("ProviderConfig[API_KEY] = %q, want %q (from _FILE)", got, "file-api-key")
+	}
+	if got := cfg.ProviderConfig["SITE"]; got != "branch" {
+		t.Errorf("ProviderConfig[SITE] = %q, want %q", got, "branch")
+	}
+}

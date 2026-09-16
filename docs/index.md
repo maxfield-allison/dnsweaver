@@ -1,16 +1,16 @@
 ---
 title: Automatic DNS records for containers, VMs & clusters
-description: dnsweaver reads hostnames from seven sources (Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, Incus) and writes records to eleven DNS providers, with split-horizon out of the box.
+description: dnsweaver reads hostnames from seven sources (Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, Incus) and writes records to twelve DNS providers, with split-horizon out of the box.
 ---
 
 # dnsweaver
 
 **Automatic DNS records for containers, VMs & clusters.**
 
-dnsweaver reads hostnames from seven sources and writes records to eleven DNS providers. A container starts with a Traefik label or a Proxmox VM boots, and the record appears; when they go away, so does it. Internal and external records come from the same labels, so **split-horizon** costs nothing extra.
+dnsweaver reads hostnames from seven sources and writes records to twelve DNS providers. A container starts with a Traefik label or a Proxmox VM boots, and the record appears; when they go away, so does it. Internal and external records come from the same labels, so **split-horizon** costs nothing extra.
 
-![Seven sources feed dnsweaver, which writes to eleven DNS providers](assets/brand/flow-light.svg#only-light){ .dnsw-flow }
-![Seven sources feed dnsweaver, which writes to eleven DNS providers](assets/brand/flow-dark.svg#only-dark){ .dnsw-flow }
+![Seven sources feed dnsweaver, which writes to twelve DNS providers](assets/brand/flow-light.svg#only-light){ .dnsw-flow }
+![Seven sources feed dnsweaver, which writes to twelve DNS providers](assets/brand/flow-dark.svg#only-dark){ .dnsw-flow }
 
 ---
 
@@ -22,7 +22,7 @@ dnsweaver reads hostnames from seven sources and writes records to eleven DNS pr
 
     ---
 
-    Route different domains to different DNS providers. Eleven providers: Technitium, Cloudflare, OVHcloud, AdGuard Home, RFC 2136, PowerDNS, OPNsense, pfSense, Pi-hole, dnsmasq, and webhook.
+    Route different domains to different DNS providers. Twelve providers: Technitium, Cloudflare, OVHcloud, AdGuard Home, RFC 2136, PowerDNS, OPNsense, pfSense, UniFi Network, Pi-hole, dnsmasq, and webhook.
 
     [:octicons-arrow-right-24: Providers](providers/index.md)
 
@@ -198,7 +198,7 @@ flowchart LR
     ```
 
     1. Comma-separated list of provider instance names
-    2. Provider type: `technitium`, `cloudflare`, `pihole`, `adguard`, `dnsmasq`, `rfc2136`, or `webhook`
+    2. Provider type: `technitium`, `cloudflare`, `pihole`, `adguard`, `unifi`, `dnsmasq`, `rfc2136`, or `webhook`
     3. Target IP for A records (or CNAME target hostname)
     4. Domain patterns to match—wildcards supported
 
@@ -240,6 +240,7 @@ flowchart LR
 | [PowerDNS](providers/powerdns.md) | A, AAAA, CNAME, SRV, TXT | Native Authoritative HTTP API |
 | [Pi-hole](providers/pihole.md) | A, CNAME | API or file mode |
 | [AdGuard Home](providers/adguard.md) | A, AAAA, CNAME | DNS rewrite management |
+| [UniFi Network](providers/unifi.md) | A, AAAA, CNAME, SRV, TXT | Official Integration API (Network 10.1+) |
 | [dnsmasq](providers/dnsmasq.md) | A, CNAME | File-based configuration |
 | [Webhook](providers/webhook.md) | A, AAAA, CNAME, TXT | Custom integrations |
 

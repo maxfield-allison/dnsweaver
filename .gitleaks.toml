@@ -1,0 +1,25 @@
+title = "dnsweaver secret detection"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Literal Cloudflare documentation placeholder"
+condition = "AND"
+paths = ['''docs/providers/cloudflare\.md$''']
+regexTarget = "line"
+regexes = ['''^\s*-H "Authorization: Bearer YOUR_TOKEN"\s*$''']
+
+[[allowlists]]
+description = "Literal PowerDNS documentation placeholder"
+condition = "AND"
+paths = ['''docs/providers/powerdns\.md$''']
+regexTarget = "line"
+regexes = ['''^curl -H 'X-API-Key: changeme-to-a-strong-key' \\\s*$''']
+
+[[allowlists]]
+description = "Non-secret configuration interval example"
+condition = "AND"
+paths = ['''internal/config/global\.go$''']
+regexTarget = "line"
+regexes = ['''^\s*errs = append\(errs, configErrFull\("DNSWEAVER_RECONCILE_INTERVAL", "must be at least 1s", "Shorter intervals cause excessive API calls", "DNSWEAVER_RECONCILE_INTERVAL=60s"\)\)\s*$''']

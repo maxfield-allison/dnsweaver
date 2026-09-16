@@ -317,6 +317,11 @@ type Hostname struct {
 	// dnsweaver to decide which provider instance claims the hostname.
 	// nil means no metadata.
 	Metadata map[string]string
+
+	// Instances is the workload-wide provider selection. A nil slice leaves
+	// routing unchanged. A record-specific Provider takes precedence, but both
+	// forms remain subject to the operator's domain and metadata scope.
+	Instances []string
 }
 
 // HasRecordHints returns true if this hostname has any record hints set.

@@ -1,4 +1,9 @@
 # Build artifacts
+.git
+.cache
+.artifacts
+.venv
+/release
 /dnsweaver
 *.exe
 
@@ -36,3 +41,8 @@ vendor/
 # OS files
 .DS_Store
 Thumbs.db
+
+.docker-auth
+site
+public
+**/__pycache__

@@ -30,7 +30,7 @@ If you manage a homelab with Traefik, Proxmox, and a self-hosted resolver and yo
 
 ## Features
 
-- 🔀 **Multi-Provider Support** — Route different domains to different DNS providers
+- 🔀 **Multi-Provider Support** — Route domains to matching providers, with optional [workload instance selection](docs/configuration/multi-instance.md#workload-provider-selection) in the unreleased source
 - 🌐 **Split-Horizon DNS** — Internal and external records from the same container labels
 - 🧩 **Seven Sources** — Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, and Incus, in one binary. See [Supported Sources](#supported-sources)
 - 🏗️ **Separate ownership namespaces** — Use distinct instance IDs and non-conflicting record scopes for multiple dnsweaver processes; this does not provide leader election or active-active HA

@@ -64,6 +64,8 @@ docker:
 # Health and metrics server
 server:
   port: 8080  # Port for /health, /ready, and /metrics endpoints
+  address: 127.0.0.1  # Loopback-only by default
+  allow_network: false # Required for non-loopback; also restrict access at the network layer
 
 # Hostname sources
 # Order matters: first source with matching hostname wins

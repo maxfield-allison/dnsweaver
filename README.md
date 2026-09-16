@@ -24,7 +24,7 @@ Think of dnsweaver as **external-dns for the homelab**. Where most tools solve a
 - **It speaks self-hosted DNS.** First-class [Technitium](https://maxfield-allison.github.io/dnsweaver/providers/technitium/), [Pi-hole](https://maxfield-allison.github.io/dnsweaver/providers/pihole/), [AdGuard Home](https://maxfield-allison.github.io/dnsweaver/providers/adguard/), and [dnsmasq](https://maxfield-allison.github.io/dnsweaver/providers/dnsmasq/) support. Not an afterthought, and not alpha.
 - **It's multi-source.** Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, and Incus in one binary. Run one or all of them at once. `external-dns` is Kubernetes-only.
 - **It does split-horizon out of the box.** Internal and external records from the *same* labels. Route private hostnames to Technitium and public ones to Cloudflare simultaneously.
-- **It's a single static Go binary.** ~15 MB, multi-arch (amd64/arm64), zero runtime dependencies. No Node.js, no sidecars.
+- **It's a single static Go binary.** Multi-arch (amd64/arm64), with no separate application runtime or sidecar required.
 
 If you manage a homelab with Traefik, Proxmox, and a self-hosted resolver and you're still creating DNS records by hand, dnsweaver is built for you.
 
@@ -33,7 +33,7 @@ If you manage a homelab with Traefik, Proxmox, and a self-hosted resolver and yo
 - 🔀 **Multi-Provider Support** — Route different domains to different DNS providers
 - 🌐 **Split-Horizon DNS** — Internal and external records from the same container labels
 - 🧩 **Seven Sources** — Traefik, Caddy, nginx-proxy, native labels, Kubernetes, Proxmox VE, and Incus, in one binary. See [Supported Sources](#supported-sources)
-- 🏗️ **Multi-Instance Safe** — Run multiple dnsweaver instances on the same DNS zone without conflicts
+- 🏗️ **Separate ownership namespaces** — Use distinct instance IDs and non-conflicting record scopes for multiple dnsweaver processes; this does not provide leader election or active-active HA
 - 🔒 **Socket Proxy Compatible** — Connect via TCP to a Docker socket proxy for improved security
 - 🛡️ **Hardened TLS** — Unified per-instance TLS controls (custom CA, mTLS client certs, SNI override, configurable min version; TLS 1.2 floor by default) for every HTTP-based provider and the Proxmox and Incus sources
 - 📊 **Observable** — Prometheus metrics, health endpoints, structured logging
@@ -62,7 +62,7 @@ Providers are where records get written. Run several at once to split internal a
 | [Technitium](https://maxfield-allison.github.io/dnsweaver/providers/technitium/) | A, AAAA, CNAME, SRV, TXT | Full-featured self-hosted DNS |
 | [Cloudflare](https://maxfield-allison.github.io/dnsweaver/providers/cloudflare/) | A, AAAA, CNAME, SRV, TXT | With optional proxy support |
 | [OVHcloud](https://maxfield-allison.github.io/dnsweaver/providers/ovh/) | A, AAAA, CNAME, SRV, TXT | Public DNS for OVH-hosted domains |
-| [RFC 2136](https://maxfield-allison.github.io/dnsweaver/providers/rfc2136/) | A, AAAA, CNAME, SRV, TXT | BIND, Windows DNS, PowerDNS, Knot |
+| [RFC 2136](https://maxfield-allison.github.io/dnsweaver/providers/rfc2136/) | A, AAAA, CNAME, SRV, TXT | HMAC-TSIG-compatible BIND, PowerDNS, Knot, Technitium; Windows secure updates are not supported |
 | [PowerDNS](https://maxfield-allison.github.io/dnsweaver/providers/powerdns/) | A, AAAA, CNAME, SRV, TXT | Native Authoritative HTTP API |
 | [Pi-hole](https://maxfield-allison.github.io/dnsweaver/providers/pihole/) | A, CNAME | API or file mode |
 | [AdGuard Home](https://maxfield-allison.github.io/dnsweaver/providers/adguard/) | A, AAAA, CNAME | DNS rewrite management |
@@ -72,6 +72,12 @@ Providers are where records get written. Run several at once to split internal a
 | [Webhook](https://maxfield-allison.github.io/dnsweaver/providers/webhook/) | Any | Custom integrations |
 
 ## Quick Start
+
+### Before upgrading
+
+The changes under [Unreleased](CHANGELOG.md#unreleased) make health, readiness and metrics listen on loopback by default. Remote scrapers and probes need an explicit network listener and access restrictions. See the [management-listener migration guide](docs/observability.md#migrating-from-earlier-releases). The bundled container and Kubernetes probes use local checks.
+
+The same changes reject invalid TLS settings and unreadable credential files instead of falling back. Remote dnsmasq updates require an SFTP server with the OpenSSH POSIX rename extension; see the [provider requirements](docs/providers/dnsmasq.md#requirements). Check the release notes for your image tag before applying these settings.
 
 ### Installation
 

@@ -155,10 +155,10 @@ func (t *sshTransport) ReadFile(path string) ([]byte, error) {
 	return data, err
 }
 
-// WriteFile writes a file on the remote host over SFTP.
-func (t *sshTransport) WriteFile(path string, data []byte, perm os.FileMode) error {
+// WriteFileAtomic replaces a managed file on the remote host over SFTP.
+func (t *sshTransport) WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	return t.do(context.Background(), func() error {
-		return t.sftp.WriteFile(path, data, perm)
+		return t.sftp.WriteFileAtomic(path, data, perm)
 	})
 }
 

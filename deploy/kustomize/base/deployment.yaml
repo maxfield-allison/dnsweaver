@@ -54,16 +54,18 @@ spec:
               cpu: 100m
               memory: 128Mi
           livenessProbe:
-            httpGet:
-              path: /health
-              port: http
+            exec:
+              command:
+                - /usr/local/bin/dnsweaver
+                - --healthcheck
             initialDelaySeconds: 10
             periodSeconds: 30
             timeoutSeconds: 5
           readinessProbe:
-            httpGet:
-              path: /ready
-              port: http
+            exec:
+              command:
+                - /usr/local/bin/dnsweaver
+                - --readycheck
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 5

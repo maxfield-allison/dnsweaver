@@ -110,6 +110,14 @@ func (r *Reconciler) providersForClaim(claim *source.Hostname) ([]*provider.Prov
 				Error:    fmt.Sprintf("explicit provider %q not found", name),
 			}
 		}
+		if !instance.MatchesWithMetadata(claim.Name, claim.Metadata) {
+			return nil, &Action{
+				Type:     ActionSkip,
+				Status:   StatusSkipped,
+				Hostname: claim.Name,
+				Error:    fmt.Sprintf("explicit provider %q is outside its configured scope", name),
+			}
+		}
 		return []*provider.ProviderInstance{instance}, nil
 	}
 

@@ -11,6 +11,8 @@ dnsmasq is a lightweight DNS/DHCP server commonly used in routers and containers
 
 - Write access to dnsmasq's configuration directory
 - Ability to signal dnsmasq to reload (or dnsmasq configured to watch files)
+- A regular managed file, not a symlink. Writes create a temporary file in the same directory and replace the managed file atomically, so mount the directory rather than a single file and allow file creation and rename there.
+- For SSH mode, an SFTP server with the OpenSSH `posix-rename@openssh.com` extension. Updates fail when this extension is unavailable; dnsweaver does not fall back to a non-atomic remote overwrite.
 
 ## Basic Configuration
 
@@ -149,7 +151,7 @@ dnsweaver can manage dnsmasq instances running on remote hosts via SSH. When SSH
 |----------|-----------|-------|
 | dnsmasq in a sidecar/shared Docker volume | No | Use volume mounts |
 | dnsmasq on a remote server or VM | **Yes** | SSH manages files remotely |
-| dnsmasq on a router (OpenWrt, DD-WRT) | **Yes** | SSH is the standard access method |
+| dnsmasq on a router (OpenWrt, DD-WRT) | **If supported** | Requires SFTP with the POSIX rename extension; SSH shell access alone is insufficient |
 | dnsmasq in a different Docker host | **Yes** | No shared filesystem |
 
 ### Basic SSH Configuration
@@ -178,7 +180,7 @@ environment:
 
 ### Authentication Methods
 
-SSH supports three authentication methods, in order of preference:
+SSH supports two authentication methods, in order of preference:
 
 #### 1. Key File (Recommended)
 
@@ -195,7 +197,7 @@ Or use Docker secrets:
 
 ```yaml
 environment:
-  - DNSWEAVER_ROUTER_SSH_KEY_FILE_FILE=/run/secrets/router_ssh_key
+  - DNSWEAVER_ROUTER_SSH_KEY_FILE=/run/secrets/router_ssh_key
 secrets:
   - router_ssh_key
 ```
@@ -230,11 +232,11 @@ Populate the file with `ssh-keyscan` (verify the fingerprint out-of-band before 
 ssh-keyscan -t ed25519 192.168.1.1 >> ./ssh_keys/known_hosts
 ```
 
-The path may also be supplied through a Docker secret with the `_FILE` suffix:
+You can mount the known-hosts file as a Docker secret and point `SSH_KNOWN_HOSTS_FILE` at it:
 
 ```yaml
 environment:
-  - DNSWEAVER_ROUTER_SSH_KNOWN_HOSTS_FILE_FILE=/run/secrets/router_known_hosts
+  - DNSWEAVER_ROUTER_SSH_KNOWN_HOSTS_FILE=/run/secrets/router_known_hosts
 secrets:
   - router_known_hosts
 ```
@@ -263,7 +265,7 @@ services:
       - DNSWEAVER_ROUTER_RELOAD_COMMAND=killall -HUP dnsmasq
       - DNSWEAVER_ROUTER_SSH_HOST=192.168.1.1
       - DNSWEAVER_ROUTER_SSH_USER=root
-      - DNSWEAVER_ROUTER_SSH_KEY_FILE_FILE=/run/secrets/router_ssh_key
+      - DNSWEAVER_ROUTER_SSH_KEY_FILE=/run/secrets/router_ssh_key
       - DNSWEAVER_ROUTER_SSH_KNOWN_HOSTS_FILE=/ssh/known_hosts
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -303,9 +305,9 @@ volumes:
 
 ## Router Integration
 
-For routers running dnsmasq (OpenWrt, DD-WRT, etc.), SSH mode is the recommended approach:
+For routers running dnsmasq (OpenWrt, DD-WRT, etc.), SSH mode is an option when the router's SFTP server meets the [requirements](#requirements). Check its SFTP capabilities before relying on this deployment path.
 
-### SSH Mode (Recommended)
+### SSH Mode
 
 Use SSH to manage the router's dnsmasq configuration directly:
 

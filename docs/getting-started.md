@@ -264,13 +264,12 @@ its own entries — DNS you manage by hand is never touched.
 
     2. **Check health endpoint:**
        ```bash
-       curl http://localhost:8080/health
+       docker exec dnsweaver /usr/local/bin/dnsweaver --healthcheck
        ```
 
-    3. **View metrics:**
-       ```bash
-       curl http://localhost:8080/metrics
-       ```
+    3. **View metrics:** Metrics are local to the container by default. See
+       [Network access](observability.md#network-access) before publishing the
+       management port for a restricted monitoring client.
 
     4. **Start a container with Traefik labels:**
        ```bash
@@ -295,8 +294,8 @@ its own entries — DNS you manage by hand is never touched.
 
     3. **Check health endpoint:**
        ```bash
-       kubectl port-forward -n dnsweaver svc/dnsweaver 8080:8080
-       curl http://localhost:8080/health
+       kubectl exec -n dnsweaver deploy/dnsweaver -- \
+         /usr/local/bin/dnsweaver --healthcheck
        ```
 
     4. **Create a test Ingress:**

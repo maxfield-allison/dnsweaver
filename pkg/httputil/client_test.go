@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -131,6 +132,33 @@ func TestNewClient_TLSSkipVerifyFalse(t *testing.T) {
 	}
 }
 
+func TestNewClient_InvalidTLSConfigurationFailsClosed(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := NewClient(&ClientConfig{TLS: &TLSConfig{
+		CAFile: filepath.Join(t.TempDir(), "missing-ca.pem"),
+	}})
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.Do(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "invalid TLS configuration") {
+		t.Fatalf("Do() error = %v, want TLS configuration error", err)
+	}
+	if requests != 0 {
+		t.Fatalf("server received %d requests under invalid TLS policy, want 0", requests)
+	}
+}
+
 func TestNewClient_AllOptions(t *testing.T) {
 	cfg := &ClientConfig{
 		Timeout:       45 * time.Second,
@@ -206,6 +234,74 @@ func TestNewClient_UserAgentAppliedToRequests(t *testing.T) {
 
 	if receivedUserAgent != "test-dnsweaver/1.2.3" {
 		t.Errorf("expected User-Agent %q, got %q", "test-dnsweaver/1.2.3", receivedUserAgent)
+	}
+}
+
+func TestNewClient_RedirectPolicy(t *testing.T) {
+	t.Run("same-origin redirect preserves legitimate credential header", func(t *testing.T) {
+		const credential = "local-fixture-value"
+		var got string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/start" {
+				http.Redirect(w, r, "/finish", http.StatusFound)
+				return
+			}
+			got = r.Header.Get("X-API-Key")
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		defer server.Close()
+
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/start", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("X-API-Key", credential)
+		resp, err := NewClient(nil).Do(req)
+		if err != nil {
+			t.Fatalf("same-origin redirect failed: %v", err)
+		}
+		defer resp.Body.Close()
+		if got != credential {
+			t.Fatalf("redirected credential = %q, want fixture value", got)
+		}
+	})
+
+	for _, header := range []string{
+		"Authorization",
+		"X-API-Key",
+		"X-FTL-SID",
+		"X-Ovh-Application",
+		"X-Ovh-Consumer",
+		"X-Webhook-Token",
+	} {
+		t.Run("cross-origin denies "+header, func(t *testing.T) {
+			var sinkRequests int
+			sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				sinkRequests++
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer sink.Close()
+			source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, sink.URL+"/capture", http.StatusFound)
+			}))
+			defer source.Close()
+
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, source.URL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set(header, "local-fixture-value")
+			resp, err := NewClient(nil).Do(req)
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			if err == nil || !strings.Contains(err.Error(), "refusing cross-origin redirect") {
+				t.Fatalf("Do() error = %v, want cross-origin refusal", err)
+			}
+			if sinkRequests != 0 {
+				t.Fatalf("credential sink received %d requests, want 0", sinkRequests)
+			}
+		})
 	}
 }
 

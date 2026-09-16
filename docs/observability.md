@@ -2,18 +2,17 @@
 
 dnsweaver provides built-in observability features for monitoring, alerting, and debugging.
 
-## Health Endpoints
+## Management Listener
 
-dnsweaver exposes HTTP endpoints on port 8080 (configurable via `DNSWEAVER_HEALTH_PORT`):
+dnsweaver serves health, readiness, and metrics on `127.0.0.1:8080` by default. The port is configurable with `DNSWEAVER_HEALTH_PORT`; the listener address is configurable with `DNSWEAVER_HEALTH_ADDRESS` or `server.address` in YAML.
 
 | Endpoint | Description |
 |----------|-------------|
-| `/health` | Overall health status |
-| `/ready` | Readiness probe (for load balancers and Kubernetes) |
+| `/health` | Process liveness status |
+| `/ready` | Cached aggregate readiness status |
 | `/metrics` | Prometheus metrics |
 
-!!! tip "Kubernetes probes"
-    The `/health` and `/ready` endpoints map directly to Kubernetes `livenessProbe` and `readinessProbe`. The Helm chart configures these automatically.
+The readiness response is redacted and does not identify providers or include upstream error text. Requests return the last asynchronously refreshed result; they do not trigger provider calls. The bundled container, Helm, and Kustomize probes use `--healthcheck` and `--readycheck` inside the container, so they work with the loopback-only default.
 
 ### Health Check
 
@@ -24,12 +23,7 @@ curl http://localhost:8080/health
 Response:
 ```json
 {
-  "status": "healthy",
-  "providers": {
-    "internal": "ok",
-    "external": "ok"
-  },
-  "docker": "connected"
+  "status": "healthy"
 }
 ```
 
@@ -40,6 +34,23 @@ curl http://localhost:8080/ready
 ```
 
 Returns `200 OK` when ready to process events, `503` otherwise.
+
+### Network access
+
+Remote scraping or an HTTP probe from outside the container requires an explicit non-loopback listener. For example:
+
+```yaml
+server:
+  port: 8080
+  address: 0.0.0.0
+  allow_network: true
+```
+
+The equivalent environment settings are `DNSWEAVER_HEALTH_ADDRESS=0.0.0.0` and `DNSWEAVER_HEALTH_ALLOW_NETWORK=true`. The opt-in is **not authentication**. Limit access to the intended monitoring or probe clients with a Kubernetes NetworkPolicy, host firewall, security group, or an equivalently restrictive control. dnsweaver rejects a non-loopback address unless the opt-in is true.
+
+### Migrating from earlier releases
+
+Earlier releases listened on every interface. After upgrading, local container health checks continue to work, but published health ports, ServiceMonitor scrapes, load-balancer probes, and host-side `curl` commands no longer reach the listener by default. Prefer the bundled local exec probes. If remote metrics or health access is required, configure the explicit network listener and its network restriction together before upgrading.
 
 ## Prometheus Metrics
 
@@ -274,7 +285,18 @@ healthcheck:
 
 ### ServiceMonitor (Prometheus Operator)
 
-If you use the Prometheus Operator, create a ServiceMonitor to scrape dnsweaver metrics:
+If you use the Prometheus Operator, first enable a network listener and restrict it to the monitoring clients. For example, Helm-managed configuration uses:
+
+```yaml
+config:
+  server:
+    address: 0.0.0.0
+    allowNetwork: true
+serviceMonitor:
+  enabled: true
+```
+
+The chart rejects `serviceMonitor.enabled=true` with its default loopback configuration. When `existingConfigMap` is used, the chart cannot validate its contents; that ConfigMap must set `server.address` and `server.allow_network` explicitly. A ServiceMonitor can then scrape dnsweaver metrics:
 
 ```yaml
 apiVersion: monitoring.coreos.com/v1
@@ -294,7 +316,28 @@ spec:
       interval: 30s
 ```
 
-The Helm chart can create this automatically with `serviceMonitor.enabled=true`.
+The Helm chart can create this automatically with `serviceMonitor.enabled=true`. Also apply a policy that admits only the monitoring namespace (adjust labels and namespace for your deployment):
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dnsweaver-management
+  namespace: dnsweaver
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: dnsweaver
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+```
 
 ### Pod Probes
 
@@ -302,15 +345,13 @@ The Helm chart configures these by default:
 
 ```yaml
 livenessProbe:
-  httpGet:
-    path: /health
-    port: http
+  exec:
+    command: ["/usr/local/bin/dnsweaver", "--healthcheck"]
   initialDelaySeconds: 10
   periodSeconds: 30
 readinessProbe:
-  httpGet:
-    path: /ready
-    port: http
+  exec:
+    command: ["/usr/local/bin/dnsweaver", "--readycheck"]
   initialDelaySeconds: 5
   periodSeconds: 10
 ```

@@ -113,7 +113,7 @@ environment:
 
 ## Multi-Instance Coordination
 
-When running **multiple copies of dnsweaver** (not multiple instances within one copy), set `DNSWEAVER_INSTANCE_ID` to prevent conflicts:
+When running **multiple copies of dnsweaver** (not multiple instances within one copy), use distinct `DNSWEAVER_INSTANCE_ID` values and non-conflicting record scopes. This separates ownership namespaces; it does not provide a distributed lock, leader election or active-active coordination:
 
 ```yaml
 # dnsweaver copy 1 (manages internal DNS)

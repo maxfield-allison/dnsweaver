@@ -4,50 +4,80 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-// ResolveHealthPort returns the port used by the health and metrics server.
-// It follows the same precedence as Load: environment, config file, defaults.
-// Only the server port is resolved so container health checks do not need to
-// read provider credentials or validate unrelated configuration on every run.
-func ResolveHealthPort(configPath string) (int, error) {
+// ResolveHealthEndpoint returns the address and port used by the health and
+// metrics server. It follows the same precedence as Load: environment, config
+// file, defaults. Only server settings are resolved so container health checks
+// do not need to read provider credentials or validate unrelated configuration.
+func ResolveHealthEndpoint(configPath string) (string, int, error) {
+	address := DefaultHealthAddress
+	allowNetwork := DefaultHealthAllowNetwork
 	port := DefaultHealthPort
 
 	if configPath != "" {
-		filePort, err := healthPortFromFile(configPath)
+		fileAddress, fileAllowNetwork, filePort, err := healthEndpointFromFile(configPath)
 		if err != nil {
-			return 0, err
+			return "", 0, err
 		}
+		address = fileAddress
+		allowNetwork = fileAllowNetwork
 		port = filePort
 	}
 
+	resolvedAddress, _, listenerErrs := healthListenerFromEnvironment(address, allowNetwork)
+	if len(listenerErrs) > 0 {
+		return "", 0, listenerErrs[0]
+	}
+	address = resolvedAddress
+
 	port, configErr := healthPortFromEnvironment(port)
 	if configErr != nil {
-		return 0, configErr
+		return "", 0, configErr
 	}
 
-	return port, nil
+	return address, port, nil
 }
 
-func healthPortFromFile(path string) (int, error) {
+// ResolveHealthPort returns the port used by the health and metrics server.
+// It remains available for callers that only need the configured port.
+func ResolveHealthPort(configPath string) (int, error) {
+	_, port, err := ResolveHealthEndpoint(configPath)
+	return port, err
+}
+
+func healthEndpointFromFile(path string) (string, bool, int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return 0, fmt.Errorf("reading config file: %w", err)
+		return "", false, 0, fmt.Errorf("reading config file: %w", err)
 	}
 
 	var fileCfg struct {
 		Server *FileServerConfig `yaml:"server,omitempty"`
 	}
 	if err := yaml.Unmarshal(data, &fileCfg); err != nil {
-		return 0, fmt.Errorf("parsing YAML config: %w", err)
+		return "", false, 0, fmt.Errorf("parsing YAML config: %w", err)
 	}
 
-	if fileCfg.Server != nil && fileCfg.Server.Port > 0 && fileCfg.Server.Port <= 65535 {
-		return fileCfg.Server.Port, nil
+	address := DefaultHealthAddress
+	allowNetwork := DefaultHealthAllowNetwork
+	port := DefaultHealthPort
+	if fileCfg.Server == nil {
+		return address, allowNetwork, port, nil
 	}
-	return DefaultHealthPort, nil
+	if fileCfg.Server.Address != "" {
+		address = strings.TrimSpace(InterpolateEnvVars(fileCfg.Server.Address))
+	}
+	if fileCfg.Server.AllowNetwork != nil {
+		allowNetwork = *fileCfg.Server.AllowNetwork
+	}
+	if fileCfg.Server != nil && fileCfg.Server.Port > 0 && fileCfg.Server.Port <= 65535 {
+		port = fileCfg.Server.Port
+	}
+	return address, allowNetwork, port, nil
 }
 
 func healthPortFromEnvironment(fallback int) (int, *ConfigError) {

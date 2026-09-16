@@ -24,7 +24,7 @@ import (
 //     (see canReplaceConflicting), else warn once and skip
 //
 // When hostname has RecordHints, they override provider defaults:
-// - RecordHints.Provider: route directly to named provider instead of domain matching
+// - RecordHints.Provider: select a named provider within its configured scope
 // - RecordHints.Type/Target/TTL/AdoptExisting: override provider instance defaults
 func (r *Reconciler) ensureRecord(ctx context.Context, hostname *source.Hostname, cache *recordCache) []Action {
 	var actions []Action
@@ -46,7 +46,20 @@ func (r *Reconciler) ensureRecord(ctx context.Context, hostname *source.Hostname
 			})
 			return actions
 		}
-		// Route to explicit provider, bypassing domain matching
+		if !inst.MatchesWithMetadata(hostname.Name, hostname.Metadata) {
+			r.logger.Warn("explicit provider is outside its configured scope",
+				slog.String("hostname", hostname.Name),
+				slog.String("target_provider", targetProvider),
+			)
+			return append(actions, Action{
+				Type:     ActionSkip,
+				Status:   StatusSkipped,
+				Hostname: hostname.Name,
+				Error:    fmt.Sprintf("explicit provider %q is outside its configured scope", targetProvider),
+			})
+		}
+		// A workload hint may narrow routing to one provider, but cannot
+		// widen that provider's operator-configured domain or metadata scope.
 		return append(actions, r.ensureRecordForProvider(ctx, hostname, inst, cache)...)
 	}
 
@@ -330,6 +343,20 @@ func (r *Reconciler) ensureRecordForProvider(ctx context.Context, hostname *sour
 		TTL:      ttl,
 		SRV:      srvData,
 		Metadata: metadata,
+	}
+
+	// TXT is multi-valued. Use the exact-member path even for single-host
+	// callers, with a complete snapshot for ownership and cache-miss parity.
+	if recordType == provider.RecordTypeTXT {
+		if cache == nil || !cache.providerAvailable(inst.Name()) {
+			cache = newRecordCache(ctx, r.providers, r.logger)
+		}
+		set := &desiredRecordSet{Instance: inst,
+			Key:     desiredSetKey{Identity: inst.Identity, Hostname: source.NormalizeHostname(hostname.Name), RecordType: recordType},
+			Members: []desiredRecordMember{{Record: desired, Claim: hostname, ClaimCount: 1}},
+		}
+		actions, _ := r.reconcileDesiredSetWithState(ctx, set, cache, nil, false)
+		return actions
 	}
 
 	// If source didn't provide metadata, check for recovered metadata from

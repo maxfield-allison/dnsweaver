@@ -25,6 +25,8 @@ func clearGlobalEnv(t *testing.T) {
 		"DNSWEAVER_RECONCILE_INTERVAL",
 		"DNSWEAVER_SHUTDOWN_TIMEOUT",
 		"DNSWEAVER_HEALTH_PORT",
+		"DNSWEAVER_HEALTH_ADDRESS",
+		"DNSWEAVER_HEALTH_ALLOW_NETWORK",
 		"DNSWEAVER_DOCKER_HOST",
 		"DNSWEAVER_DOCKER_MODE",
 		"DNSWEAVER_DOCKER_CONNECT_TIMEOUT",
@@ -93,6 +95,9 @@ func TestLoadGlobalConfig_Defaults(t *testing.T) {
 	if cfg.HealthPort != DefaultHealthPort {
 		t.Errorf("HealthPort = %d, want %d", cfg.HealthPort, DefaultHealthPort)
 	}
+	if cfg.HealthAddress != DefaultHealthAddress || cfg.HealthAllowNetwork != DefaultHealthAllowNetwork {
+		t.Errorf("health listener = %s allow=%v, want %s allow=%v", cfg.HealthAddress, cfg.HealthAllowNetwork, DefaultHealthAddress, DefaultHealthAllowNetwork)
+	}
 	if cfg.DockerHost != DefaultDockerHost {
 		t.Errorf("DockerHost = %q, want %q", cfg.DockerHost, DefaultDockerHost)
 	}
@@ -125,6 +130,8 @@ func TestLoadGlobalConfig_CustomValues(t *testing.T) {
 	os.Setenv("DNSWEAVER_DEFAULT_TTL", "600")
 	os.Setenv("DNSWEAVER_RECONCILE_INTERVAL", "5m")
 	os.Setenv("DNSWEAVER_HEALTH_PORT", "9090")
+	os.Setenv("DNSWEAVER_HEALTH_ADDRESS", "0.0.0.0")
+	os.Setenv("DNSWEAVER_HEALTH_ALLOW_NETWORK", "true")
 	os.Setenv("DNSWEAVER_DOCKER_HOST", "tcp://localhost:2375")
 	os.Setenv("DNSWEAVER_DOCKER_MODE", "swarm")
 	os.Setenv("DNSWEAVER_DOCKER_CONNECT_TIMEOUT", "45s")
@@ -178,6 +185,9 @@ func TestLoadGlobalConfig_CustomValues(t *testing.T) {
 	}
 	if cfg.HealthPort != 9090 {
 		t.Errorf("HealthPort = %d, want %d", cfg.HealthPort, 9090)
+	}
+	if cfg.HealthAddress != "0.0.0.0" || !cfg.HealthAllowNetwork {
+		t.Errorf("health listener = %s allow=%v, want 0.0.0.0 allow=true", cfg.HealthAddress, cfg.HealthAllowNetwork)
 	}
 	if cfg.DockerHost != "tcp://localhost:2375" {
 		t.Errorf("DockerHost = %q, want %q", cfg.DockerHost, "tcp://localhost:2375")

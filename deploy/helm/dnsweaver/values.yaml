@@ -78,17 +78,19 @@ resources:
     memory: 128Mi
 
 livenessProbe:
-  httpGet:
-    path: /health
-    port: http
+  exec:
+    command:
+      - /usr/local/bin/dnsweaver
+      - --healthcheck
   initialDelaySeconds: 10
   periodSeconds: 30
   timeoutSeconds: 5
 
 readinessProbe:
-  httpGet:
-    path: /ready
-    port: http
+  exec:
+    command:
+      - /usr/local/bin/dnsweaver
+      - --readycheck
   initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 5
@@ -172,6 +174,11 @@ config:
   server:
     # -- Health/metrics port
     port: 8080
+    # -- Management listener IP. Loopback keeps health, readiness, and metrics local to the pod.
+    address: "127.0.0.1"
+    # -- Explicitly permit a non-loopback listener. This does not add authentication;
+    # network access must also be restricted with a NetworkPolicy or firewall.
+    allowNetwork: false
 
   # -- Hostname sources (order matters: first match wins)
   sources:

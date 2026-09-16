@@ -93,7 +93,7 @@ For advanced use cases, use the named record format: `dnsweaver.records.<name>.<
 | `dnsweaver.records.<name>.hostname` | - | Hostname for this record (required) |
 | `dnsweaver.records.<name>.type` | `A` | Record type: `A`, `AAAA`, `CNAME`, `SRV`, `TXT` |
 | `dnsweaver.records.<name>.target` | - | Override target (IP or hostname) |
-| `dnsweaver.records.<name>.provider` | - | Target specific provider instance |
+| `dnsweaver.records.<name>.provider` | - | Select a provider instance that also matches the configured domain and workload filters |
 | `dnsweaver.records.<name>.ttl` | - | TTL for this specific record |
 | `dnsweaver.records.<name>.port` | - | Port (for SRV records) |
 | `dnsweaver.records.<name>.priority` | - | Priority (for SRV records) |
@@ -102,6 +102,8 @@ For advanced use cases, use the named record format: `dnsweaver.records.<name>.<
 | `dnsweaver.records.<name>.proxied` | provider default | Cloudflare proxy (orange-cloud) override for this record — `true` or `false`. Ignored by non-Cloudflare providers. |
 | `dnsweaver.records.<name>.adopt` | workload/provider/global policy | Override existing-record adoption for this named record. Enabling requires the matching provider's `ADOPT_EXISTING_ALLOW_OVERRIDES` gate. Disabling is always honored. |
 | `dnsweaver.records.<name>.meta.<key>` | - | Arbitrary provider metadata passed through to the target provider (advanced). |
+
+An explicit provider hint narrows routing; it does not bypass that provider's domain patterns, exclusions or workload-metadata filters. If an existing named record stops matching after an upgrade, correct the operator's provider scope rather than granting access through a workload label.
 
 ### Existing-record adoption
 

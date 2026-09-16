@@ -2,6 +2,8 @@ package provider
 
 import (
 	"crypto/tls"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/httputil"
@@ -32,9 +34,6 @@ func TestRegistry_PropagatesTLSConfig(t *testing.T) {
 			"URL":             "https://dns.example.com",
 			"TOKEN":           "abc",
 			"ZONE":            "example.com",
-			"TLS_CA_FILE":     "/etc/ssl/internal-ca.pem",
-			"TLS_CERT_FILE":   "/etc/ssl/client.crt",
-			"TLS_KEY_FILE":    "/etc/ssl/client.key",
 			"TLS_SERVER_NAME": "dns.internal",
 			"TLS_SKIP_VERIFY": "true",
 			"TLS_MIN_VERSION": "1.3",
@@ -49,15 +48,39 @@ func TestRegistry_PropagatesTLSConfig(t *testing.T) {
 	}
 	got := captured.HTTP.TLS
 	want := &httputil.TLSConfig{
-		CAFile:       "/etc/ssl/internal-ca.pem",
-		CertFile:     "/etc/ssl/client.crt",
-		KeyFile:      "/etc/ssl/client.key",
 		ServerName:   "dns.internal",
 		InsecureSkip: true,
 		MinVersion:   tls.VersionTLS13,
 	}
 	if *got != *want {
 		t.Errorf("TLS config mismatch\n got: %+v\nwant: %+v", *got, *want)
+	}
+}
+
+func TestRegistry_RejectsTLSConfigurationBeforeFactory(t *testing.T) {
+	r := NewRegistry(testLogger())
+	factoryCalled := false
+	r.RegisterFactory("capture", func(cfg FactoryConfig) (Provider, error) {
+		factoryCalled = true
+		return &mockProvider{name: cfg.Name, typeName: "capture"}, nil
+	})
+
+	err := r.CreateInstance(ProviderInstanceConfig{
+		Name:       "bad-tls",
+		TypeName:   "capture",
+		RecordType: RecordTypeA,
+		Target:     "10.0.0.1",
+		TTL:        300,
+		Domains:    []string{"*.example.com"},
+		ProviderConfig: map[string]string{
+			"TLS_CA_FILE": filepath.Join(t.TempDir(), "missing-ca.pem"),
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid TLS configuration") {
+		t.Fatalf("CreateInstance() error = %v, want TLS configuration error", err)
+	}
+	if factoryCalled {
+		t.Fatal("provider factory ran with invalid explicit TLS configuration")
 	}
 }
 

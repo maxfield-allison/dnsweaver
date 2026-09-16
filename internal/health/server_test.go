@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -63,6 +65,7 @@ func TestServer_handleReady_AllHealthy(t *testing.T) {
 	s.RegisterChecker("provider:test2", func(ctx context.Context) error {
 		return nil
 	})
+	s.refreshReadiness(t.Context())
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
@@ -82,14 +85,8 @@ func TestServer_handleReady_AllHealthy(t *testing.T) {
 		t.Errorf("expected status 'ready', got %q", resp.Status)
 	}
 
-	if len(resp.Components) != 2 {
-		t.Errorf("expected 2 components, got %d", len(resp.Components))
-	}
-
-	for _, c := range resp.Components {
-		if !c.Healthy {
-			t.Errorf("expected component %q to be healthy", c.Name)
-		}
+	if len(resp.Components) != 0 {
+		t.Errorf("readiness response exposed components: %+v", resp.Components)
 	}
 }
 
@@ -102,6 +99,7 @@ func TestServer_handleReady_SomeUnhealthy(t *testing.T) {
 	s.RegisterChecker("provider:unhealthy", func(ctx context.Context) error {
 		return errors.New("connection refused")
 	})
+	s.refreshReadiness(t.Context())
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
@@ -121,23 +119,8 @@ func TestServer_handleReady_SomeUnhealthy(t *testing.T) {
 		t.Errorf("expected status 'not_ready', got %q", resp.Status)
 	}
 
-	// Check that one component is healthy and one is not
-	healthyCount := 0
-	unhealthyCount := 0
-	for _, c := range resp.Components {
-		if c.Healthy {
-			healthyCount++
-		} else {
-			unhealthyCount++
-			if c.Error != "connection refused" {
-				t.Errorf("expected error 'connection refused', got %q", c.Error)
-			}
-		}
-	}
-
-	if healthyCount != 1 || unhealthyCount != 1 {
-		t.Errorf("expected 1 healthy and 1 unhealthy, got %d healthy and %d unhealthy",
-			healthyCount, unhealthyCount)
+	if len(resp.Components) != 0 {
+		t.Errorf("readiness response exposed components or upstream errors: %+v", resp.Components)
 	}
 }
 
@@ -152,6 +135,7 @@ func TestServer_handleReady_Timeout(t *testing.T) {
 			return nil
 		}
 	})
+	s.refreshReadiness(t.Context())
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
@@ -193,6 +177,7 @@ func TestServer_handleReady_Degraded(t *testing.T) {
 	s.RegisterDegradedChecker("pending-providers", func(ctx context.Context) (bool, string) {
 		return true, "some providers are initializing"
 	})
+	s.refreshReadiness(t.Context())
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
@@ -213,12 +198,8 @@ func TestServer_handleReady_Degraded(t *testing.T) {
 		t.Errorf("expected status 'degraded', got %q", resp.Status)
 	}
 
-	if len(resp.Degraded) != 1 {
-		t.Fatalf("expected 1 degraded component, got %d", len(resp.Degraded))
-	}
-
-	if resp.Degraded[0].Message != "some providers are initializing" {
-		t.Errorf("expected degraded message, got %q", resp.Degraded[0].Message)
+	if len(resp.Degraded) != 0 {
+		t.Fatalf("readiness response exposed degraded details: %+v", resp.Degraded)
 	}
 }
 
@@ -229,6 +210,7 @@ func TestServer_handleReady_NoDegraded(t *testing.T) {
 	s.RegisterDegradedChecker("pending-providers", func(ctx context.Context) (bool, string) {
 		return false, "" // No pending providers
 	})
+	s.refreshReadiness(t.Context())
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
@@ -261,6 +243,7 @@ func TestServer_handleReady_DegradedWithUnhealthyChecker(t *testing.T) {
 	s.RegisterDegradedChecker("pending-providers", func(ctx context.Context) (bool, string) {
 		return true, "providers pending"
 	})
+	s.refreshReadiness(t.Context())
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
 	w := httptest.NewRecorder()
@@ -305,6 +288,7 @@ func TestServer_handleReady_ShuttingDown(t *testing.T) {
 	s.RegisterChecker("test", func(ctx context.Context) error {
 		return nil
 	})
+	s.refreshReadiness(t.Context())
 
 	// Before shutdown — should be ready
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
@@ -334,4 +318,156 @@ func TestServer_handleReady_ShuttingDown(t *testing.T) {
 	if resp.Status != "shutting_down" {
 		t.Errorf("status = %q, want %q", resp.Status, "shutting_down")
 	}
+}
+
+func TestServer_handleReady_DoesNotInvokeBackendChecker(t *testing.T) {
+	s := New(0)
+	calls := 0
+	s.RegisterChecker("provider:fixture", func(context.Context) error {
+		calls++
+		return nil
+	})
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
+	rr := httptest.NewRecorder()
+	s.handleReady(rr, req)
+	if calls != 0 {
+		t.Fatalf("HTTP readiness invoked backend checker %d times", calls)
+	}
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("uncached readiness status = %d, want 503", rr.Code)
+	}
+
+	s.refreshReadiness(t.Context())
+	rr = httptest.NewRecorder()
+	s.handleReady(rr, req)
+	if calls != 1 {
+		t.Fatalf("cached HTTP readiness changed checker count to %d, want 1", calls)
+	}
+	if rr.Code != http.StatusOK {
+		t.Fatalf("refreshed readiness status = %d, want 200", rr.Code)
+	}
+}
+
+func TestServer_refreshReadiness_DoesNotPublishStaleSnapshot(t *testing.T) {
+	s := New(0)
+	s.RegisterChecker("provider:first", func(context.Context) error {
+		s.RegisterChecker("provider:late", func(context.Context) error { return nil })
+		return nil
+	})
+
+	s.refreshReadiness(t.Context())
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/ready", nil)
+	rr := httptest.NewRecorder()
+	s.handleReady(rr, req)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("stale readiness status = %d, want 503 until late checker runs", rr.Code)
+	}
+}
+
+func TestServer_DefaultListenerIsLoopback(t *testing.T) {
+	s := New(0)
+	if err := s.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = s.Shutdown(ctx)
+	})
+
+	host, portString, err := net.SplitHostPort(s.listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+		t.Fatalf("default listener address = %q, want loopback", host)
+	}
+	port, err := strconv.Atoi(portString)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Probe(t.Context(), port); err != nil {
+		t.Fatalf("local health probe failed: %v", err)
+	}
+
+	if externalIP := localNonLoopbackIP(t); externalIP != nil {
+		dialer := net.Dialer{Timeout: 250 * time.Millisecond}
+		conn, err := dialer.DialContext(t.Context(), "tcp", net.JoinHostPort(externalIP.String(), portString))
+		if err == nil {
+			_ = conn.Close()
+			t.Fatalf("default loopback listener accepted non-loopback address %s", externalIP)
+		}
+	}
+}
+
+func TestServer_ExplicitNetworkListener(t *testing.T) {
+	externalIP := localNonLoopbackIP(t)
+	if externalIP == nil {
+		t.Skip("no non-loopback interface available")
+	}
+	s := New(0, WithAddress("0.0.0.0"))
+	if err := s.Start(); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = s.Shutdown(ctx)
+	})
+
+	host, port, err := net.SplitHostPort(s.listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ip := net.ParseIP(host); ip == nil || !ip.IsUnspecified() {
+		t.Fatalf("explicit network listener address = %q, want wildcard", host)
+	}
+
+	client := &http.Client{
+		Timeout:   time.Second,
+		Transport: &http.Transport{Proxy: nil},
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+net.JoinHostPort(externalIP.String(), port)+"/health", nil)
+	if err != nil {
+		t.Fatalf("create explicit network health request: %v", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("explicit network health request failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("explicit network health status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestServer_StartReturnsBindFailure(t *testing.T) {
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(t.Context(), "tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	defer listener.Close()
+
+	port := serverPort(t, listener.Addr())
+	s := New(port)
+	if err := s.Start(); err == nil {
+		t.Fatal("Start() error = nil, want occupied-port bind failure")
+	}
+}
+
+func localNonLoopbackIP(t *testing.T) net.IP {
+	t.Helper()
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatalf("InterfaceAddrs() error = %v", err)
+	}
+	for _, addr := range addrs {
+		ip, _, err := net.ParseCIDR(addr.String())
+		if err == nil && ip.IsGlobalUnicast() && !ip.IsLoopback() {
+			return ip
+		}
+	}
+	return nil
 }

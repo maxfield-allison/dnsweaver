@@ -116,6 +116,14 @@ records dnsweaver manages (its own records, or matching records allowed by the
 effective [adoption policy](../configuration/environment.md#existing-record-adoption)).
 Records it does not manage are left as found.
 
+After an update, dnsweaver reads the record returned by Cloudflare. If Cloudflare returns a different type, name, content, TTL, or proxy state, the accepted values are logged with a warning instead of reporting only the values that were requested.
+
+### Proxy eligibility and certificate coverage are separate
+
+A record's orange-cloud proxy setting does not prove that Cloudflare has an edge certificate for that hostname. In a normal full-zone setup, Universal SSL covers the zone apex and first-level subdomains by default; a deeper name such as `app.dev.example.com` may still be proxied but lack a matching Universal certificate. Total TLS, an advanced certificate, or a suitable custom certificate can cover deeper names. CNAME setup zones have different Universal SSL behavior.
+
+dnsweaver controls only the DNS record's `proxied` field. It does not inspect or provision Cloudflare certificate entitlements. Verify certificate coverage in Cloudflare before enabling the proxy for a hostname. See Cloudflare's current [Universal SSL limitations](https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/limitations/).
+
 ## Split-Horizon with Cloudflare
 
 Common pattern: Cloudflare for external, Technitium for internal:

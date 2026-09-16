@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 
@@ -381,22 +382,88 @@ func (c *Client) UpdateRecord(ctx context.Context, zoneID, recordID, recordType,
 	}
 
 	path := fmt.Sprintf("/zones/%s/dns_records/%s", zoneID, recordID)
-	_, err = c.doRequest(ctx, http.MethodPatch, path, strings.NewReader(string(bodyBytes)))
+	resp, err := c.doRequest(ctx, http.MethodPatch, path, strings.NewReader(string(bodyBytes)))
 	if err != nil {
 		return fmt.Errorf("updating record: %w", err)
 	}
 
+	var updated dnsRecord
+	if err := json.Unmarshal(resp.Result, &updated); err != nil {
+		return fmt.Errorf("parsing updated record response: %w", err)
+	}
+	if updated.ID == "" {
+		return fmt.Errorf("parsing updated record response: missing record ID")
+	}
+
+	if differences := updateResponseDifferences(updated, reqBody); len(differences) > 0 {
+		c.logger.Warn("Cloudflare update response differs from request",
+			slog.String("zone_id", zoneID),
+			slog.String("record_id", updated.ID),
+			slog.Any("differences", differences),
+			slog.String("requested_type", recordType),
+			slog.String("actual_type", updated.Type),
+			slog.String("requested_name", name),
+			slog.String("actual_name", updated.Name),
+			slog.String("requested_content", content),
+			slog.String("actual_content", updated.Content),
+			slog.Int("requested_ttl", ttl),
+			slog.Int("actual_ttl", updated.TTL),
+			slog.Bool("requested_proxied", proxied),
+			slog.Bool("actual_proxied", updated.Proxied),
+		)
+	}
+
+	// Log the accepted state returned by Cloudflare, not merely the values sent
+	// in the request. Cloudflare may normalize fields while still returning a
+	// successful response.
 	c.logger.Info("updated DNS record",
 		slog.String("zone_id", zoneID),
-		slog.String("record_id", recordID),
-		slog.String("type", recordType),
-		slog.String("name", name),
-		slog.String("content", content),
-		slog.Int("ttl", ttl),
-		slog.Bool("proxied", proxied),
+		slog.String("record_id", updated.ID),
+		slog.String("type", updated.Type),
+		slog.String("name", updated.Name),
+		slog.String("content", updated.Content),
+		slog.Int("ttl", updated.TTL),
+		slog.Bool("proxied", updated.Proxied),
 	)
 
 	return nil
+}
+
+func updateResponseDifferences(actual dnsRecord, requested createRecordRequest) []string {
+	var differences []string
+	if !strings.EqualFold(actual.Type, requested.Type) {
+		differences = append(differences, "type")
+	}
+	if !equalDNSName(actual.Name, requested.Name) {
+		differences = append(differences, "name")
+	}
+	if !equalRecordContent(requested.Type, actual.Content, requested.Content) {
+		differences = append(differences, "content")
+	}
+	if actual.TTL != requested.TTL {
+		differences = append(differences, "ttl")
+	}
+	if actual.Proxied != requested.Proxied {
+		differences = append(differences, "proxied")
+	}
+	return differences
+}
+
+func equalDNSName(a, b string) bool {
+	return strings.EqualFold(strings.TrimSuffix(a, "."), strings.TrimSuffix(b, "."))
+}
+
+func equalRecordContent(recordType, a, b string) bool {
+	switch strings.ToUpper(recordType) {
+	case "A", "AAAA":
+		aAddr, aErr := netip.ParseAddr(a)
+		bAddr, bErr := netip.ParseAddr(b)
+		return aErr == nil && bErr == nil && aAddr == bAddr
+	case "CNAME":
+		return equalDNSName(a, b)
+	default:
+		return a == b
+	}
 }
 
 // FindRecords finds DNS records by name and type in the given zone.

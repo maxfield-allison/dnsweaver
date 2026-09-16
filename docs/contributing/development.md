@@ -4,7 +4,7 @@ This guide covers setting up your local development environment for contributing
 
 ## Prerequisites
 
-- **Go 1.25+** — [Download](https://go.dev/dl/)
+- **Go 1.26.8** — [Download](https://go.dev/dl/)
 - **Docker** — For testing and running dependencies
 - **golangci-lint** — [Installation](https://golangci-lint.run/usage/install/)
 - **Make** — For running build targets

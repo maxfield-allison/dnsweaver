@@ -6,26 +6,29 @@ import (
 )
 
 func TestExtractTLSConfig_Empty(t *testing.T) {
-	if got := extractTLSConfig(nil, nil, "i"); got != nil {
+	if got, err := extractTLSConfig(nil, "i"); err != nil || got != nil {
 		t.Errorf("nil map: got %+v, want nil", got)
 	}
-	if got := extractTLSConfig(map[string]string{}, nil, "i"); got != nil {
+	if got, err := extractTLSConfig(map[string]string{}, "i"); err != nil || got != nil {
 		t.Errorf("empty map: got %+v, want nil", got)
 	}
-	if got := extractTLSConfig(map[string]string{"URL": "x"}, nil, "i"); got != nil {
+	if got, err := extractTLSConfig(map[string]string{"URL": "x"}, "i"); err != nil || got != nil {
 		t.Errorf("unrelated keys: got %+v, want nil", got)
 	}
 }
 
 func TestExtractTLSConfig_Populated(t *testing.T) {
-	cfg := extractTLSConfig(map[string]string{
+	cfg, err := extractTLSConfig(map[string]string{
 		"TLS_CA_FILE":     "/etc/ssl/ca.pem",
 		"TLS_CERT_FILE":   "/etc/ssl/c.crt",
 		"TLS_KEY_FILE":    "/etc/ssl/c.key",
 		"TLS_SERVER_NAME": "internal.example.com",
 		"TLS_SKIP_VERIFY": "true",
 		"TLS_MIN_VERSION": "1.3",
-	}, nil, "test")
+	}, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if cfg == nil {
 		t.Fatal("expected non-nil TLSConfig")
 	}
@@ -46,16 +49,13 @@ func TestExtractTLSConfig_Populated(t *testing.T) {
 	}
 }
 
-func TestExtractTLSConfig_InvalidMinVersionIgnored(t *testing.T) {
-	cfg := extractTLSConfig(map[string]string{
+func TestExtractTLSConfig_InvalidMinVersionRejected(t *testing.T) {
+	cfg, err := extractTLSConfig(map[string]string{
 		"TLS_SKIP_VERIFY": "true",
 		"TLS_MIN_VERSION": "1.1",
-	}, nil, "test")
-	if cfg == nil {
-		t.Fatal("expected non-nil (skip-verify still set)")
-	}
-	if cfg.MinVersion != 0 {
-		t.Errorf("MinVersion should be unset (default) on parse error, got %x", cfg.MinVersion)
+	}, "test")
+	if err == nil || cfg != nil {
+		t.Fatalf("extractTLSConfig() = (%+v, %v), want error", cfg, err)
 	}
 }
 

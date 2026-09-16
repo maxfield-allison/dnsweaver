@@ -46,6 +46,7 @@ func main() {
 	showVersion := flag.Bool("version", false, "Show version and exit")
 	validateOnly := flag.Bool("validate", false, "Validate configuration and exit")
 	healthcheckOnly := flag.Bool("healthcheck", false, "Probe the running health endpoint and exit")
+	readycheckOnly := flag.Bool("readycheck", false, "Probe the running readiness endpoint and exit")
 	flag.Parse()
 
 	if *showVersion {
@@ -65,6 +66,13 @@ func main() {
 	if *healthcheckOnly {
 		if err := runHealthcheck(); err != nil {
 			fmt.Fprintf(os.Stderr, "Health check failed: %s\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	if *readycheckOnly {
+		if err := runReadinessCheck(); err != nil {
+			fmt.Fprintf(os.Stderr, "Readiness check failed: %s\n", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -117,6 +125,7 @@ func runValidate() error {
 	fmt.Printf("  Reconcile Interval: %s\n", cfg.ReconcileInterval())
 	fmt.Printf("  Shutdown Timeout:   %s\n", cfg.ShutdownTimeout())
 	fmt.Printf("  Health Port:        %d\n", cfg.HealthPort())
+	fmt.Printf("  Health Address:     %s\n", cfg.HealthAddress())
 	if cfg.InstanceID() != "" {
 		fmt.Printf("  Instance ID:        %s\n", cfg.InstanceID())
 	}
@@ -548,6 +557,7 @@ func run() error {
 	// Start health server with provider manager status (#10, #125)
 	healthServer := health.New(cfg.HealthPort(),
 		health.WithLogger(logger),
+		health.WithAddress(cfg.HealthAddress()),
 	)
 
 	// Register provider health checkers for /ready endpoint
@@ -658,6 +668,7 @@ func run() error {
 		slog.Int("sources", sourceRegistry.Count()),
 		slog.Int("providers", providerRegistry.Count()),
 		slog.Int("health_port", cfg.HealthPort()),
+		slog.String("health_address", cfg.HealthAddress()),
 	)
 
 	// Handle shutdown signals

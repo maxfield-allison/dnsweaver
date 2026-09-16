@@ -45,7 +45,7 @@ type Client struct {
 // FileSystem abstracts file operations for testing.
 type FileSystem interface {
 	ReadFile(path string) ([]byte, error)
-	WriteFile(path string, data []byte, perm os.FileMode) error
+	WriteFileAtomic(path string, data []byte, perm os.FileMode) error
 	Stat(path string) (os.FileInfo, error)
 	MkdirAll(path string, perm os.FileMode) error
 }
@@ -57,8 +57,45 @@ func (osFileSystem) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-func (osFileSystem) WriteFile(path string, data []byte, perm os.FileMode) error {
-	return os.WriteFile(path, data, perm)
+func (osFileSystem) WriteFileAtomic(path string, data []byte, perm os.FileMode) (retErr error) {
+	if info, err := os.Lstat(path); err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("managed path %q is not a regular file", path)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("checking managed path %q: %w", path, err)
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".dnsweaver-*")
+	if err != nil {
+		return fmt.Errorf("creating temporary managed file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer func() {
+		if retErr != nil {
+			_ = tmp.Close()
+		}
+		_ = os.Remove(tmpPath)
+	}()
+
+	if err := tmp.Chmod(perm); err != nil {
+		return fmt.Errorf("setting temporary managed file mode: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return fmt.Errorf("writing temporary managed file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		return fmt.Errorf("syncing temporary managed file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("closing temporary managed file: %w", err)
+	}
+	// A same-directory rename replaces the managed directory entry itself. It
+	// never follows a symlink introduced after the Lstat check.
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("replacing managed file: %w", err)
+	}
+	return nil
 }
 
 func (osFileSystem) Stat(path string) (os.FileInfo, error) {
@@ -337,7 +374,7 @@ func (c *Client) Create(ctx context.Context, record dnsmasqRecord) error {
 	}
 
 	// Write updated content
-	if err := c.fs.WriteFile(configPath, []byte(newContent), 0644); err != nil {
+	if err := c.fs.WriteFileAtomic(configPath, []byte(newContent), 0644); err != nil {
 		return fmt.Errorf("writing config file: %w", err)
 	}
 
@@ -399,7 +436,7 @@ func (c *Client) Delete(ctx context.Context, record dnsmasqRecord) error {
 		newContent += "\n"
 	}
 
-	if err := c.fs.WriteFile(configPath, []byte(newContent), 0644); err != nil {
+	if err := c.fs.WriteFileAtomic(configPath, []byte(newContent), 0644); err != nil {
 		return fmt.Errorf("writing config file: %w", err)
 	}
 
@@ -470,7 +507,7 @@ func (c *Client) WriteRecords(ctx context.Context, records []dnsmasqRecord) erro
 	}
 
 	configPath := c.ConfigFilePath()
-	if err := c.fs.WriteFile(configPath, []byte(content), 0644); err != nil {
+	if err := c.fs.WriteFileAtomic(configPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing config file: %w", err)
 	}
 

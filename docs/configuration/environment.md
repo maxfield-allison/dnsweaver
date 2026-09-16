@@ -42,6 +42,8 @@ dnsweaver --config /etc/dnsweaver/config.yml
 | `DNSWEAVER_RECONCILE_INTERVAL` | `60s` | Periodic reconciliation interval |
 | `DNSWEAVER_SHUTDOWN_TIMEOUT` | `30s` | Graceful shutdown timeout for in-flight updates |
 | `DNSWEAVER_HEALTH_PORT` | `8080` | Port for health/metrics endpoints |
+| `DNSWEAVER_HEALTH_ADDRESS` | `127.0.0.1` | IP address for the health, readiness, and metrics listener. Hostnames and values containing a port are rejected. |
+| `DNSWEAVER_HEALTH_ALLOW_NETWORK` | `false` | Required before binding the management listener to a non-loopback address. This is not authentication; separately restrict network access. |
 
 !!! note "Deprecated Variable"
     `DNSWEAVER_PROVIDERS` still works as an alias for `DNSWEAVER_INSTANCES` but is deprecated.
@@ -224,16 +226,12 @@ hands off to uid `1000` via `su-exec`. The long-running process therefore reads
 your CA bundle, client certificate, and **private key as uid/gid 1000 — not as
 root and not as the host user that owns the files.**
 
-If a mounted key is owned `root:root` with mode `0600` (or `0640`), the process
-gets `permission denied` even though the file "looks" readable on the host:
+If a mounted key is owned `root:root` with mode `0600` (or `0640`), the process gets `permission denied` even though the file looks readable on the host. The configured provider fails to initialize, or its HTTP requests are disabled; dnsweaver does not continue with a different TLS policy. The error includes the key path and the runtime uid/gid:
 
 ```text
-TLS configuration failed to build, falling back to stdlib defaults
-  error="loading TLS client keypair (cert=\"/etc/certs/cert.crt\" key=\"/etc/certs/key.pem\"):
-  open /etc/certs/key.pem: permission denied
-  (dnsweaver runs as uid=1000 gid=1000 after dropping privileges; the file must be
-  readable by that user — chown it to that uid/gid, make it group-readable, or mount
-  it as a Docker secret: .../#tls-certificate-file-permissions)"
+loading TLS client keypair (cert="/etc/certs/cert.crt" key="/etc/certs/key.pem"):
+open /etc/certs/key.pem: permission denied
+(dnsweaver runs as uid=1000 gid=1000 after dropping privileges; the file must be readable by that user)
 ```
 
 Pick **one** of these fixes (do **not** `chmod 0666` a private key — that makes it

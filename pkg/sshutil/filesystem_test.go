@@ -74,6 +74,13 @@ func TestSFTPFileSystem_NotConnected(t *testing.T) {
 		}
 	})
 
+	t.Run("WriteFileAtomic not connected", func(t *testing.T) {
+		err := fs.WriteFileAtomic("/path/to/file", []byte("data"), 0o644)
+		if !errors.Is(err, ErrNotConnected) {
+			t.Errorf("WriteFileAtomic() error = %v, want %v", err, ErrNotConnected)
+		}
+	})
+
 	t.Run("Stat not connected", func(t *testing.T) {
 		_, err := fs.Stat("/path/to/file")
 		if !errors.Is(err, ErrNotConnected) {

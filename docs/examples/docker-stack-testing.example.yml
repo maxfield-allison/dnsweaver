@@ -19,7 +19,7 @@
 #   2. Create config: Prepare config.yml (see config.example.yml)
 #   3. Deploy: docker stack deploy -c docker-stack-testing.example.yml dnsweaver-test
 #   4. Logs: docker service logs -f dnsweaver-test_dnsweaver
-#   5. Health: curl http://<swarm-ip>:8089/health
+#   5. Health: curl http://<swarm-ip>:8089/health (test-only network listener below)
 #
 # TESTING WORKFLOW:
 #   1. Deploy stack
@@ -62,6 +62,10 @@ services:
     environment:
       # Primary config via YAML file
       DNSWEAVER_CONFIG: "/config/config.yml"
+      # Test-only published management listener. This is not authentication;
+      # restrict the published port to the test network at the host firewall.
+      DNSWEAVER_HEALTH_ADDRESS: "0.0.0.0"
+      DNSWEAVER_HEALTH_ALLOW_NETWORK: "true"
       # Provider secret via _FILE pattern (v0.5.1+)
       DNSWEAVER_TEST_DNS_TOKEN_FILE: "/run/secrets/technitium_token"
       TZ: "America/Chicago"

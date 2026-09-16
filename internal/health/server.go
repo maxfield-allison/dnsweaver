@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,17 +54,28 @@ type Response struct {
 
 // Server provides /health, /ready, and /metrics endpoints.
 type Server struct {
-	port    int
-	mux     *http.ServeMux
-	server  *http.Server
-	logger  *slog.Logger
-	timeout time.Duration
+	address  string
+	port     int
+	mux      *http.ServeMux
+	server   *http.Server
+	listener net.Listener
+	logger   *slog.Logger
+	timeout  time.Duration
+	interval time.Duration
 
-	shuttingDown     atomic.Bool
-	mu               sync.RWMutex
-	checkers         map[string]HealthChecker
-	degradedCheckers map[string]DegradedChecker
+	shuttingDown      atomic.Bool
+	readiness         atomic.Int32
+	checkerGeneration atomic.Uint64
+	mu                sync.RWMutex
+	checkers          map[string]HealthChecker
+	degradedCheckers  map[string]DegradedChecker
 }
+
+const (
+	readinessNotReady int32 = iota
+	readinessReady
+	readinessDegraded
+)
 
 // Option is a functional option for configuring the Server.
 type Option func(*Server)
@@ -81,16 +94,36 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
+// WithCheckInterval sets how often active readiness checks run in the
+// background. HTTP requests only read the cached result.
+func WithCheckInterval(interval time.Duration) Option {
+	return func(s *Server) {
+		s.interval = interval
+	}
+}
+
+// WithAddress sets the IP address used by the management listener. The
+// application configuration layer validates that non-loopback addresses have
+// an explicit network-listener opt-in.
+func WithAddress(address string) Option {
+	return func(s *Server) {
+		s.address = address
+	}
+}
+
 // New creates a new health server on the specified port.
 func New(port int, opts ...Option) *Server {
 	s := &Server{
+		address:          "127.0.0.1",
 		port:             port,
 		mux:              http.NewServeMux(),
 		logger:           slog.Default(),
 		timeout:          5 * time.Second,
+		interval:         30 * time.Second,
 		checkers:         make(map[string]HealthChecker),
 		degradedCheckers: make(map[string]DegradedChecker),
 	}
+	s.readiness.Store(readinessReady)
 
 	for _, opt := range opts {
 		opt(s)
@@ -105,6 +138,8 @@ func (s *Server) RegisterChecker(name string, checker HealthChecker) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.checkers[name] = checker
+	s.checkerGeneration.Add(1)
+	s.readiness.Store(readinessNotReady)
 	s.logger.Debug("registered health checker", slog.String("name", name))
 }
 
@@ -114,6 +149,8 @@ func (s *Server) RegisterDegradedChecker(name string, checker DegradedChecker) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.degradedCheckers[name] = checker
+	s.checkerGeneration.Add(1)
+	s.readiness.Store(readinessNotReady)
 	s.logger.Debug("registered degraded checker", slog.String("name", name))
 }
 
@@ -148,6 +185,28 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	status := s.readiness.Load()
+	w.Header().Set("Content-Type", "application/json")
+	resp := Response{}
+	switch status {
+	case readinessReady:
+		resp.Status = StatusReady
+		w.WriteHeader(http.StatusOK)
+	case readinessDegraded:
+		resp.Status = StatusDegraded
+		w.WriteHeader(http.StatusOK)
+	default:
+		resp.Status = StatusNotReady
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// refreshReadiness performs active checks outside the request path and stores
+// only the aggregate result. Detailed component names and upstream errors stay
+// in local logs rather than being returned over the management endpoint.
+func (s *Server) refreshReadiness(parent context.Context) {
+	generation := s.checkerGeneration.Load()
 	s.mu.RLock()
 	checkers := make(map[string]HealthChecker, len(s.checkers))
 	for name, checker := range s.checkers {
@@ -159,75 +218,87 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(r.Context(), s.timeout)
+	ctx, cancel := context.WithTimeout(parent, s.timeout)
 	defer cancel()
 
-	var components []HealthStatus
-	var degradedList []DegradedStatus
 	allHealthy := true
 	hasDegraded := false
 
 	// Run health checkers
 	for name, checker := range checkers {
-		status := HealthStatus{Name: name, Healthy: true}
 		if err := checker(ctx); err != nil {
-			status.Healthy = false
-			status.Error = err.Error()
 			allHealthy = false
 			s.logger.Warn("health check failed",
 				slog.String("component", name),
 				slog.String("error", err.Error()),
 			)
 		}
-		components = append(components, status)
 	}
 
 	// Run degraded checkers
 	for name, checker := range degradedCheckers {
 		if degraded, message := checker(ctx); degraded {
 			hasDegraded = true
-			degradedList = append(degradedList, DegradedStatus{
-				Name:    name,
-				Message: message,
-			})
 			s.logger.Debug("degraded state detected",
 				slog.String("component", name),
 				slog.String("message", message),
 			)
 		}
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-
-	resp := Response{Components: components, Degraded: degradedList}
-	if !allHealthy {
-		// Unhealthy - at least one health checker failed
-		resp.Status = StatusNotReady
-		w.WriteHeader(http.StatusServiceUnavailable)
-	} else if hasDegraded {
-		// Healthy but degraded - all checkers passed but some degradation
-		resp.Status = StatusDegraded
-		w.WriteHeader(http.StatusOK) // 200 OK for degraded (still functional)
-	} else {
-		// Fully healthy
-		resp.Status = StatusReady
-		w.WriteHeader(http.StatusOK)
+	// A checker registered while this snapshot was running has not been
+	// evaluated. RegisterChecker already marked readiness not-ready; do not
+	// overwrite that state with a stale result.
+	if s.checkerGeneration.Load() != generation {
+		return
 	}
 
-	_ = json.NewEncoder(w).Encode(resp)
+	if !allHealthy {
+		s.readiness.Store(readinessNotReady)
+	} else if hasDegraded {
+		s.readiness.Store(readinessDegraded)
+	} else {
+		s.readiness.Store(readinessReady)
+	}
+}
+
+func (s *Server) runChecks(ctx context.Context) {
+	s.refreshReadiness(ctx)
+	ticker := time.NewTicker(s.interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.refreshReadiness(ctx)
+		}
+	}
 }
 
 // Start starts the health server in a goroutine.
 func (s *Server) Start() error {
+	listenAddress := net.JoinHostPort(s.address, strconv.Itoa(s.port))
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(context.Background(), "tcp", listenAddress)
+	if err != nil {
+		return fmt.Errorf("listening on management address %s: %w", listenAddress, err)
+	}
+	s.listener = listener
 	s.server = &http.Server{
-		Addr:              fmt.Sprintf(":%d", s.port),
+		Addr:              listenAddress,
 		Handler:           s.mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	checkCtx, cancelChecks := context.WithCancel(context.Background())
+	s.server.RegisterOnShutdown(cancelChecks)
+	go s.runChecks(checkCtx)
 
 	go func() {
-		s.logger.Info("health server starting", slog.Int("port", s.port))
-		if err := s.server.ListenAndServe(); err != http.ErrServerClosed {
+		s.logger.Info("health server starting",
+			slog.String("address", s.address),
+			slog.Int("port", s.port),
+		)
+		if err := s.server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("health server error", slog.String("error", err.Error()))
 		}
 	}()

@@ -29,22 +29,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   backend.
   ([GitHub #178](https://github.com/maxfield-allison/dnsweaver/issues/178))
 
+### Changed
+
+- **Breaking: management endpoints now bind to loopback by default.** Remote health probes and Prometheus scrapers need an explicit listener address and network opt-in, with separate access restrictions. Bundled container and Kubernetes probes use local checks. See the [migration guide](docs/observability.md#migrating-from-earlier-releases) before upgrading.
+
 ### Fixed
 
-- **Technitium instances on different servers remain distinct backends.** The
-  normal provider factory discarded the configured API URL from its backend
-  identity, so instances serving the same zone on separate servers could be
-  grouped together and leave the previous route stale when selection changed.
-- **Kubernetes namespace filters now scope informer API requests.** Configured
-  namespaces previously filtered the local cache only, so dnsweaver still
-  required cluster-wide list/watch permissions. Each configured namespace now
-  gets its own informer and can be authorized with namespace-scoped RBAC.
-- **Managed mode now leaves unowned same-type records untouched when adoption
-  is disabled.** A pre-existing A, AAAA, CNAME, or SRV record with a different
-  target could previously be updated even though `ADOPT_EXISTING=false`.
-  Adoption policy now guards ownership creation, provider-state updates,
-  target changes, type-conflict replacement, and create-race conflicts through
-  one decision path.
+- **Technitium instances on different servers remain distinct backends.** The normal provider factory discarded the configured API URL from its backend identity, so instances serving the same zone on separate servers could be grouped together and leave the previous route stale when selection changed.
+- **Kubernetes namespace filters now scope informer API requests.** Configured namespaces previously filtered the local cache only, so dnsweaver still required cluster-wide list/watch permissions. Each configured namespace now gets its own informer and can be authorized with namespace-scoped RBAC.
+- **Managed mode now leaves unowned same-type records untouched when adoption is disabled.** A pre-existing A, AAAA, CNAME, or SRV record with a different target could previously be updated even though `ADOPT_EXISTING=false`. Adoption policy now guards ownership creation, provider-state updates, target changes, type-conflict replacement, and create-race conflicts through one decision path.
+- **TXT reconciliation now converges without deleting unrelated values.** Ownership applies to exact TXT members, including quoted provider forms, so a second identical reconciliation is a no-op and authoritative mode does not widen a managed TXT change to other values at the same owner name.
+- **Failed cross-type replacement restores the previous answer and ownership.** Replacing A/AAAA/CNAME records now compensates after a failed create instead of leaving the old answer deleted. The compensation is best effort and is reported if restoration itself fails.
+- **Cloudflare update logs reflect the state accepted by the API.** The update response is parsed and compared with the request; normalized type, name, content, TTL, or proxy state is reported rather than silently logging only the requested values.
+
+### Security
+
+- Provider hints can narrow routing only to a provider that also matches the configured domain and workload-metadata scope; workload input cannot use an explicit provider name to widen operator policy.
+- Provider HTTP clients reject redirects that change scheme, host, or effective port before copying custom credential headers. Same-origin redirects remain supported.
+- Explicit TLS and secret-file configuration now fails closed. Invalid trust, client-certificate, minimum-version, or unreadable `*_FILE` settings stop provider construction or requests instead of falling back to a different credential or trust policy.
+- dnsmasq managed files are replaced atomically and symlink targets are rejected for both local and SFTP writes. Remote atomic updates require the OpenSSH POSIX rename extension and fail closed when it is unavailable.
+- Six dependency findings have narrowly scoped, time-bounded exceptions for the exact Docker client and `x/crypto` module/package reachability observed by the pinned scanner. They are due for review on 2026-10-16 and expire on 2026-12-16. Changed scope or a due review fails the gate; an available supported fix requires immediate maintainer review. GO-2026-5158 was fixed by the OpenTelemetry update and is not excepted.
+- Readiness checks run on a bounded background interval and expose only an aggregate cached state, avoiding request-triggered provider calls and raw upstream error disclosure. A non-loopback listener requires a separate NetworkPolicy, firewall, or equivalent access restriction; the network opt-in does not provide authentication.
+
+### Dependencies
+
+- The supported Go 1.26 line is patched to Go 1.26.8, OpenTelemetry core is updated to 1.44.0, and `golang.org/x/crypto` is updated to 0.57.0 with its compatible transitive modules.
+
+### CI
+
+- Vulnerability checks now run pinned `govulncheck` structured output through one fail-closed policy gate. Missing tools, timeouts, malformed or truncated output, scanner failure, unknown findings, and undecided exceptions all fail while retaining raw and normalized evidence.
+- GitLab merge-request admission now covers Go, module, gate, workflow, Dockerfile, and entrypoint changes. Lint is blocking, tool and image versions are pinned, raw Go coverage is no longer mislabeled as Cobertura, and obsolete success-masking Swarm deployment jobs are removed.
+- CodeQL is updated from 4.37.9 to 4.38.0.
 
 ## [2.8.2] - 2026-09-03
 

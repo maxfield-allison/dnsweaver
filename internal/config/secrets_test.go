@@ -28,7 +28,10 @@ func TestGetEnvOrFile_DirectValue(t *testing.T) {
 	defer os.Unsetenv(directKey)
 	os.Unsetenv(fileKey)
 
-	got := getEnvOrFile(directKey, fileKey)
+	got, _, err := readEnvOrFile(directKey, fileKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != value {
 		t.Errorf("getEnvOrFile() = %q, want %q", got, value)
 	}
@@ -50,7 +53,10 @@ func TestGetEnvOrFile_FileValue(t *testing.T) {
 	os.Setenv(fileKey, secretFile)
 	defer os.Unsetenv(fileKey)
 
-	got := getEnvOrFile(directKey, fileKey)
+	got, _, err := readEnvOrFile(directKey, fileKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != secretValue {
 		t.Errorf("getEnvOrFile() = %q, want %q (file content trimmed)", got, secretValue)
 	}
@@ -74,7 +80,10 @@ func TestGetEnvOrFile_FileTakesPrecedence(t *testing.T) {
 	defer os.Unsetenv(directKey)
 	defer os.Unsetenv(fileKey)
 
-	got := getEnvOrFile(directKey, fileKey)
+	got, _, err := readEnvOrFile(directKey, fileKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != fileValue {
 		t.Errorf("getEnvOrFile() = %q, want %q (file should take precedence)", got, fileValue)
 	}
@@ -90,12 +99,12 @@ func TestGetEnvOrFile_NonexistentFile(t *testing.T) {
 	defer os.Unsetenv(directKey)
 	defer os.Unsetenv(fileKey)
 
-	// When _FILE is explicitly set but unreadable, the result should be empty
-	// rather than silently falling through to the direct env var. This prevents
-	// masking misconfigured secret file paths.
-	got := getEnvOrFile(directKey, fileKey)
+	got, configured, err := readEnvOrFile(directKey, fileKey)
+	if err == nil || !configured {
+		t.Fatalf("readEnvOrFile() = (%q, %v, %v), want configured file error", got, configured, err)
+	}
 	if got != "" {
-		t.Errorf("getEnvOrFile() = %q, want %q (should NOT fallback when _FILE is set but unreadable)", got, "")
+		t.Errorf("readEnvOrFile() value = %q, want empty on file error", got)
 	}
 }
 
@@ -188,7 +197,13 @@ func TestGetEnvWithFileFallback(t *testing.T) {
 	os.Setenv(prefix+key+"_FILE", secretFile)
 	defer os.Unsetenv(prefix + key + "_FILE")
 
-	got := getEnvWithFileFallback(prefix, key)
+	got, configured, err := getEnvWithFileFallback(prefix, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !configured {
+		t.Fatal("getEnvWithFileFallback() did not report configured file")
+	}
 	if got != value {
 		t.Errorf("getEnvWithFileFallback() = %q, want %q", got, value)
 	}

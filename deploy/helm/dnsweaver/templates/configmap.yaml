@@ -39,6 +39,8 @@ data:
 
     server:
       port: {{ .Values.config.server.port }}
+      address: {{ .Values.config.server.address | quote }}
+      allow_network: {{ .Values.config.server.allowNetwork }}
 
     sources:
       {{- toYaml .Values.config.sources | nindent 6 }}

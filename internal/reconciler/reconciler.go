@@ -118,7 +118,8 @@ type Reconciler struct {
 	// previousDesired retains the last complete provider-routed member set.
 	// Providers without durable TXT ownership use it to make safe removals
 	// during this process lifetime; it is deliberately empty after restart.
-	previousDesired map[desiredSetKey]previousDesiredSet
+	previousDesired     map[desiredSetKey]previousDesiredSet
+	pendingReplacements map[replacementKey]replacementRecovery
 
 	// reconcileMu serializes full Reconcile() calls to prevent concurrent
 	// reconciliation cycles from interleaving (e.g., periodic timer firing
@@ -261,6 +262,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	for _, action := range compiled.Skipped {
 		result.AddAction(action)
 	}
+	blockedReplacements := r.retryReplacements(ctx, cache, result)
 	sets, previous := r.reconciliationSets(compiled, cache)
 	nextPrevious := make(map[desiredSetKey]previousDesiredSet, len(previous)+len(compiled.Sets))
 	for key, prior := range previous {
@@ -273,8 +275,29 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 		r.logger.Warn("desired-state snapshot is partial; suppressing member removals")
 	}
 	for _, set := range sets {
-		prior := previous[set.Key]
-		actions, managed := r.reconcileDesiredSetWithState(ctx, set, cache, prior.Records, allowRemovals)
+		replacement := replacementKey{set.Key.Identity, set.Key.Hostname}
+		if blockedReplacements[replacement] {
+			continue
+		}
+		var priorRecords []provider.Record
+		for key, prior := range previous {
+			if key.Identity == set.Key.Identity && key.Hostname == set.Key.Hostname {
+				priorRecords = append(priorRecords, prior.Records...)
+			}
+		}
+		actions, managed := r.reconcileDesiredSetWithState(ctx, set, cache, priorRecords, allowRemovals)
+		for _, action := range actions {
+			if action.Status == StatusFailed {
+				blockedReplacements[replacement] = true
+			}
+		}
+		sameTypeManaged := make([]provider.Record, 0, len(managed))
+		for _, record := range managed {
+			if record.Type == set.Key.RecordType {
+				sameTypeManaged = append(sameTypeManaged, record)
+			}
+		}
+		managed = sameTypeManaged
 		for _, action := range actions {
 			result.AddAction(action)
 		}

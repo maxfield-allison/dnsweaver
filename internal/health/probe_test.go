@@ -79,3 +79,40 @@ func TestProbeErrorIncludesEndpoint(t *testing.T) {
 		t.Errorf("Probe() error = %q, want endpoint", err)
 	}
 }
+
+func TestProbePath(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	if err := ProbePath(t.Context(), serverPort(t, server.Listener.Addr()), "/ready"); err != nil {
+		t.Fatalf("ProbePath() error = %v", err)
+	}
+	if gotPath != "/ready" {
+		t.Fatalf("probe path = %q, want /ready", gotPath)
+	}
+	if err := ProbePath(t.Context(), 8080, "/metrics"); err == nil {
+		t.Fatal("ProbePath() accepted unsupported metrics probe")
+	}
+}
+
+func TestProbeAddressPathUsesLoopbackForWildcard(t *testing.T) {
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(t.Context(), "tcp4", "0.0.0.0:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	server.Listener = listener
+	server.Start()
+	defer server.Close()
+
+	if err := ProbeAddressPath(t.Context(), "0.0.0.0", serverPort(t, listener.Addr()), "/health"); err != nil {
+		t.Fatalf("ProbeAddressPath() error = %v", err)
+	}
+}

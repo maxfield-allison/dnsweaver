@@ -46,7 +46,7 @@ jobs:
           # binaries shipped by golangci-lint-action are built with an older Go
           # and refuse to run against a newer target version. Mirrors the
           # GitLab lint job, which installs golangci-lint the same way.
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
           golangci-lint run --config .golangci.yml --timeout 5m
 
   test:
@@ -88,29 +88,12 @@ jobs:
           cache: true
       - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          # govulncheck has no built-in suppression mechanism. This wrapper
-          # passes when ONLY known-unfixed vulnerabilities are present and
-          # fails on anything new. Mirrors the GitLab security:govulncheck job.
-          # Known unfixed (github.com/docker/docker SDK — no fix in v28.x):
-          #   GO-2026-4883, GO-2026-4887, GO-2026-5617, GO-2026-5668,
-          #   GO-2026-5746 — Moby daemon vulns (docker cp, container archive,
-          #   plugin/AuthZ). dnsweaver uses the SDK only as a read-only client
-          #   and runs no daemon, so these paths are unreachable. No stable fix
-          #   in the docker/docker +incompatible module (v29 is pre-release
-          #   moby/v2). Tracked/dismissed in GitHub Dependabot.
-          KNOWN_VULNS="GO-2026-4883|GO-2026-4887|GO-2026-5617|GO-2026-5668|GO-2026-5746"
-          RC=0
-          govulncheck ./... > govulncheck.txt 2>&1 || RC=$?
-          cat govulncheck.txt
-          if [ "$RC" -eq 0 ]; then
-            echo "No vulnerabilities found"
-            exit 0
-          fi
-          FOUND=$(grep -oE 'GO-[0-9]+-[0-9]+' govulncheck.txt | sort -u)
-          UNKNOWN=$(echo "$FOUND" | grep -vE "^($KNOWN_VULNS)$" || true)
-          if [ -n "$UNKNOWN" ]; then
-            echo "::error::New vulnerabilities found: $UNKNOWN"
-            exit 1
-          fi
-          echo "::warning::Only known-unfixed vulnerabilities found (docker/docker SDK, no upstream fix): $FOUND"
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          ./scripts/govulncheck-gate.sh
+      - name: Retain govulncheck evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: govulncheck-evidence
+          path: .artifacts/govulncheck
+          if-no-files-found: error

@@ -222,6 +222,17 @@ func (c *Config) HealthPort() int {
 	return c.Global.HealthPort
 }
 
+// HealthAddress returns the management listener IP address.
+func (c *Config) HealthAddress() string {
+	return c.Global.HealthAddress
+}
+
+// HealthAllowNetwork reports whether non-loopback management binding was
+// explicitly enabled by the operator.
+func (c *Config) HealthAllowNetwork() bool {
+	return c.Global.HealthAllowNetwork
+}
+
 // DockerHost returns the Docker socket/host path.
 func (c *Config) DockerHost() string {
 	return c.Global.DockerHost

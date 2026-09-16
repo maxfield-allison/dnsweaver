@@ -203,6 +203,7 @@ server:
 func TestToGlobalConfig(t *testing.T) {
 	dryRun := true
 	cleanup := false
+	allowNetwork := true
 
 	fileCfg := &FileConfig{
 		Logging: &FileLoggingConfig{
@@ -219,7 +220,9 @@ func TestToGlobalConfig(t *testing.T) {
 			Mode: "standalone",
 		},
 		Server: &FileServerConfig{
-			Port: 8081,
+			Port:         8081,
+			Address:      "0.0.0.0",
+			AllowNetwork: &allowNetwork,
 		},
 	}
 
@@ -248,6 +251,9 @@ func TestToGlobalConfig(t *testing.T) {
 	}
 	if global.HealthPort != 8081 {
 		t.Errorf("HealthPort = %d, want %d", global.HealthPort, 8081)
+	}
+	if global.HealthAddress != "0.0.0.0" || !global.HealthAllowNetwork {
+		t.Errorf("health listener = %s allow=%v, want 0.0.0.0 allow=true", global.HealthAddress, global.HealthAllowNetwork)
 	}
 }
 

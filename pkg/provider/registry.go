@@ -120,7 +120,15 @@ func (r *Registry) CreateInstance(cfg ProviderInstanceConfig) error {
 	// them through the same shared HTTPConfig.TLS field rather than each
 	// re-parsing the map. The TLS_* keys are added to providerConfigFields
 	// in internal/config and so always live in the map when set.
-	tlsCfg := extractTLSConfig(cfg.ProviderConfig, r.logger, cfg.Name)
+	tlsCfg, err := extractTLSConfig(cfg.ProviderConfig, cfg.Name)
+	if err != nil {
+		return fmt.Errorf("invalid TLS configuration for provider %q: %w", cfg.Name, err)
+	}
+	if tlsCfg != nil {
+		if _, buildErr := tlsCfg.Build(); buildErr != nil {
+			return fmt.Errorf("invalid TLS configuration for provider %q: %w", cfg.Name, buildErr)
+		}
+	}
 	factoryCfg := FactoryConfig{
 		Name:           cfg.Name,
 		ProviderConfig: cfg.ProviderConfig,

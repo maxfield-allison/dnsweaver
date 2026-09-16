@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -31,7 +32,7 @@ func (m *mockFileSystem) ReadFile(path string) ([]byte, error) {
 	return nil, os.ErrNotExist
 }
 
-func (m *mockFileSystem) WriteFile(path string, data []byte, perm os.FileMode) error {
+func (m *mockFileSystem) WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	m.files[path] = data
 	return nil
 }
@@ -96,6 +97,89 @@ func TestClient_ConfigFilePath_AbsoluteEscape(t *testing.T) {
 	got := client.ConfigFilePath()
 	if got == "/tmp/evil.conf" {
 		t.Error("ConfigFilePath() should prevent absolute path escape")
+	}
+}
+
+func TestOSFileSystem_WriteFileAtomic_RejectsSymlink(t *testing.T) {
+	configDir := t.TempDir()
+	managed := filepath.Join(configDir, "dnsweaver.conf")
+	outside := filepath.Join(t.TempDir(), "outside.conf")
+	if err := os.WriteFile(outside, []byte("outside-original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, managed); err != nil {
+		t.Fatal(err)
+	}
+
+	err := (osFileSystem{}).WriteFileAtomic(managed, []byte("managed-replacement"), 0o644)
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("WriteFileAtomic() error = %v, want non-regular-file refusal", err)
+	}
+	got, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "outside-original" {
+		t.Fatalf("outside target = %q, want unchanged", got)
+	}
+	if info, err := os.Lstat(managed); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("managed path no longer a symlink after refusal: info=%v err=%v", info, err)
+	}
+}
+
+func TestOSFileSystem_WriteFileAtomic_ReplacesRegularFile(t *testing.T) {
+	managed := filepath.Join(t.TempDir(), "dnsweaver.conf")
+	if err := os.WriteFile(managed, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := (osFileSystem{}).WriteFileAtomic(managed, []byte("new"), 0o644); err != nil {
+		t.Fatalf("WriteFileAtomic() error = %v", err)
+	}
+	got, err := os.ReadFile(managed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "new" {
+		t.Fatalf("managed content = %q, want new", got)
+	}
+	info, err := os.Lstat(managed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm() != 0o644 {
+		t.Fatalf("managed mode = %v, want regular 0644", info.Mode())
+	}
+}
+
+func TestClient_CreateRejectsManagedFileSymlink(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "dnsmasq.d")
+	if err := os.Mkdir(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(root, "outside.conf")
+	if err := os.WriteFile(outside, []byte("# outside sentinel\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(configDir, "dnsweaver.conf")); err != nil {
+		t.Fatal(err)
+	}
+
+	client := NewClient(configDir, "dnsweaver.conf", "", "example.test")
+	err := client.Create(t.Context(), dnsmasqRecord{
+		Hostname: "fixture.example.test",
+		Type:     provider.RecordTypeA,
+		Target:   "192.0.2.10",
+	})
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("Create() error = %v, want managed-path refusal", err)
+	}
+	got, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "# outside sentinel\n" {
+		t.Fatalf("outside target = %q, want unchanged", got)
 	}
 }
 

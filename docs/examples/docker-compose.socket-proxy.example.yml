@@ -61,6 +61,11 @@ services:
 
       DNSWEAVER_LOG_LEVEL: "info"
 
+      # Required only because this example publishes port 8080. This opt-in is
+      # not authentication; restrict the published port at the host firewall.
+      DNSWEAVER_HEALTH_ADDRESS: "0.0.0.0"
+      DNSWEAVER_HEALTH_ALLOW_NETWORK: "true"
+
       # --- Example provider config (replace with your own) ---------------
       DNSWEAVER_INSTANCES: "internal"
       DNSWEAVER_INTERNAL_TYPE: "technitium"
@@ -73,7 +78,7 @@ services:
     networks:
       - dnsweaver-internal
     ports:
-      - "8080:8080"   # health endpoint (optional)
+      - "127.0.0.1:8080:8080" # optional host-local management endpoint
 
 networks:
   dnsweaver-internal:

@@ -1,10 +1,12 @@
 # Secrets Management
 
-dnsweaver supports multiple methods for secure credential management across Docker and Kubernetes. Any environment variable can use the `_FILE` suffix to read its value from a file — this works with Docker secrets, Kubernetes secret volume mounts, or any file-based secret injection.
+dnsweaver supports file-backed provider credentials across Docker and Kubernetes. Settings with `_FILE` support can read values from Docker secrets, Kubernetes secret volume mounts or other mounted files. The supported credential settings are listed below; `_FILE` is not a general override for every environment variable.
 
 ## How It Works
 
 The `_FILE` suffix pattern works identically on Docker and Kubernetes — dnsweaver reads the file contents at startup and uses them as the variable value.
+
+For settings that support `_FILE`, a configured file takes precedence over the direct environment value and YAML configuration. If that file cannot be read, configuration loading fails; dnsweaver does not reuse an older credential or fall back to the direct value. An empty file is an explicit empty value and is subject to the setting's normal validation.
 
 Instead of passing a secret directly:
 
@@ -74,7 +76,7 @@ Then reference them in your stack file exactly as shown above.
 
 ## Supported Variables
 
-Any environment variable that accepts sensitive data supports the `_FILE` suffix:
+The following provider credential settings support the `_FILE` suffix:
 
 ### Provider Credentials
 
@@ -102,8 +104,8 @@ To pass an SSH private key as a Docker secret:
 services:
   dnsweaver:
     environment:
-      # Read the SSH key path from a Docker secret
-      - DNSWEAVER_ROUTER_SSH_KEY_FILE_FILE=/run/secrets/router_ssh_key
+      # The mounted secret contains the private key itself
+      - DNSWEAVER_ROUTER_SSH_KEY_FILE=/run/secrets/router_ssh_key
     secrets:
       - router_ssh_key
 
@@ -111,6 +113,8 @@ secrets:
   router_ssh_key:
     file: ./ssh_keys/router_id_ed25519
 ```
+
+`SSH_KEY_FILE` is the path to the key file. Use `SSH_KEY_FILE_FILE` only when the first file contains a path to a separate key file, not the private key contents.
 
 ## Secret File Format
 

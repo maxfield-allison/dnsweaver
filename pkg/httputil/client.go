@@ -358,10 +358,9 @@ func (t *userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error
 // idle timeouts, and the stdlib connection pool — all of which a bare
 // &http.Transport{TLSClientConfig: …} would silently discard.
 //
-// On TLS construction errors NewClient logs the error and returns a client
-// using stdlib defaults; it does not return an error so that the existing
-// signature stays back-compatible. Providers that need fail-fast behavior
-// should call TLSConfig.Build() themselves before constructing the client.
+// On TLS construction errors NewClient preserves its existing signature but
+// installs a transport that rejects every request with the configuration
+// error. It never falls back to a different trust or client-identity policy.
 func NewClient(cfg *ClientConfig) *http.Client {
 	if cfg == nil {
 		cfg = &ClientConfig{}
@@ -400,9 +399,58 @@ func NewClient(cfg *ClientConfig) *http.Client {
 	}
 
 	return &http.Client{
-		Timeout:   timeout,
-		Transport: transport,
+		Timeout:       timeout,
+		Transport:     transport,
+		CheckRedirect: rejectCrossOriginRedirect,
 	}
+}
+
+// rejectCrossOriginRedirect keeps redirects within the origin selected by the
+// operator. Go deliberately copies non-standard headers such as X-API-Key to a
+// redirected request; rejecting the redirect before it is sent prevents those
+// provider credentials from reaching an endpoint chosen by a response.
+func rejectCrossOriginRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return fmt.Errorf("stopped after 10 redirects")
+	}
+	if len(via) == 0 || sameOrigin(via[0].URL, req.URL) {
+		return nil
+	}
+	return fmt.Errorf("refusing cross-origin redirect from %s to %s", origin(via[0].URL), origin(req.URL))
+}
+
+func sameOrigin(a, b *url.URL) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) &&
+		effectivePort(a) == effectivePort(b)
+}
+
+func effectivePort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	default:
+		return ""
+	}
+}
+
+func origin(u *url.URL) string {
+	if u == nil {
+		return "<invalid>"
+	}
+	host := u.Hostname()
+	if port := effectivePort(u); port != "" {
+		host = host + ":" + port
+	}
+	return strings.ToLower(u.Scheme) + "://" + host
 }
 
 // buildTransport returns the base RoundTripper for NewClient. When tlsCfg is
@@ -416,16 +464,12 @@ func buildTransport(tlsCfg *TLSConfig, logger *slog.Logger) http.RoundTripper {
 
 	built, err := tlsCfg.Build()
 	if err != nil {
-		// We can't fail the constructor without breaking the existing
-		// signature, but we MUST surface the misconfiguration. Log loudly
-		// and fall back to stdlib defaults — the request will then fail
-		// with a clear x509 error rather than silently bypassing TLS.
 		if logger != nil {
-			logger.Error("TLS configuration failed to build, falling back to stdlib defaults",
+			logger.Error("TLS configuration failed to build; requests are disabled",
 				slog.String("error", err.Error()),
 			)
 		}
-		return http.DefaultTransport
+		return errorRoundTripper{err: fmt.Errorf("invalid TLS configuration: %w", err)}
 	}
 
 	// Clone the default transport to inherit HTTP/2, proxy, dial, idle, and
@@ -440,6 +484,14 @@ func buildTransport(tlsCfg *TLSConfig, logger *slog.Logger) http.RoundTripper {
 	return cloned
 }
 
+type errorRoundTripper struct {
+	err error
+}
+
+func (t errorRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, t.err
+}
+
 // NewClientWithTransport creates an HTTP client with custom transport settings.
 // This allows advanced configuration like custom TLS roots, proxies, etc.
 func NewClientWithTransport(timeout time.Duration, transport *http.Transport) *http.Client {
@@ -448,8 +500,9 @@ func NewClientWithTransport(timeout time.Duration, transport *http.Transport) *h
 	}
 
 	return &http.Client{
-		Timeout:   timeout,
-		Transport: transport,
+		Timeout:       timeout,
+		Transport:     transport,
+		CheckRedirect: rejectCrossOriginRedirect,
 	}
 }
 

@@ -87,3 +87,69 @@ func TestCompileDesiredRecordSets_DeduplicatesBackendIdentity(t *testing.T) {
 		t.Fatalf("provider mapping = %v, want first", got)
 	}
 }
+
+func TestCompileDesiredRecordSets_ProviderHintCannotWidenScope(t *testing.T) {
+	mock := newTestMockProvider("restricted")
+	providers := testProviderRegistry(quietLogger(), mock)
+	if err := providers.CreateInstance(provider.ProviderInstanceConfig{
+		Name:       "restricted",
+		TypeName:   "mock",
+		RecordType: provider.RecordTypeA,
+		Target:     "192.0.2.1",
+		TTL:        300,
+		Domains:    []string{"*.allowed.example"},
+		MetadataFilters: map[string][]string{
+			"traefik.entrypoint": {"internal"},
+		},
+	}); err != nil {
+		t.Fatalf("CreateInstance() error = %v", err)
+	}
+	r := New(nil, source.NewRegistry(quietLogger()), providers, WithLogger(quietLogger()))
+
+	tests := []struct {
+		name     string
+		claim    *source.Hostname
+		wantSets int
+	}{
+		{
+			name: "domain outside provider scope is denied",
+			claim: &source.Hostname{
+				Name: "outside.denied.example", Metadata: map[string]string{"traefik.entrypoint": "internal"},
+				RecordHints: &source.RecordHints{Provider: "restricted", Target: "192.0.2.55"},
+			},
+		},
+		{
+			name: "metadata outside provider scope is denied",
+			claim: &source.Hostname{
+				Name: "app.allowed.example", Metadata: map[string]string{"traefik.entrypoint": "external"},
+				RecordHints: &source.RecordHints{Provider: "restricted", Target: "192.0.2.55"},
+			},
+		},
+		{
+			name: "in-scope explicit route remains supported",
+			claim: &source.Hostname{
+				Name: "app.allowed.example", Metadata: map[string]string{"traefik.entrypoint": "internal"},
+				RecordHints: &source.RecordHints{Provider: "restricted", Target: "192.0.2.55"},
+			},
+			wantSets: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			compiled := r.compileDesiredRecordSets([]*source.Hostname{tt.claim})
+			if len(compiled.Sets) != tt.wantSets {
+				t.Fatalf("sets = %d, want %d", len(compiled.Sets), tt.wantSets)
+			}
+			if tt.wantSets == 0 {
+				if len(compiled.Skipped) != 1 || compiled.Skipped[0].Status != StatusSkipped {
+					t.Fatalf("skipped = %+v, want one denied action", compiled.Skipped)
+				}
+				return
+			}
+			if len(compiled.Skipped) != 0 || compiled.Sets[0].Instance.Name() != "restricted" {
+				t.Fatalf("compiled = %+v, want restricted provider only", compiled)
+			}
+		})
+	}
+}

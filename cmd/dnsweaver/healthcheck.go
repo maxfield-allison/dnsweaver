@@ -17,20 +17,28 @@ const (
 )
 
 func runHealthcheck() error {
+	return runManagementProbe("/health")
+}
+
+func runReadinessCheck() error {
+	return runManagementProbe("/ready")
+}
+
+func runManagementProbe(path string) error {
 	configPath := config.GetConfigFilePath()
 	if configPath == "" {
 		configPath = processOneConfigPath()
 	}
 
-	port, err := config.ResolveHealthPort(configPath)
+	address, port, err := config.ResolveHealthEndpoint(configPath)
 	if err != nil {
-		return fmt.Errorf("resolving health port: %w", err)
+		return fmt.Errorf("resolving health listener: %w", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), healthcheckTimeout)
 	defer cancel()
 
-	return health.Probe(ctx, port)
+	return health.ProbeAddressPath(ctx, address, port, path)
 }
 
 // processOneConfigPath recovers a --config argument used to launch the main

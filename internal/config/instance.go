@@ -269,12 +269,19 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 	// Secrets support the _FILE suffix for Docker secrets
 	for _, field := range providerConfigFields {
 		var value string
+		configured := false
 		if field.isSecret {
-			value = getEnvWithFileFallback(prefix, field.name)
+			var err error
+			value, configured, err = getEnvWithFileFallback(prefix, field.name)
+			if err != nil {
+				errs = append(errs, configErrHelp(prefix+field.name+"_FILE", err.Error(), "Ensure the configured secret file exists and is readable by the dnsweaver process"))
+				continue
+			}
 		} else {
 			value = getEnv(prefix + field.name)
+			configured = value != ""
 		}
-		if value != "" {
+		if configured {
 			cfg.ProviderConfig[field.name] = value
 		}
 	}
@@ -392,13 +399,20 @@ func mergeProviderEnvOverrides(cfg *ProviderInstanceConfig) []*ConfigError {
 	// Check for provider-specific config field overrides
 	for _, field := range providerConfigFields {
 		var value string
+		configured := false
 		if field.isSecret {
-			value = getEnvWithFileFallback(prefix, field.name)
+			var err error
+			value, configured, err = getEnvWithFileFallback(prefix, field.name)
+			if err != nil {
+				errs = append(errs, configErrHelp(prefix+field.name+"_FILE", err.Error(), "Ensure the configured secret file exists and is readable by the dnsweaver process"))
+				continue
+			}
 		} else {
 			value = getEnv(prefix + field.name)
+			configured = value != ""
 		}
 		// Only override if env var is explicitly set
-		if value != "" {
+		if configured {
 			slog.Debug("env override applied to provider config",
 				slog.String("provider", cfg.Name),
 				slog.String("field", field.name),

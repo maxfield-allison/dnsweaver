@@ -3,6 +3,8 @@ package sshutil
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	iofs "io/fs"
@@ -23,6 +25,64 @@ type FileSystem interface {
 	WriteFile(path string, data []byte, perm os.FileMode) error
 	Stat(path string) (os.FileInfo, error)
 	MkdirAll(path string, perm os.FileMode) error
+}
+
+// WriteFileAtomic writes data to a same-directory temporary file and uses the
+// OpenSSH POSIX rename extension for atomic replacement. It deliberately does
+// not fall back to truncate-in-place or non-overwriting rename semantics.
+func (fs *SFTPFileSystem) WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
+	sftpClient, getErr := fs.getSFTP()
+	if getErr != nil {
+		return getErr
+	}
+
+	dir := filepath.Dir(path)
+	if dir != "." && dir != "/" {
+		if mkdirErr := fs.mkdirAllInternal(sftpClient, dir, 0o755); mkdirErr != nil {
+			return fmt.Errorf("creating parent directory %s: %w", dir, mkdirErr)
+		}
+	}
+	if info, lstatErr := sftpClient.Lstat(path); lstatErr == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("managed path %q is not a regular file", path)
+		}
+	} else if !os.IsNotExist(lstatErr) {
+		return fmt.Errorf("checking managed path %q: %w", path, lstatErr)
+	}
+
+	random := make([]byte, 8)
+	if _, randomErr := rand.Read(random); randomErr != nil {
+		return fmt.Errorf("generating temporary managed filename: %w", randomErr)
+	}
+	tmpPath := filepath.Join(dir, "."+filepath.Base(path)+".dnsweaver-"+hex.EncodeToString(random))
+	file, err := sftpClient.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL)
+	if err != nil {
+		return fmt.Errorf("creating temporary managed file %s: %w", tmpPath, err)
+	}
+	cleanup := true
+	defer func() {
+		_ = file.Close()
+		if cleanup {
+			_ = sftpClient.Remove(tmpPath)
+		}
+	}()
+
+	if n, err := file.Write(data); err != nil {
+		return fmt.Errorf("writing temporary managed file %s: %w", tmpPath, err)
+	} else if n != len(data) {
+		return fmt.Errorf("short write to temporary managed file %s: wrote %d of %d bytes", tmpPath, n, len(data))
+	}
+	if err := file.Chmod(perm); err != nil {
+		return fmt.Errorf("setting temporary managed file mode: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("closing temporary managed file: %w", err)
+	}
+	if err := sftpClient.PosixRename(tmpPath, path); err != nil {
+		return fmt.Errorf("atomically replacing managed file %s: %w", path, err)
+	}
+	cleanup = false
+	return nil
 }
 
 // SFTPFileSystem implements FileSystem over SFTP.

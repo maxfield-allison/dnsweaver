@@ -3,7 +3,6 @@
 # =============================================================================
 #
 # Image Strategy:
-#   :dev     - Development/integration testing (develop branch)
 #   :edge    - Bleeding edge from main branch
 #   :latest  - Latest stable release (version tags)
 #   :vX.Y.Z  - Specific version
@@ -16,13 +15,14 @@
 # Multi-arch support: amd64 + arm64
 # =============================================================================
 
-ARG GO_VERSION=1.26.6
+ARG GO_VERSION=1.26.8
+ARG GO_ALPINE_VERSION=3.24
 ARG ALPINE_VERSION=3.23
 
 # -----------------------------------------------------------------------------
 # Stage 1: Go Builder (Multi-Arch Cross-Compilation)
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${GO_ALPINE_VERSION} AS builder
 
 # Build arguments for multi-arch support
 ARG TARGETPLATFORM
@@ -37,7 +37,7 @@ RUN apk add --no-cache git ca-certificates tzdata
 
 # Copy go mod files first for layer caching
 COPY go.mod go.sum* ./
-RUN go mod download 2>/dev/null || true
+RUN go mod download
 
 # Copy source
 COPY . .
@@ -50,7 +50,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build \
     ./cmd/dnsweaver
 
 # Verify binary
-RUN ls -la dnsweaver && file dnsweaver || true
+RUN test -x dnsweaver
 
 # -----------------------------------------------------------------------------
 # Stage 2: Minimal Runtime (Alpine)

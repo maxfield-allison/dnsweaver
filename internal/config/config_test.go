@@ -62,6 +62,9 @@ func TestLoad_MinimalConfig(t *testing.T) {
 	if cfg.HealthPort() != DefaultHealthPort {
 		t.Errorf("HealthPort() = %d, want %d", cfg.HealthPort(), DefaultHealthPort)
 	}
+	if cfg.HealthAddress() != DefaultHealthAddress || cfg.HealthAllowNetwork() {
+		t.Errorf("health listener = %s allow=%v, want loopback default", cfg.HealthAddress(), cfg.HealthAllowNetwork())
+	}
 	if cfg.DockerHost() != DefaultDockerHost {
 		t.Errorf("DockerHost() = %q, want %q", cfg.DockerHost(), DefaultDockerHost)
 	}

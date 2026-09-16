@@ -629,6 +629,50 @@ func TestMergeProviderEnvOverrides(t *testing.T) {
 		}
 	})
 
+	t.Run("unreadable TOKEN_FILE is a configuration error", func(t *testing.T) {
+		instanceName := "test-unreadable-file"
+		prefix := envPrefix(instanceName)
+		t.Setenv(prefix+"TOKEN", "local-direct-fixture")
+		t.Setenv(prefix+"TOKEN_FILE", filepath.Join(t.TempDir(), "missing-token"))
+		cfg := &ProviderInstanceConfig{
+			Name: instanceName,
+			ProviderConfig: map[string]string{
+				"TOKEN": "local-yaml-fixture",
+			},
+		}
+
+		errs := mergeProviderEnvOverrides(cfg)
+		if len(errs) != 1 || !strings.Contains(errs[0].Error(), prefix+"TOKEN_FILE") {
+			t.Fatalf("merge errors = %v, want TOKEN_FILE error", errs)
+		}
+		if got := cfg.ProviderConfig["TOKEN"]; got != "local-yaml-fixture" {
+			t.Fatalf("TOKEN = %q; failed load must not partially mutate YAML", got)
+		}
+	})
+
+	t.Run("empty TOKEN_FILE explicitly clears YAML value", func(t *testing.T) {
+		instanceName := "test-empty-file"
+		prefix := envPrefix(instanceName)
+		path := filepath.Join(t.TempDir(), "empty-token")
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv(prefix+"TOKEN_FILE", path)
+		cfg := &ProviderInstanceConfig{
+			Name: instanceName,
+			ProviderConfig: map[string]string{
+				"TOKEN": "local-yaml-fixture",
+			},
+		}
+
+		if errs := mergeProviderEnvOverrides(cfg); len(errs) != 0 {
+			t.Fatalf("merge errors = %v", errs)
+		}
+		if got := cfg.ProviderConfig["TOKEN"]; got != "" {
+			t.Fatalf("TOKEN = %q, want explicit empty value", got)
+		}
+	})
+
 	t.Run("overrides TARGET from env var", func(t *testing.T) {
 		instanceName := "test-target-override"
 		prefix := envPrefix(instanceName)

@@ -1,7 +1,7 @@
 package provider
 
 import (
-	"log/slog"
+	"fmt"
 	"strings"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/httputil"
@@ -32,13 +32,12 @@ const (
 // config map and returns a *httputil.TLSConfig. Returns nil when no TLS
 // settings are configured (so the resulting client uses stdlib defaults).
 //
-// Parsing errors (e.g. unsupported MIN_VERSION) are logged at WARN level
-// against the named instance and the offending field is ignored — the
-// instance still starts. A misconfigured CA path is NOT caught here; that
-// surfaces inside httputil.NewClient → TLSConfig.Build at request time.
-func extractTLSConfig(cfgMap map[string]string, logger *slog.Logger, instance string) *httputil.TLSConfig {
+// Parsing errors are returned so explicit TLS policy cannot be silently
+// weakened. File and keypair validation is performed by Registry before the
+// provider factory runs.
+func extractTLSConfig(cfgMap map[string]string, instance string) (*httputil.TLSConfig, error) {
 	if len(cfgMap) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	tls := httputil.TLSConfig{
@@ -49,37 +48,41 @@ func extractTLSConfig(cfgMap map[string]string, logger *slog.Logger, instance st
 	}
 
 	if v, ok := cfgMap[tlsKeySkipVerify]; ok && v != "" {
-		tls.InsecureSkip = parseBoolish(v)
+		parsed, valid := parseBoolishValue(v)
+		if !valid {
+			return nil, fmt.Errorf("TLS_SKIP_VERIFY for instance %q has invalid boolean %q", instance, v)
+		}
+		tls.InsecureSkip = parsed
 	}
 
 	if v, ok := cfgMap[tlsKeyMinVersion]; ok && v != "" {
 		parsed, err := httputil.ParseTLSMinVersion(v)
 		if err != nil {
-			if logger != nil {
-				logger.Warn("ignoring invalid TLS min version, falling back to default",
-					slog.String("instance", instance),
-					slog.String("value", v),
-					slog.String("error", err.Error()),
-				)
-			}
-		} else {
-			tls.MinVersion = parsed
+			return nil, fmt.Errorf("TLS_MIN_VERSION for instance %q: %w", instance, err)
 		}
+		tls.MinVersion = parsed
 	}
 
 	if tls.IsZero() {
-		return nil
+		return nil, nil
 	}
-	return &tls
+	return &tls, nil
 }
 
 // parseBoolish accepts the same truthy values as internal/config.parseBool so
 // the registry does not need to import internal packages.
 func parseBoolish(s string) bool {
+	value, _ := parseBoolishValue(s)
+	return value
+}
+
+func parseBoolishValue(s string) (bool, bool) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "true", "1", "yes", "on":
-		return true
+		return true, true
+	case "false", "0", "no", "off":
+		return false, true
 	default:
-		return false
+		return false, false
 	}
 }

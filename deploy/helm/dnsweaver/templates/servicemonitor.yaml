@@ -1,3 +1,9 @@
+{{- if and .Values.serviceMonitor.enabled (not .Values.existingConfigMap) }}
+{{- $address := default "127.0.0.1" .Values.config.server.address }}
+{{- if or (not .Values.config.server.allowNetwork) (not (or (eq $address "0.0.0.0") (eq $address "::"))) }}
+{{- fail "serviceMonitor.enabled requires config.server.address to be 0.0.0.0 or :: and config.server.allowNetwork=true; this opt-in is not authentication, so restrict access with a NetworkPolicy or firewall" }}
+{{- end }}
+{{- end }}
 {{- if .Values.serviceMonitor.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

@@ -37,6 +37,11 @@ data:
 
     server:
       port: 8080
+      # Loopback is compatible with the Deployment's exec probes. To expose
+      # metrics, set a non-loopback address and allow_network: true, then add
+      # a NetworkPolicy or firewall restriction. The opt-in is not authentication.
+      address: 127.0.0.1
+      allow_network: false
 
     # Sources — order matters (first match wins)
     sources:

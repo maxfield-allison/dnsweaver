@@ -258,6 +258,10 @@ func mergeGlobalConfig(base *GlobalConfig) (*GlobalConfig, []*ConfigError) {
 	if healthPortErr != nil {
 		errs = append(errs, healthPortErr)
 	}
+	healthAddress, healthAllowNetwork, healthListenerErrs := healthListenerFromEnvironment(cfg.HealthAddress, cfg.HealthAllowNetwork)
+	cfg.HealthAddress = healthAddress
+	cfg.HealthAllowNetwork = healthAllowNetwork
+	errs = append(errs, healthListenerErrs...)
 
 	// Note: DNSWEAVER_SOURCE (singular) is deprecated. Source list is
 	// determined by parseSources() which reads DNSWEAVER_SOURCES and

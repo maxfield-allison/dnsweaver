@@ -14,6 +14,8 @@ GOCMD := go
 GOBUILD := $(GOCMD) build
 GOTEST := $(GOCMD) test
 GOMOD := $(GOCMD) mod
+GOLANGCI_LINT_VERSION := v2.13.2
+GOVULNCHECK_VERSION := v1.8.0
 
 # Binary names
 BINARY_NAME := dnsweaver
@@ -79,7 +81,7 @@ lint:
 		golangci-lint run ./...; \
 	else \
 		echo "⚠️  golangci-lint not installed. Install with:"; \
-		echo "    go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"; \
+		echo "    go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)"; \
 		exit 1; \
 	fi
 
@@ -122,12 +124,7 @@ security: vuln secrets
 
 ## vuln: Check for known vulnerabilities
 vuln:
-	@if command -v govulncheck >/dev/null 2>&1; then \
-		govulncheck ./...; \
-	else \
-		echo "⚠️  govulncheck not installed. Install with:"; \
-		echo "    go install golang.org/x/vuln/cmd/govulncheck@latest"; \
-	fi
+	./scripts/govulncheck-gate.sh
 
 ## secrets: Scan for secrets with gitleaks
 secrets:
@@ -196,8 +193,8 @@ clean:
 
 ## tools: Install development tools
 tools:
-	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 	@echo ""
 	@echo "Install gitleaks separately: https://github.com/gitleaks/gitleaks#installing"
 

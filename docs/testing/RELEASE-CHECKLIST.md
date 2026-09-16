@@ -6,9 +6,9 @@ Pre-release testing protocol for dnsweaver. Every item must pass before tagging 
 
 ```bash
 # Run the full pre-release validation locally
-gofmt -w . && gofmt -l .
-golangci-lint run ./...
-go test ./... -count=1 -race
+test -z "$(gofmt -l .)"
+golangci-lint run --config .golangci.yml
+go test -race -count=1 ./...
 go build ./...
 make test-integration  # Requires test environment
 ```
@@ -27,8 +27,11 @@ These run automatically: GitHub Actions on every pull request (lint, tests, buil
 | ☐ Race detection | `go test ./... -race` | No data races detected |
 | ☐ Build | `go build ./...` | Clean build, no errors |
 | ☐ Docker build | `docker build .` | Image builds successfully |
-| ☐ SBOM generation | CI artifact | SBOM generated for release |
-| ☐ Security scan | `gitleaks detect` | No secret leaks |
+| ☐ Dependency gate | `./scripts/govulncheck-gate.sh` | Structured scan completes; every finding is fixed or has a current accepted exception |
+| ☐ Secret scan | GitLab `security:gitleaks` | Checked-out tree has no detected secret |
+| ☐ Internal image scan | GitLab `security:container-scan` | Internal amd64 image has no unacknowledged CRITICAL/HIGH finding |
+
+The pipeline does not currently generate an SBOM or bind the internal scanned image to the separately rebuilt public amd64/arm64 images. Those remain release qualification gaps; a green source pipeline is not evidence that a published digest was scanned, signed, or provenanced.
 
 ## 2. Manual Integration Tests
 
@@ -92,7 +95,7 @@ For each source enabled in the test environment:
 | ☐ Git tag follows SemVer (`vMAJOR.MINOR.PATCH`) | |
 | ☐ Docker image tagged and pushed to registry | |
 | ☐ GitHub Release created by the tag pipeline | |
-| ☐ SBOM attached to release | |
+| ☐ SBOM attached to release | Not automated; required before making an SBOM/provenance claim |
 
 ## 5. Post-Release Verification
 

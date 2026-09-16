@@ -124,7 +124,9 @@ type FileProviderConfig struct {
 
 // FileServerConfig holds health/metrics server settings.
 type FileServerConfig struct {
-	Port int `yaml:"port,omitempty"` // Port for health/metrics endpoints
+	Port         int    `yaml:"port,omitempty"`          // Port for health/metrics endpoints
+	Address      string `yaml:"address,omitempty"`       // Listener IP address
+	AllowNetwork *bool  `yaml:"allow_network,omitempty"` // Explicit opt-in for non-loopback binding
 }
 
 // envVarPattern matches ${VAR} or ${VAR:-default} syntax.
@@ -181,6 +183,9 @@ func (c *FileConfig) interpolateEnvVars() {
 		}
 		c.Kubernetes.LabelSelector = InterpolateEnvVars(c.Kubernetes.LabelSelector)
 		c.Kubernetes.AnnotationFilter = InterpolateEnvVars(c.Kubernetes.AnnotationFilter)
+	}
+	if c.Server != nil {
+		c.Server.Address = InterpolateEnvVars(c.Server.Address)
 	}
 
 	for i := range c.Sources {
@@ -259,6 +264,8 @@ func (c *FileConfig) ToGlobalConfig() *GlobalConfig {
 		ReconcileInterval:    DefaultReconcileInterval,
 		ShutdownTimeout:      DefaultShutdownTimeout,
 		HealthPort:           DefaultHealthPort,
+		HealthAddress:        DefaultHealthAddress,
+		HealthAllowNetwork:   DefaultHealthAllowNetwork,
 		Platform:             DefaultPlatform,
 		DockerHost:           DefaultDockerHost,
 		DockerMode:           DefaultDockerMode,
@@ -381,6 +388,12 @@ func (c *FileConfig) ToGlobalConfig() *GlobalConfig {
 	if c.Server != nil {
 		if c.Server.Port > 0 && c.Server.Port <= 65535 {
 			cfg.HealthPort = c.Server.Port
+		}
+		if c.Server.Address != "" {
+			cfg.HealthAddress = strings.TrimSpace(c.Server.Address)
+		}
+		if c.Server.AllowNetwork != nil {
+			cfg.HealthAllowNetwork = *c.Server.AllowNetwork
 		}
 	}
 

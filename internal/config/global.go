@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"regexp"
 	"strconv"
@@ -27,6 +28,8 @@ const (
 	DefaultReconcileInterval    = 60 * time.Second
 	DefaultShutdownTimeout      = 30 * time.Second
 	DefaultHealthPort           = 8080
+	DefaultHealthAddress        = "127.0.0.1"
+	DefaultHealthAllowNetwork   = false
 	DefaultDockerHost           = "unix:///var/run/docker.sock"
 	DefaultDockerMode           = "auto"
 	DefaultDockerConnectTimeout = 30 * time.Second
@@ -53,15 +56,17 @@ type GlobalConfig struct {
 	LogCompress   bool   // Compress rotated log files with gzip
 
 	// Behavior
-	DryRun            bool          // If true, don't make actual DNS changes
-	CleanupOrphans    bool          // If true, delete DNS records for removed workloads
-	CleanupOnStop     bool          // If true, delete DNS records when containers stop; if false, only when removed
-	OwnershipTracking bool          // If true, use TXT records to track record ownership
-	AdoptExisting     bool          // If true, adopt existing DNS records by creating ownership TXT records
-	DefaultTTL        int           // Default TTL for records if not specified per-provider
-	ReconcileInterval time.Duration // How often to reconcile DNS records
-	ShutdownTimeout   time.Duration // Max time to wait for in-flight operations during shutdown
-	HealthPort        int           // Port for health/metrics endpoints
+	DryRun             bool          // If true, don't make actual DNS changes
+	CleanupOrphans     bool          // If true, delete DNS records for removed workloads
+	CleanupOnStop      bool          // If true, delete DNS records when containers stop; if false, only when removed
+	OwnershipTracking  bool          // If true, use TXT records to track record ownership
+	AdoptExisting      bool          // If true, adopt existing DNS records by creating ownership TXT records
+	DefaultTTL         int           // Default TTL for records if not specified per-provider
+	ReconcileInterval  time.Duration // How often to reconcile DNS records
+	ShutdownTimeout    time.Duration // Max time to wait for in-flight operations during shutdown
+	HealthPort         int           // Port for health/metrics endpoints
+	HealthAddress      string        // IP address for the management listener
+	HealthAllowNetwork bool          // Explicit opt-in for non-loopback management binding
 
 	// Platform selection
 	Platform string // docker, kubernetes, both
@@ -373,6 +378,10 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	if healthPortErr != nil {
 		errs = append(errs, healthPortErr)
 	}
+	healthAddress, healthAllowNetwork, healthListenerErrs := healthListenerFromEnvironment(DefaultHealthAddress, DefaultHealthAllowNetwork)
+	cfg.HealthAddress = healthAddress
+	cfg.HealthAllowNetwork = healthAllowNetwork
+	errs = append(errs, healthListenerErrs...)
 
 	// Parse INSTANCE_ID
 	if instanceID := getEnv("DNSWEAVER_INSTANCE_ID"); instanceID != "" {
@@ -414,7 +423,11 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	// Proxmox VE settings
 	cfg.ProxmoxURL = getEnv("DNSWEAVER_PROXMOX_URL")
 	cfg.ProxmoxTokenID = getEnv("DNSWEAVER_PROXMOX_TOKEN_ID")
-	cfg.ProxmoxTokenSecret = getEnvOrFile("DNSWEAVER_PROXMOX_TOKEN_SECRET", "DNSWEAVER_PROXMOX_TOKEN_SECRET_FILE")
+	var proxmoxSecretErr error
+	cfg.ProxmoxTokenSecret, _, proxmoxSecretErr = readEnvOrFile("DNSWEAVER_PROXMOX_TOKEN_SECRET", "DNSWEAVER_PROXMOX_TOKEN_SECRET_FILE")
+	if proxmoxSecretErr != nil {
+		errs = append(errs, configErrHelp("DNSWEAVER_PROXMOX_TOKEN_SECRET_FILE", proxmoxSecretErr.Error(), "Ensure the configured secret file exists and is readable by the dnsweaver process"))
+	}
 	cfg.ProxmoxNodeFilter = getEnv("DNSWEAVER_PROXMOX_NODE_FILTER")
 	cfg.ProxmoxTagFilter = getEnv("DNSWEAVER_PROXMOX_TAG_FILTER")
 	cfg.ProxmoxStateFilter = getEnv("DNSWEAVER_PROXMOX_STATE_FILTER")
@@ -527,6 +540,63 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	cfg.IncusCertStore = getEnv("DNSWEAVER_INCUS_CERT_STORE")
 
 	return cfg, errs
+}
+
+func healthListenerFromEnvironment(fallbackAddress string, fallbackAllowNetwork bool) (string, bool, []*ConfigError) {
+	address := fallbackAddress
+	allowNetwork := fallbackAllowNetwork
+	var errs []*ConfigError
+
+	if configured := strings.TrimSpace(getEnv("DNSWEAVER_HEALTH_ADDRESS")); configured != "" {
+		address = configured
+	}
+	if configured := getEnv("DNSWEAVER_HEALTH_ALLOW_NETWORK"); configured != "" {
+		parsed, ok := parseBoolValue(configured)
+		if !ok {
+			errs = append(errs, configErrFull(
+				"DNSWEAVER_HEALTH_ALLOW_NETWORK",
+				fmt.Sprintf("invalid boolean %q", configured),
+				"Use true only when a non-loopback listener is required and network access is separately restricted",
+				"DNSWEAVER_HEALTH_ALLOW_NETWORK=false",
+			))
+		} else {
+			allowNetwork = parsed
+		}
+	}
+
+	if err := validateHealthListener(address, allowNetwork); err != nil {
+		errs = append(errs, err)
+	}
+	return address, allowNetwork, errs
+}
+
+func validateHealthListener(address string, allowNetwork bool) *ConfigError {
+	ip := net.ParseIP(strings.TrimSpace(address))
+	if ip == nil {
+		return configErrFull(
+			"DNSWEAVER_HEALTH_ADDRESS",
+			fmt.Sprintf("must be an IP address without a port, got %q", address),
+			"Use 127.0.0.1 or ::1 for local-only access; non-loopback addresses also require DNSWEAVER_HEALTH_ALLOW_NETWORK=true",
+			"DNSWEAVER_HEALTH_ADDRESS=127.0.0.1",
+		)
+	}
+	if ip.IsMulticast() {
+		return configErrFull(
+			"DNSWEAVER_HEALTH_ADDRESS",
+			fmt.Sprintf("multicast address %q cannot be used for the management listener", address),
+			"Use a loopback, unicast, or wildcard address",
+			"DNSWEAVER_HEALTH_ADDRESS=127.0.0.1",
+		)
+	}
+	if !ip.IsLoopback() && !allowNetwork {
+		return configErrFull(
+			"DNSWEAVER_HEALTH_ALLOW_NETWORK",
+			fmt.Sprintf("must be true before binding the management listener to non-loopback address %q", address),
+			"Non-loopback management access is not authenticated; restrict it with firewall or network policy controls",
+			"DNSWEAVER_HEALTH_ADDRESS=0.0.0.0 DNSWEAVER_HEALTH_ALLOW_NETWORK=true",
+		)
+	}
+	return nil
 }
 
 // instanceIDPattern matches valid instance IDs: alphanumeric, hyphens, underscores, dots.

@@ -38,7 +38,15 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 		return actions, managed
 	}
 
-	existingRecords, _ := cache.getExistingRecords(instance.Name(), set.Key.Hostname)
+	existingRecords, _ := cache.getExistingRecords(instance.Name(), set.Key.Hostname, set.Key.RecordType)
+	// A successful replacement or an external deletion retires live authority
+	// for absent members. Never keep a stale no-TXT claim indefinitely.
+	managed = nil
+	for _, prior := range previous {
+		if prior.Type == set.Key.RecordType && recordMemberPresent(existingRecords, prior) {
+			managed = append(managed, prior)
+		}
+	}
 	var sameType, conflicting []provider.Record
 	for _, existing := range existingRecords {
 		switch {
@@ -66,31 +74,15 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 		}
 	}
 
-	if len(conflicting) > 0 {
-		adopt := setAllowsAdoption(r, set)
-		for _, record := range conflicting {
-			if !allowRemovals || !r.mayDeleteMember(instance, record, cache, previous, adopt) {
-				for _, member := range set.Members {
-					actions = append(actions, memberAction(ActionSkip, StatusSkipped, instance, member.Record, errRecordTypeConflict))
-				}
-				return actions, managed
-			}
-		}
-		for _, record := range conflicting {
-			action, ok := r.deleteSetMember(ctx, instance, record, cache)
-			actions = append(actions, action)
-			if !ok {
-				return actions, managed
-			}
-			if !r.isDryRun() {
-				managed = forgetRecordMember(managed, record)
-			}
-		}
+	// Empty desired sets retire only their own type; they must never replace
+	// another type which a preceding desired set has just created or restored.
+	if len(set.Members) > 0 && len(conflicting) > 0 {
+		return r.reconcileCrossTypeSet(ctx, set, cache, previous, conflicting, allowRemovals)
 	}
 
 	matchedExisting := make([]bool, len(sameType))
 	_, hasLegacyOwnership := cache.legacyOwnershipRecord(instance.Name(), set.Key.Hostname, instance.InstanceID)
-	legacyUpgradeComplete := hasLegacyOwnership && instance.Provider.Capabilities().SupportsOwnershipTXT
+	legacyUpgradeComplete := hasLegacyOwnership && instance.Provider.Capabilities().SupportsOwnershipTXT && set.Key.RecordType != provider.RecordTypeTXT
 	desiredWritesSucceeded := true
 
 	// A CNAME target change must update the one exact existing CNAME instead of
@@ -124,7 +116,10 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 				desiredWritesSucceeded = false
 			} else {
 				managed = rememberRecordMember(managed, record)
+				cache.addRecord(instance.Name(), record)
 				if err := r.ensureMemberOwnership(ctx, instance, record, cache); err != nil {
+					action.Status = StatusFailed
+					action.Error = fmt.Sprintf("creating member ownership: %v", err)
 					r.logger.Warn("failed to create member ownership record",
 						slog.String("provider", instance.Name()),
 						slog.String("hostname", record.Hostname),
@@ -144,7 +139,12 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 		_, hasMemberOwnership := cache.memberOwnershipRecord(instance.Name(), record, instance.InstanceID)
 		adopt := r.effectiveAdoptExisting(desiredMember.Claim, instance)
 		mayManage := !r.config.OwnershipTracking || !instance.Mode.RequiresOwnership() ||
-			hasMemberOwnership || adopt || hasLegacyOwnership
+			hasMemberOwnership || adopt || hasLegacyOwnership ||
+			(!instance.Provider.Capabilities().SupportsOwnershipTXT && recordMemberPresent(previous, existing))
+		if record.Type == provider.RecordTypeTXT {
+			mayManage = !cache.foreignMemberOwnership(instance.Name(), record, instance.InstanceID) &&
+				(hasMemberOwnership || recordMemberPresent(previous, existing) || adopt)
+		}
 		if mayManage && !r.isDryRun() {
 			managed = rememberRecordMember(managed, existing)
 		}
@@ -252,6 +252,14 @@ func (r *Reconciler) mayDeleteMember(instance *provider.ProviderInstance, record
 	if !instance.Mode.AllowsDelete() {
 		return false
 	}
+	if record.Type == provider.RecordTypeTXT {
+		if cache.foreignMemberOwnership(instance.Name(), record, instance.InstanceID) {
+			return false
+		}
+		_, owned := cache.memberOwnershipRecord(instance.Name(), record, instance.InstanceID)
+		return owned || recordMemberPresent(previous, record)
+	}
+
 	if !instance.Mode.RequiresOwnership() || !r.config.OwnershipTracking || adopt {
 		return true
 	}
@@ -279,6 +287,7 @@ func (r *Reconciler) deleteSetMember(ctx context.Context, instance *provider.Pro
 		action.Error = err.Error()
 		return action, false
 	}
+	cache.removeRecord(instance.Name(), record)
 	if marker, owned := cache.memberOwnershipRecord(instance.Name(), record, instance.InstanceID); owned {
 		if err := instance.DeleteMember(ctx, marker); err != nil && !errors.Is(err, provider.ErrNotFound) {
 			r.logger.Warn("failed to delete member ownership record",
@@ -287,6 +296,8 @@ func (r *Reconciler) deleteSetMember(ctx context.Context, instance *provider.Pro
 				slog.String("target", record.Target),
 				slog.String("error", err.Error()),
 			)
+		} else {
+			cache.removeRecord(instance.Name(), marker)
 		}
 	}
 	return action, true
@@ -304,6 +315,7 @@ func (r *Reconciler) ensureMemberOwnership(ctx context.Context, instance *provid
 	if err := instance.CreateMemberOwnershipRecord(ctx, record, record.Metadata); err != nil {
 		return err
 	}
+	cache.addRecord(instance.Name(), desired)
 	if found {
 		if err := instance.DeleteMember(ctx, existing); err != nil && !errors.Is(err, provider.ErrNotFound) {
 			return fmt.Errorf("deleting stale member ownership marker: %w", err)

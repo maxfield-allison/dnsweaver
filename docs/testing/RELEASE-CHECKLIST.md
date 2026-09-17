@@ -1,6 +1,6 @@
 # Release Checklist
 
-Pre-release testing protocol for dnsweaver. Every item must pass before tagging a release.
+Release verification for dnsweaver. Complete the source checks before tagging, then qualify the versioned images before publication. Record evidence or an explicit limitation for each applicable item. The [release procedure](../contributing/releases.md) defines the publication and recovery steps.
 
 ## Quick Reference
 
@@ -17,7 +17,7 @@ make test-integration  # Requires test environment
 
 ## 1. Automated CI Checks
 
-These run automatically: GitHub Actions on every pull request (lint, tests, build, govulncheck, CodeQL), and the GitLab tag pipeline again at release time. Verify all pass on `main` before tagging.
+GitHub Actions runs source checks on pull requests and main. GitLab also checks qualifying source changes and version tags. Complete source checks on the exact merged commit before tagging. Then complete image qualification and release assembly for the exact tag before publication.
 
 | Check | Command | Pass Criteria |
 |-------|---------|---------------|
@@ -29,9 +29,11 @@ These run automatically: GitHub Actions on every pull request (lint, tests, buil
 | ☐ Docker build | `docker build .` | Image builds successfully |
 | ☐ Dependency gate | `./scripts/govulncheck-gate.sh` | Structured scan completes; every finding is fixed or has a current accepted exception |
 | ☐ Secret scan | GitLab `security:gitleaks` | Checked-out tree has no detected secret |
-| ☐ Internal image scan | GitLab `security:container-scan` | Internal amd64 image has no unacknowledged CRITICAL/HIGH finding |
+| ☐ Native image qualification | GitLab `docker:build:amd64` and `docker:build:arm64` | Each exact digest passes version, health, listener and readiness checks on its native architecture |
+| ☐ Image scans | GitLab `security:container:amd64` and `security:container:arm64` | Each qualified digest passes the reviewed HIGH/CRITICAL vulnerability policy and has a matching SBOM |
+| ☐ Release assembly | GitLab `release:assemble` | Index contains exactly the two qualified architecture digests; provenance, SBOMs and checksums match |
 
-The pipeline does not currently generate an SBOM or bind the internal scanned image to the separately rebuilt public amd64/arm64 images. Those remain release qualification gaps; a green source pipeline is not evidence that a published digest was scanned, signed, or provenanced.
+The publication job promotes the qualified digests without rebuilding. Review the retained evidence for the exact tag and inspect public assets for private data before publication. Provenance is an unsigned declared build record, not a signed attestation. A green branch pipeline does not qualify a later squash commit or a different embedded release version.
 
 ## 2. Manual Integration Tests
 
@@ -94,14 +96,18 @@ For each source enabled in the test environment:
 | ☐ CHANGELOG.md has release date and version header | |
 | ☐ Git tag follows SemVer (`vMAJOR.MINOR.PATCH`) | |
 | ☐ Docker image tagged and pushed to registry | |
-| ☐ GitHub Release created by the tag pipeline | |
-| ☐ SBOM attached to release | Not automated; required before making an SBOM/provenance claim |
+| ☐ Versioned amd64/arm64 images qualified before public promotion | |
+| ☐ Explicit publication approval recorded before the manual `github:release` job | |
+| ☐ GitHub Release published by the manual job | |
+| ☐ Both SBOMs, unsigned provenance and SHA256SUMS attached and verified | |
 
 ## 5. Post-Release Verification
 
 | Check | Status |
 |-------|--------|
-| ☐ Docker image pulls successfully | |
+| ☐ Public images pull by digest from GHCR and Docker Hub; both platforms and embedded versions match | |
+| ☐ Intended version/latest aliases and GitHub latest-release pointer read back | |
+| ☐ Downloaded release assets match SHA256SUMS | |
 | ☐ Fresh deployment with example config works | |
 | ☐ GitLab pipeline for tag completed successfully | |
 | ☐ GitHub Release published, notes match CHANGELOG.md | |
@@ -120,40 +126,15 @@ See the [CHANGELOG](https://github.com/maxfield-allison/dnsweaver/blob/main/CHAN
 
 ## Release Workflow
 
-GitHub is the origin and the tag is what triggers a release. The `Sync to GitLab`
-workflow mirrors `main` and `v*` tags to the GitLab instance, whose tag pipeline
-builds the multi-arch images, pushes them to GHCR and Docker Hub, and publishes
-the GitHub Release with notes drawn from the changelog. There is no `develop`
-branch; everything merges to `main` by pull request.
+GitHub is the public source. The `Sync to GitLab` workflow mirrors merged `main` commits and version tags. A tag starts qualification; publication waits for the manual `github:release` job and maintainer approval.
 
-```bash
-# 1. main is clean and the merged PRs were green in CI
-git checkout main
-git pull origin main
-gofmt -l . && golangci-lint run ./... && go test ./... -count=1 -race && go build ./...
-
-# 2. Move the Unreleased section of CHANGELOG.md under a version header with
-#    today's date, and merge that change by PR like any other.
-
-# 3. Tag on main and push the tag to GitHub
-git tag -a v1.0.0 -m "v1.0.0 - Description of release"
-git push origin v1.0.0
-
-# 4. Watch the Sync to GitLab workflow, then the GitLab tag pipeline. When it
-#    finishes, the images are published and the GitHub Release exists.
-```
+1. Verify the merged commit on both forges and complete its source checks. Use an isolated checkout; preserve any unrelated local work.
+2. Prepare and merge a version/changelog PR. Include migration instructions, update the Helm chart's version and default application image tag, and review the release notes. The publication job draws its notes from the versioned changelog section.
+3. With approval for the exact commit and version, create and push the public tag. Confirm that the mirror starts the tag pipeline.
+4. Inspect both native architecture jobs, image scans, the assembled index, SBOMs, unsigned provenance and checksums. Branch-version images do not substitute for tag-version qualification.
+5. With publication approval, run the manual `github:release` job. Follow the [release procedure](../contributing/releases.md) for retry and rollback; never move an existing tag to conceal a mismatch.
+6. Verify the public registries, assets and intended aliases. Deployment is a separate action.
 
 ## Hotfix Workflow
 
-A hotfix is an ordinary pull request against `main` followed by a patch tag:
-
-```bash
-# 1. Branch from main, fix, run the checks above, update CHANGELOG.md, open the PR
-git checkout -b fix/short-description main
-
-# 2. After merge, tag the patch release
-git checkout main
-git pull origin main
-git tag -a v1.0.1 -m "v1.0.1 - Hotfix: description"
-git push origin v1.0.1
-```
+A hotfix follows the same sequence: merge a focused fix against `main`, prepare the patch version and changelog, qualify the exact tag, then publish with approval. A smaller source change does not remove the artifact verification or post-publication checks.

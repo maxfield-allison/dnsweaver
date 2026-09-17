@@ -115,6 +115,11 @@ func (r *Registry) ExtractAllWithStatus(ctx context.Context, w workload.Workload
 		)
 		return nil, true
 	}
+	instances, err := workloadInstances(w)
+	if err != nil {
+		r.logger.Warn("invalid workload provider selection; preserving existing records", slog.String("workload", w.Name), slog.String("error", err.Error()))
+		return nil, false
+	}
 
 	workloadAdopt, adoptKey, adoptValid := workloadAdoptExistingHint(w)
 	if !adoptValid {
@@ -149,6 +154,8 @@ func (r *Registry) ExtractAllWithStatus(ctx context.Context, w workload.Workload
 		}
 
 		if len(hostnames) > 0 {
+			hostnames = append(Hostnames(nil), hostnames...)
+			applyWorkloadInstances(hostnames, instances)
 			applyWorkloadAdoptionHint(hostnames, workloadAdopt)
 			r.logger.Debug("source extracted hostnames",
 				slog.String("source", src.Name()),
@@ -270,6 +277,10 @@ func (r *Registry) DiscoverableSources() []Source {
 // ExtractFrom queries a specific source by name.
 // Returns an error if the source is not found.
 func (r *Registry) ExtractFrom(ctx context.Context, sourceName string, w workload.Workload) (Hostnames, error) {
+	instances, err := workloadInstances(w)
+	if err != nil {
+		return nil, err
+	}
 	r.mu.RLock()
 	src, exists := r.byName[sourceName]
 	r.mu.RUnlock()
@@ -282,6 +293,8 @@ func (r *Registry) ExtractFrom(ctx context.Context, sourceName string, w workloa
 	if err != nil {
 		return nil, err
 	}
+	hostnames = append(Hostnames(nil), hostnames...)
+	applyWorkloadInstances(hostnames, instances)
 	workloadAdopt, adoptKey, valid := workloadAdoptExistingHint(w)
 	if !valid {
 		r.logger.Warn("invalid workload adoption hint (must be true/false); ignoring",

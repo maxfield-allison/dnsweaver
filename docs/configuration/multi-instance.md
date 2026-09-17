@@ -15,7 +15,7 @@ This creates three independent provider instances. Each instance has its own:
 - Record type and target
 - Ownership tracking scope
 
-Instances operate independently — a service matching multiple instance domain patterns creates records in all matching providers.
+By default, a service matching multiple instance domain patterns creates records in all matching providers. A workload can select a smaller set of those providers with `dnsweaver.instances`.
 
 ## Instance Naming
 
@@ -29,6 +29,33 @@ Instance names become part of environment variable prefixes. The name is upperca
 
 !!! tip
     Use descriptive names that identify the provider's purpose, not just its type. `internal-dns` is better than `technitium1`.
+
+## Workload Provider Selection
+
+The Docker label `dnsweaver.instances` selects which configured provider instances receive every hostname discovered on that workload, including hostnames from Traefik. Names are case-sensitive and must match the configured instance names.
+
+```yaml
+labels:
+  - "traefik.http.routers.app.rule=Host(`app.example.com`)"
+  - "dnsweaver.instances=internal,external"
+```
+
+For Kubernetes, use the annotation:
+
+```yaml
+metadata:
+  annotations:
+    dnsweaver.dev/hostname: app.example.com
+    dnsweaver.dev/instances: internal,external
+```
+
+The selection is intersected with the operator's domain patterns, exclusions and workload filters. It cannot grant a workload access to a provider outside that scope. `dnsweaver.records.<name>.provider` overrides the workload selection for that named record, while still obeying the provider's scope.
+
+Without a selector, existing all-matching-provider routing is unchanged. Spaces around names are ignored and duplicate names are collapsed. An empty selector, an empty list member, an unknown provider, or contradictory label and annotation sets is invalid. Invalid selections do not fall back to all providers. They suppress removals for that reconciliation cycle; correcting or removing the selector lets reconciliation resume. A valid selection with no in-scope destination also suppresses removals.
+
+Changing `internal,external` to `internal` retires only the exact owned members on the external route. On providers with ownership TXT support, this also works after a restart. Unrelated records remain untouched. If discovery is incomplete or a provider snapshot cannot be read, removals wait. A failed destination write preserves the previous route. If the DNS write succeeds but its ownership marker fails, that destination needs ownership repair or explicit adoption before the previous route can be retired.
+
+These labels are available in the unreleased source. Check the changelog for your image tag before using them.
 
 ## Common Patterns
 
@@ -142,20 +169,13 @@ This prevents one copy's orphan cleanup from deleting records managed by the oth
 
 ### Providers Without TXT Support
 
-Some providers — **AdGuard Home**, **Pi-hole** (file mode), and **dnsmasq** — cannot store TXT records. For these providers, dnsweaver uses **target-based ownership inference** instead of TXT ownership records.
+Providers without ownership TXT support cannot recover proof of exact-member ownership from DNS after a restart. A running process can retain evidence of records it created or explicitly adopted and use that evidence for later changes and route cleanup. Matching the configured target alone does not grant authority over a pre-existing record.
 
-In target-based inference, orphan cleanup compares each record's type and target against the instance's configured values. Records that match are inferred as owned and cleaned up; records with different targets are preserved.
-
-This means `DNSWEAVER_INSTANCE_ID` has **no effect** on providers that don't support TXT records — ownership is determined entirely by target matching. If two copies of dnsweaver point at the same provider with different targets (e.g., different `DNSWEAVER_<INSTANCE>_TARGET` values), they will naturally avoid conflicting because each copy only touches records matching its own target.
-
-!!! tip
-    If two copies target the **same** provider with the **same** target value, there is no way to distinguish ownership. Avoid this configuration — instead, consolidate into a single copy with multiple instances.
-
-See [Operational Modes](modes.md) for details on how target-based inference works in managed mode.
+A restarted process leaves unowned records untouched unless adoption is explicitly enabled. `DNSWEAVER_INSTANCE_ID` cannot create durable ownership on these providers. Avoid overlapping scopes between independent dnsweaver processes, and review [Operational Modes](modes.md) before enabling adoption.
 
 ## Domain Overlap
 
-When multiple instances match the same hostname, **all matching instances create records**. This is by design — it enables split-horizon, multi-provider redundancy, and webhook notification patterns.
+When multiple instances match the same hostname, **all matching instances create records unless a workload selector narrows them**. This is by design — it enables split-horizon, multi-provider redundancy, and webhook notification patterns.
 
 To prevent overlap, use `EXCLUDE_DOMAINS`:
 

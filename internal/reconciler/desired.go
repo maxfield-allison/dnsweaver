@@ -3,6 +3,7 @@ package reconciler
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/provider"
 	"github.com/maxfield-allison/dnsweaver/pkg/source"
@@ -27,6 +28,7 @@ type desiredRecordSet struct {
 }
 
 type desiredCompilation struct {
+	RoutingComplete   bool
 	Sets              []*desiredRecordSet
 	Skipped           []Action
 	HostnameProviders map[string][]string
@@ -41,12 +43,15 @@ type previousDesiredSet struct {
 // resolves instance defaults, and deduplicates identical DNS members while
 // retaining how many claims want each one.
 func (r *Reconciler) compileDesiredRecordSets(claims []*source.Hostname) desiredCompilation {
-	compiled := desiredCompilation{HostnameProviders: make(map[string][]string)}
+	compiled := desiredCompilation{HostnameProviders: make(map[string][]string), RoutingComplete: true}
 	sets := make(map[desiredSetKey]*desiredRecordSet)
 
 	for _, claim := range claims {
 		candidates, skip := r.providersForClaim(claim)
 		if skip != nil {
+			if claim.Instances != nil || (claim.RecordHints != nil && claim.RecordHints.Provider != "") {
+				compiled.RoutingComplete = false
+			}
 			compiled.Skipped = append(compiled.Skipped, *skip)
 			continue
 		}
@@ -99,6 +104,14 @@ func (r *Reconciler) compileDesiredRecordSets(claims []*source.Hostname) desired
 }
 
 func (r *Reconciler) providersForClaim(claim *source.Hostname) ([]*provider.ProviderInstance, *Action) {
+	// Validate the whole selection before honoring a record override. A typo
+	// must not silently publish only part of a workload's requested routing.
+	for _, name := range claim.Instances {
+		if _, exists := r.providers.Get(name); !exists {
+			return nil, &Action{Type: ActionSkip, Status: StatusSkipped, Hostname: claim.Name,
+				Error: fmt.Sprintf("selected provider %q not found", name)}
+		}
+	}
 	if claim.RecordHints != nil && claim.RecordHints.Provider != "" {
 		name := claim.RecordHints.Provider
 		instance, exists := r.providers.Get(name)
@@ -122,6 +135,11 @@ func (r *Reconciler) providersForClaim(claim *source.Hostname) ([]*provider.Prov
 	}
 
 	instances := r.providers.MatchingProvidersForHostname(claim.Name, claim.Metadata)
+	if claim.Instances != nil {
+		instances = slices.DeleteFunc(instances, func(instance *provider.ProviderInstance) bool {
+			return !slices.Contains(claim.Instances, instance.Name())
+		})
+	}
 	if len(instances) == 0 {
 		return nil, &Action{
 			Type:     ActionSkip,

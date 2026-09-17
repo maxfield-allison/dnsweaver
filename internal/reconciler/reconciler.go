@@ -268,15 +268,23 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	for key, prior := range previous {
 		nextPrevious[key] = prior
 	}
-	allowRemovals := r.config.CleanupOrphans && extracted.Complete
+	complete := extracted.Complete && compiled.RoutingComplete
+	// A destination that could not be read cannot establish a safe route move.
+	// Preserve the old route until every provider snapshot is available.
+	for _, instance := range r.providers.All() {
+		complete = complete && cache.providerAvailable(instance.Name())
+	}
+	allowRemovals := r.config.CleanupOrphans && complete
 	if allowRemovals {
 		allowRemovals = r.memberRemovalsAllowed(compiled, cache, previous)
-	} else if r.config.CleanupOrphans && !extracted.Complete {
+	} else if r.config.CleanupOrphans && !complete {
 		r.logger.Warn("desired-state snapshot is partial; suppressing member removals")
 	}
+	failedDestinations := make(map[string]bool)
 	for _, set := range sets {
 		replacement := replacementKey{set.Key.Identity, set.Key.Hostname}
 		if blockedReplacements[replacement] {
+			failedDestinations[set.Key.Hostname] = true
 			continue
 		}
 		var priorRecords []provider.Record
@@ -285,10 +293,26 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 				priorRecords = append(priorRecords, prior.Records...)
 			}
 		}
-		actions, managed := r.reconcileDesiredSetWithState(ctx, set, cache, priorRecords, allowRemovals)
+		// reconciliationSets places desired destinations before empty retired
+		// routes. Preserve the old route if a destination write was rejected,
+		// including policy skips and failed ownership-marker creation.
+		setRemovals := allowRemovals && (len(set.Members) != 0 || !failedDestinations[set.Key.Hostname])
+		actions, managed := r.reconcileDesiredSetWithState(ctx, set, cache, priorRecords, setRemovals)
 		for _, action := range actions {
+			if action.Status == StatusFailed || (action.Status == StatusSkipped && action.Error != "" && action.Error != errRecordAlreadyExists) {
+				failedDestinations[set.Key.Hostname] = true
+			}
 			if action.Status == StatusFailed {
 				blockedReplacements[replacement] = true
+			}
+		}
+		if !dryRun {
+			for _, member := range set.Members {
+				_, durable := cache.memberOwnershipRecord(set.Instance.Name(), member.Record, set.Instance.InstanceID)
+				needsDurable := r.config.OwnershipTracking && set.Instance.Mode.RequiresOwnership() && set.Instance.Provider.Capabilities().SupportsOwnershipTXT
+				if !recordMemberPresent(managed, member.Record) || (needsDurable && !durable) {
+					failedDestinations[set.Key.Hostname] = true
+				}
 			}
 		}
 		sameTypeManaged := make([]provider.Record, 0, len(managed))
@@ -321,7 +345,7 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	}
 	r.hostnameProviders = compiled.HostnameProviders
 	r.mu.Unlock()
-	if extracted.Complete && !dryRun {
+	if complete && !dryRun {
 		r.rememberDesired(nextPrevious)
 	}
 

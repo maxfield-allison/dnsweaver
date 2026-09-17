@@ -79,6 +79,7 @@ labels:
 |-------|---------|-------------|
 | `dnsweaver.hostname` | - | Single hostname to create |
 | `dnsweaver.hostnames` | - | Comma-separated list of hostnames |
+| `dnsweaver.instances` | all matching providers | Comma-separated provider instance names for all hostnames on the workload, including other sources. See [workload selection](../configuration/multi-instance.md#workload-provider-selection). |
 | `dnsweaver.enabled` | `true` | Enable/disable processing |
 | `dnsweaver.ttl` | - | Override TTL for this container |
 | `dnsweaver.proxied` | provider default | Cloudflare proxy (orange-cloud) override — `true` or `false`. Applies to every hostname on the container. Ignored by non-Cloudflare providers. |
@@ -93,7 +94,7 @@ For advanced use cases, use the named record format: `dnsweaver.records.<name>.<
 | `dnsweaver.records.<name>.hostname` | - | Hostname for this record (required) |
 | `dnsweaver.records.<name>.type` | `A` | Record type: `A`, `AAAA`, `CNAME`, `SRV`, `TXT` |
 | `dnsweaver.records.<name>.target` | - | Override target (IP or hostname) |
-| `dnsweaver.records.<name>.provider` | - | Select a provider instance that also matches the configured domain and workload filters |
+| `dnsweaver.records.<name>.provider` | - | Override the workload selection for this record; the instance must still match the configured domain and workload filters |
 | `dnsweaver.records.<name>.ttl` | - | TTL for this specific record |
 | `dnsweaver.records.<name>.port` | - | Port (for SRV records) |
 | `dnsweaver.records.<name>.priority` | - | Priority (for SRV records) |

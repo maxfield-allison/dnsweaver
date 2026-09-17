@@ -18,22 +18,29 @@
 ARG GO_VERSION=1.26.8
 ARG GO_ALPINE_VERSION=3.24
 ARG ALPINE_VERSION=3.23
+ARG BUILDER_IMAGE=golang:${GO_VERSION}-alpine${GO_ALPINE_VERSION}
+ARG RUNTIME_IMAGE=alpine:${ALPINE_VERSION}
 
 # -----------------------------------------------------------------------------
 # Stage 1: Go Builder (Multi-Arch Cross-Compilation)
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${GO_ALPINE_VERSION} AS builder
+FROM --platform=$BUILDPLATFORM ${BUILDER_IMAGE} AS builder
 
 # Build arguments for multi-arch support
 ARG TARGETPLATFORM
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=dev
+ARG BUILD_DATE
+ARG BUILDER_PACKAGES_SHA256
 
 WORKDIR /build
 
 # Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apk add --no-cache git ca-certificates tzdata && \
+    if [ -n "$BUILDER_PACKAGES_SHA256" ]; then \
+      test "$(apk --no-network info -v | LC_ALL=C sort | sha256sum | cut -d ' ' -f1)" = "$BUILDER_PACKAGES_SHA256"; \
+    fi
 
 # Copy go mod files first for layer caching
 COPY go.mod go.sum* ./
@@ -45,7 +52,8 @@ COPY . .
 # Build with cross-compilation for target architecture
 # CGO_ENABLED=0 ensures pure Go build (no C dependencies)
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build \
-    -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    -buildvcs=false -trimpath \
+    -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" \
     -o dnsweaver \
     ./cmd/dnsweaver
 
@@ -55,7 +63,7 @@ RUN test -x dnsweaver
 # -----------------------------------------------------------------------------
 # Stage 2: Minimal Runtime (Alpine)
 # -----------------------------------------------------------------------------
-FROM alpine:${ALPINE_VERSION}
+FROM ${RUNTIME_IMAGE}
 
 # Labels
 LABEL org.opencontainers.image.title="dnsweaver" \
@@ -68,13 +76,17 @@ LABEL org.opencontainers.image.title="dnsweaver" \
 # CI passes --build-arg CACHE_BUST=$CI_PIPELINE_ID so every pipeline
 # runs a fresh apk upgrade, even if the base image hash is unchanged.
 ARG CACHE_BUST=dev
+ARG RUNTIME_PACKAGES_SHA256
 
 # Install runtime dependencies (no wget/curl — reduces attack surface)
 # Upgrade base packages first to pick up security fixes
 # su-exec: drops privileges from root to dnsweaver in the entrypoint after
 #         performing one-time docker socket GID detection.
 RUN apk upgrade --no-cache && \
-    apk add --no-cache ca-certificates tzdata su-exec
+    apk add --no-cache ca-certificates tzdata su-exec && \
+    if [ -n "$RUNTIME_PACKAGES_SHA256" ]; then \
+      test "$(apk --no-network info -v | LC_ALL=C sort | sha256sum | cut -d ' ' -f1)" = "$RUNTIME_PACKAGES_SHA256"; \
+    fi
 
 # Create non-root user
 RUN addgroup -g 1000 dnsweaver && \

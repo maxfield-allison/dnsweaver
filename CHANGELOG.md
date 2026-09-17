@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Workloads can select provider instances across all hostname sources.** `dnsweaver.instances` and the Kubernetes annotation `dnsweaver.dev/instances` narrow routing within the operator's configured scope. Named-record provider overrides take precedence. Route changes retire exact owned members live and after restart on TXT-capable providers; malformed selections, incomplete discovery and failed destinations preserve previous routes. ([GitHub #183](https://github.com/maxfield-allison/dnsweaver/issues/183))
+
 - **Provider-scoped record sets preserve every distinct A and AAAA member.**
   Claims are deduplicated only after provider routing and target resolution, so
   repeated claims for one target create one record while distinct Proxmox,
@@ -56,6 +58,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The supported Go 1.26 line is patched to Go 1.26.8, OpenTelemetry core is updated to 1.44.0, and `golang.org/x/crypto` is updated to 0.57.0 with its compatible transitive modules.
 
 ### CI
+
+- Container publication now promotes the same amd64 and arm64 digests that passed runtime checks and vulnerability scanning. SBOMs, checksums and declared unsigned provenance accompany the release. Publication is manual, verifies the public tag, resumes matching drafts and refuses conflicting version tags; failed `latest` updates attempt rollback. See the [release procedure](docs/contributing/releases.md).
+- GitLab Go jobs use project-scoped dependency and compiler caches with bounded parallelism. Blocking lint retains package-loading timings and resource evidence without increasing its five-minute timeout.
 
 - Vulnerability checks now run pinned `govulncheck` structured output through one fail-closed policy gate. Missing tools, timeouts, malformed or truncated output, scanner failure, unknown findings, and undecided exceptions all fail while retaining raw and normalized evidence.
 - GitLab merge-request admission now covers Go, module, gate, workflow, Dockerfile, and entrypoint changes. Lint is blocking, tool and image versions are pinned, raw Go coverage is no longer mislabeled as Cobertura, and obsolete success-masking Swarm deployment jobs are removed.

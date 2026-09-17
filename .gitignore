@@ -46,3 +46,8 @@ Thumbs.db
 .venv/
 site/
 .cache/
+.artifacts/
+.docker-auth/
+/release/
+/public/
+__pycache__/

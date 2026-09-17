@@ -7,33 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-09-17
+
+This major release changes the management listener to loopback by default. Before upgrading, review remote health probes and Prometheus scrapers. Prefer the bundled local probes. If remote access is required, set `DNSWEAVER_HEALTH_ADDRESS=0.0.0.0` and `DNSWEAVER_HEALTH_ALLOW_NETWORK=true`, then restrict access with a NetworkPolicy, firewall or equivalent control. The opt-in does not provide authentication.
+
 ### Added
 
 - **Workloads can select provider instances across all hostname sources.** `dnsweaver.instances` and the Kubernetes annotation `dnsweaver.dev/instances` narrow routing within the operator's configured scope. Named-record provider overrides take precedence. Route changes retire exact owned members live and after restart on TXT-capable providers; malformed selections, incomplete discovery and failed destinations preserve previous routes. ([GitHub #183](https://github.com/maxfield-allison/dnsweaver/issues/183))
 
-- **Provider-scoped record sets preserve every distinct A and AAAA member.**
-  Claims are deduplicated only after provider routing and target resolution, so
-  repeated claims for one target create one record while distinct Proxmox,
-  Incus, or named-record targets remain separate members. Ownership markers,
-  replacement, orphan cleanup, provider-route changes, restart recovery, and
-  the deletion circuit breaker now operate on exact members without removing
-  unrelated siblings. Built-in providers either delete an exact member or
-  retain their documented safe limitation.
-  ([GitHub #177](https://github.com/maxfield-allison/dnsweaver/issues/177))
-- **Existing-record adoption can now be scoped to a provider, workload, or
-  named record.** `DNSWEAVER_{NAME}_ADOPT_EXISTING` overrides the global policy
-  for one provider. `dnsweaver.adopt` and `dnsweaver.dev/adopt` apply to every
-  hostname found on a workload, including hostnames discovered through
-  Traefik, while `dnsweaver.records.<name>.adopt` can narrow one named record.
-  Workloads may always disable adoption. Enabling it from a workload requires
-  `DNSWEAVER_{NAME}_ADOPT_EXISTING_ALLOW_OVERRIDES=true` on each provider that
-  permits the takeover, so one label cannot grant itself access to every DNS
-  backend.
-  ([GitHub #178](https://github.com/maxfield-allison/dnsweaver/issues/178))
+- **Provider-scoped record sets preserve every distinct A and AAAA member.** Claims are deduplicated only after provider routing and target resolution, so repeated claims for one target create one record while distinct Proxmox, Incus, or named-record targets remain separate members. Ownership markers, replacement, orphan cleanup, provider-route changes, restart recovery, and the deletion circuit breaker now operate on exact members without removing unrelated siblings. Built-in providers either delete an exact member or retain their documented safe limitation. ([GitHub #177](https://github.com/maxfield-allison/dnsweaver/issues/177))
+- **Existing-record adoption can now be scoped to a provider, workload, or named record.** `DNSWEAVER_{NAME}_ADOPT_EXISTING` overrides the global policy for one provider. `dnsweaver.adopt` and `dnsweaver.dev/adopt` apply to every hostname found on a workload, including hostnames discovered through Traefik, while `dnsweaver.records.<name>.adopt` can narrow one named record. Workloads may always disable adoption. Enabling it from a workload requires `DNSWEAVER_{NAME}_ADOPT_EXISTING_ALLOW_OVERRIDES=true` on each provider that permits the takeover, so one label cannot grant itself access to every DNS backend. ([GitHub #178](https://github.com/maxfield-allison/dnsweaver/issues/178))
 
 ### Changed
 
-- **Breaking: management endpoints now bind to loopback by default.** Remote health probes and Prometheus scrapers need an explicit listener address and network opt-in, with separate access restrictions. Bundled container and Kubernetes probes use local checks. See the [migration guide](docs/observability.md#migrating-from-earlier-releases) before upgrading.
+- **Breaking: management endpoints now bind to loopback by default.** Remote health probes and Prometheus scrapers need an explicit listener address and network opt-in, with separate access restrictions. Bundled container and Kubernetes probes use local checks. See the [migration guide](https://github.com/maxfield-allison/dnsweaver/blob/v3.0.0/docs/observability.md#migrating-from-earlier-releases) before upgrading.
 
 ### Fixed
 
@@ -41,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Kubernetes namespace filters now scope informer API requests.** Configured namespaces previously filtered the local cache only, so dnsweaver still required cluster-wide list/watch permissions. Each configured namespace now gets its own informer and can be authorized with namespace-scoped RBAC.
 - **Managed mode now leaves unowned same-type records untouched when adoption is disabled.** A pre-existing A, AAAA, CNAME, or SRV record with a different target could previously be updated even though `ADOPT_EXISTING=false`. Adoption policy now guards ownership creation, provider-state updates, target changes, type-conflict replacement, and create-race conflicts through one decision path.
 - **TXT reconciliation now converges without deleting unrelated values.** Ownership applies to exact TXT members, including quoted provider forms, so a second identical reconciliation is a no-op and authoritative mode does not widen a managed TXT change to other values at the same owner name.
-- **Failed cross-type replacement restores the previous answer and ownership.** Replacing A/AAAA/CNAME records now compensates after a failed create instead of leaving the old answer deleted. The compensation is best effort and is reported if restoration itself fails.
+- **Failed cross-type replacement attempts to restore the previous answer and ownership.** Replacing A/AAAA/CNAME records now compensates after a failed create instead of leaving the old answer deleted. The compensation is best effort and is reported if restoration itself fails.
 - **Cloudflare update logs reflect the state accepted by the API.** The update response is parsed and compared with the request; normalized type, name, content, TTL, or proxy state is reported rather than silently logging only the requested values.
 
 ### Security
@@ -59,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI
 
-- Container publication now promotes the same amd64 and arm64 digests that passed runtime checks and vulnerability scanning. SBOMs, checksums and declared unsigned provenance accompany the release. Publication is manual, verifies the public tag, resumes matching drafts and refuses conflicting version tags; failed `latest` updates attempt rollback. See the [release procedure](docs/contributing/releases.md).
+- Container publication now promotes the same amd64 and arm64 digests that passed runtime checks and vulnerability scanning. SBOMs, checksums and declared unsigned provenance accompany the release. Publication is manual, verifies the public tag, resumes matching drafts and refuses conflicting version tags; failed `latest` updates attempt rollback. See the [release procedure](https://github.com/maxfield-allison/dnsweaver/blob/v3.0.0/docs/contributing/releases.md).
 - GitLab Go jobs use project-scoped dependency and compiler caches with bounded parallelism. Blocking lint retains package-loading timings and resource evidence without increasing its five-minute timeout.
 
 - Vulnerability checks now run pinned `govulncheck` structured output through one fail-closed policy gate. Missing tools, timeouts, malformed or truncated output, scanner failure, unknown findings, and undecided exceptions all fail while retaining raw and normalized evidence.
@@ -1671,7 +1658,8 @@ release workflow.
 - GitLab CI/CD pipeline with GitHub release automation
 - Docker Hub and GitHub Container Registry publishing
 
-[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.2...HEAD
+[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.2...v3.0.0
 [2.8.2]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.1...v2.8.2
 [2.8.1]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/maxfield-allison/dnsweaver/compare/v2.7.3...v2.8.0

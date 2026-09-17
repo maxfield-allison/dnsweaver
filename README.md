@@ -75,7 +75,7 @@ Providers are where records get written. Run several at once to split internal a
 
 ### Before upgrading
 
-The changes under [Unreleased](CHANGELOG.md#unreleased) make health, readiness and metrics listen on loopback by default. Remote scrapers and probes need an explicit network listener and access restrictions. See the [management-listener migration guide](docs/observability.md#migrating-from-earlier-releases). The bundled container and Kubernetes probes use local checks.
+In [v3.0.0](CHANGELOG.md#300---2026-09-17), health, readiness and metrics listen on loopback by default. Remote scrapers and probes need an explicit network listener and access restrictions. See the [management-listener migration guide](docs/observability.md#migrating-from-earlier-releases). The bundled container and Kubernetes probes use local checks.
 
 The same changes reject invalid TLS settings and unreadable credential files instead of falling back. Remote dnsmasq updates require an SFTP server with the OpenSSH POSIX rename extension; see the [provider requirements](docs/providers/dnsmasq.md#requirements). Check the release notes for your image tag before applying these settings.
 

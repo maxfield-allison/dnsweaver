@@ -2,8 +2,8 @@ apiVersion: v2
 name: dnsweaver
 description: Automatic DNS records for containers, VMs and clusters
 type: application
-version: 1.0.0
-appVersion: "1.0.0"
+version: 3.0.0
+appVersion: "v3.0.0"
 home: https://github.com/maxfield-allison/dnsweaver
 sources:
   - https://github.com/maxfield-allison/dnsweaver

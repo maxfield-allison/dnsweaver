@@ -375,6 +375,8 @@ var providerConfigFields = []struct {
 	{"ENDPOINT", false},          // OVH: API region (e.g. ovh-eu)
 	// PowerDNS specific fields
 	{"SERVER_ID", false}, // PowerDNS: server id segment in the API path (default "localhost")
+	// UniFi specific fields
+	{"SITE", false}, // UniFi: site internalReference or UUID (default "default")
 }
 
 // mergeProviderEnvOverrides applies environment variable overrides to a

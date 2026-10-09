@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **UniFi Network provider.** A new `unifi` provider type manages DNS records on UniFi OS consoles (Dream Machine, Cloud Gateway, Cloud Key) and UniFi OS Server through the official Integration API, using only an API key. Supports A, AAAA, CNAME, TXT and SRV records with standard TXT ownership tracking and native in-place updates. Only user-defined DNS policies are managed, so console-derived entries are never touched. Requires UniFi Network 10.6 or later, and clients receive answers only through a UniFi gateway; the legacy standalone Network Application does not expose the Integration API and is not supported. See [docs/providers/unifi.md](docs/providers/unifi.md).
+
 ## [3.0.0] - 2026-09-17
 
 This major release changes the management listener to loopback by default. Before upgrading, review remote health probes and Prometheus scrapers. Prefer the bundled local probes. If remote access is required, set `DNSWEAVER_HEALTH_ADDRESS=0.0.0.0` and `DNSWEAVER_HEALTH_ALLOW_NETWORK=true`, then restrict access with a NetworkPolicy, firewall or equivalent control. The opt-in does not provide authentication.

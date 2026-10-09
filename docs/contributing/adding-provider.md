@@ -361,7 +361,7 @@ DNSWEAVER_{NAME}_ZONE_ID=...     # Or ZONE for name lookup
 DNSWEAVER_{NAME}_TTL=300
 ```
 
-### Private DNS Providers (Technitium, Pi-hole, dnsmasq, unbound, OPNsense, pfSense)
+### Private DNS Providers (Technitium, Pi-hole, dnsmasq, unbound, OPNsense, pfSense, UniFi)
 
 Characteristics:
 - Local network access

@@ -1680,7 +1680,8 @@ release workflow.
 - GitLab CI/CD pipeline with GitHub release automation
 - Docker Hub and GitHub Container Registry publishing
 
-[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v3.0.1...HEAD
+[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v3.0.2...HEAD
+[3.0.2]: https://github.com/maxfield-allison/dnsweaver/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/maxfield-allison/dnsweaver/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.2...v3.0.0
 [2.8.2]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.1...v2.8.2

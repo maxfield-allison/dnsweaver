@@ -1,1 +1,0 @@
-Technitium request errors now redact the configured API token before logging or returning an error, including transport failures and error responses that echo it. Query authentication remains compatible with older supported servers. After upgrading every affected instance, rotate any token captured in retained logs and review access to those logs.

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## [3.0.1] - 2026-10-11
+
+### Security
+
+- Technitium request errors now redact the configured API token before logging or returning an error, including transport failures and error responses that echo it. Query authentication remains compatible with older supported servers. After upgrading every affected instance, rotate any token captured in retained logs and review access to those logs. Upgrading does not remove credentials from earlier log entries.
+- The GitHub-to-GitLab mirror passes credentials through temporary HTTP authentication headers, refuses branch divergence and keeps existing tags immutable. Credentials are no longer stored in Git remotes or passed on command lines. Mirror secrets belong in the `gitlab-mirror` environment, limited to `main` and `v*` tags, with the repository-level token copy removed.
+- Update the supported Go 1.26 toolchain to 1.26.9 and `golang.org/x/net` to 0.60.0 for the October security fixes. CI and container builds use the patched toolchain.
+
+
 ## [3.0.0] - 2026-09-17
 
 This major release changes the management listener to loopback by default. Before upgrading, review remote health probes and Prometheus scrapers. Prefer the bundled local probes. If remote access is required, set `DNSWEAVER_HEALTH_ADDRESS=0.0.0.0` and `DNSWEAVER_HEALTH_ALLOW_NETWORK=true`, then restrict access with a NetworkPolicy, firewall or equivalent control. The opt-in does not provide authentication.

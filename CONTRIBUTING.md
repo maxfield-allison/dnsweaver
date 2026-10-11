@@ -11,7 +11,7 @@ account to contribute.
 
 ### Prerequisites
 
-- Go 1.26.8 (the supported toolchain patch is pinned in [`go.mod`](go.mod))
+- Go 1.26.9 (the supported toolchain patch is pinned in [`go.mod`](go.mod))
 - Docker (for building images and integration testing)
 - Access to a container orchestrator (optional, for integration testing)
 

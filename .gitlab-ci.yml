@@ -40,10 +40,10 @@ workflow:
     changes: *docker-files
 
 .go-base:
-  image: golang:1.26.8-alpine3.24
+  image: golang:1.26.9-alpine3.24
   cache:
     key:
-      prefix: "go-1.26.8"
+      prefix: "go-1.26.9"
       files: [go.sum]
     paths: [.cache/go/pkg/mod, .cache/go/bin, .cache/go-build, .cache/golangci-lint]
   before_script:

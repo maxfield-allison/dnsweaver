@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import subprocess
 import time
+from typing import Any
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -181,6 +182,41 @@ def package_hash(packages):
     return hashlib.sha256(("\n".join(sorted(packages)) + "\n").encode()).hexdigest()
 
 
+def public_sbom(document: dict[str, Any], private_repo: str) -> dict[str, Any]:
+    """Exclude staging tags while retaining digest and package evidence."""
+
+    def without_tags(value: Any) -> Any:
+        if isinstance(value, dict):
+            result = {}
+            for key, child in value.items():
+                if key == "properties" and isinstance(child, list):
+                    child = [
+                        p
+                        for p in child
+                        if not isinstance(p, dict)
+                        or p.get("name") != "aquasecurity:trivy:RepoTag"
+                    ]
+                result[key] = without_tags(child)
+            return result
+        if isinstance(value, list):
+            return [without_tags(child) for child in value]
+        return value
+
+    serialized = json.dumps(without_tags(document))
+    public_repo = "ghcr.io/maxfield-allison/dnsweaver"
+    for safe in ("", "/"):
+        serialized = serialized.replace(
+            urllib.parse.quote(private_repo, safe=safe),
+            urllib.parse.quote(public_repo, safe=safe),
+        )
+    serialized = serialized.replace(private_repo, public_repo)
+    if private_repo.split("/")[0] in serialized or re.search(
+        r"candidate-[0-9a-f]{40}-[0-9]+", serialized
+    ):
+        raise ValueError("SBOM still contains private staging metadata")
+    return json.loads(serialized)
+
+
 def scan(arch):
     directory = OUT / arch
     image = read_json(directory / "image.json")
@@ -193,16 +229,8 @@ def scan(arch):
     run("trivy", "image", "--format", "cyclonedx", "--output", str(sbom), image["image"])
     # Trivy includes the private staging reference in SBOM metadata. Publish a
     # neutral digest reference instead; keep the original scan report internal.
-    document = read_json(sbom)
-    serialized = json.dumps(document)
     private_repo = image["image"].split("@")[0]
-    public_repo = "ghcr.io/maxfield-allison/dnsweaver"
-    for safe in ("", "/"):
-        serialized = serialized.replace(urllib.parse.quote(private_repo, safe=safe), urllib.parse.quote(public_repo, safe=safe))
-    serialized = serialized.replace(private_repo, public_repo)
-    if private_repo.split("/")[0] in serialized:
-        raise ValueError("SBOM still contains the private staging host")
-    write_json(sbom, json.loads(serialized))
+    write_json(sbom, public_sbom(read_json(sbom), private_repo))
     report = read_json(raw)
     write_json(directory / "qualified.json", {**image,
         "scan": {"status": "passed", "tool": run("trivy", "--version").stdout.strip(),

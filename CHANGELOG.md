@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## [3.0.2] - 2026-10-11
+
+### Fixed
+
+- Release SBOMs omit staging repository tags and reject leftover staging metadata before qualification. Image digests, package versions and license information remain in the public evidence.
+
+### Security
+
+- Includes the security fixes from 3.0.1: Technitium API token redaction, mirror credential hardening, Go 1.26.9 and `golang.org/x/net` 0.60.0. Upgrade every affected instance before rotating tokens exposed in retained logs. Earlier log entries remain sensitive after upgrading.
+
+
 ## [3.0.1] - 2026-10-11
 
 ### Security

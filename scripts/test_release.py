@@ -163,6 +163,132 @@ class PromotionTests(unittest.TestCase):
         self.assertFalse(self.registry.writes)
 
 
+class SBOMScanTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.directory = Path(self.tmp.name)
+        self.private_repo = "staging.invalid/example/dnsweaver"
+        self.image = {
+            "source": SOURCE,
+            "version": "v3.0.0",
+            "arch": "amd64",
+            "image": self.private_repo + "@" + NEW,
+            "digest": NEW,
+        }
+        r.write_json(self.directory / "amd64/image.json", self.image)
+        self.document = {
+            "bomFormat": "CycloneDX",
+            "metadata": {
+                "component": {
+                    "properties": [
+                        {
+                            "name": "aquasecurity:trivy:RepoTag",
+                            "value": self.private_repo
+                            + ":candidate-"
+                            + SOURCE
+                            + "-123-amd64",
+                        },
+                        {
+                            "name": "aquasecurity:trivy:Reference",
+                            "value": self.image["image"],
+                        },
+                    ],
+                    "purl": "pkg:oci/dnsweaver@"
+                    + NEW
+                    + "?repository_url=staging.invalid%2Fexample%2Fdnsweaver",
+                }
+            },
+            "components": [
+                {
+                    "name": "package",
+                    "version": "1.0",
+                    "licenses": [{"license": {"id": "MIT"}}],
+                    "properties": [
+                        {
+                            "name": "aquasecurity:trivy:RepoTag",
+                            "value": "candidate-" + SOURCE + "-123-amd64",
+                        },
+                        {"name": "package:architecture", "value": "amd64"},
+                    ],
+                }
+            ],
+        }
+
+    def scan(self):
+        def scanner(*args, **kwargs):
+            if args[:3] == ("trivy", "image", "--scanners"):
+                r.write_json(
+                    self.directory / "amd64/scan.private.json",
+                    {"CreatedAt": "2026-01-01T00:00:00Z"},
+                )
+            elif args[:4] == ("trivy", "image", "--format", "cyclonedx"):
+                r.write_json(
+                    self.directory / "amd64/sbom-amd64.cdx.json", self.document
+                )
+            elif args != ("trivy", "--version"):
+                raise AssertionError("unexpected scanner operation")
+            return subprocess.CompletedProcess(args, 0, "Version: fixture\n", "")
+
+        with (
+            patch.object(r, "OUT", self.directory),
+            patch.object(r, "run", side_effect=scanner),
+        ):
+            r.scan("amd64")
+        return r.read_json(self.directory / "amd64/sbom-amd64.cdx.json")
+
+    def test_staging_tags_are_excluded_without_losing_package_evidence(self):
+        original = copy.deepcopy(self.document)
+        actual = self.scan()
+        public_repo = "ghcr.io/maxfield-allison/dnsweaver"
+        self.assertEqual(
+            actual["metadata"]["component"]["properties"],
+            [
+                {
+                    "name": "aquasecurity:trivy:Reference",
+                    "value": public_repo + "@" + NEW,
+                }
+            ],
+        )
+        self.assertEqual(
+            actual["metadata"]["component"]["purl"],
+            "pkg:oci/dnsweaver@"
+            + NEW
+            + "?repository_url=ghcr.io%2Fmaxfield-allison%2Fdnsweaver",
+        )
+        self.assertEqual(
+            actual["components"],
+            [
+                {
+                    "name": "package",
+                    "version": "1.0",
+                    "licenses": [{"license": {"id": "MIT"}}],
+                    "properties": [{"name": "package:architecture", "value": "amd64"}],
+                }
+            ],
+        )
+        self.assertEqual(self.document, original)
+        self.assertEqual(r.read_json(self.directory / "amd64/image.json"), self.image)
+        qualified = r.read_json(self.directory / "amd64/qualified.json")
+        self.assertEqual(
+            qualified["sbom"]["sha256"],
+            r.digest((self.directory / "amd64/sbom-amd64.cdx.json").read_bytes()),
+        )
+
+    def test_optional_repository_tags_can_be_absent(self):
+        self.document = {
+            "bomFormat": "CycloneDX",
+            "components": [{"name": "package", "version": "1.0"}],
+        }
+        self.assertEqual(self.scan(), self.document)
+
+    def test_unexpected_staging_tag_location_fails_closed(self):
+        self.document["metadata"]["unexpected"] = "candidate-" + SOURCE + "-123-amd64"
+        with self.assertRaises(ValueError):
+            self.scan()
+        self.assertFalse((self.directory / "amd64/qualified.json").exists())
+
+
 class QualificationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

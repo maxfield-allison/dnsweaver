@@ -11,7 +11,7 @@ Each native amd64 and arm64 runner checks the embedded version, container health
 Only after both architectures pass does `release:assemble` create an index containing those two digests. It updates the staging registry's `sha-<short-commit>` convenience alias and advances `edge` only for the default branch. These development aliases may move after a rebuild; qualification always uses the immutable digest. Its artifacts contain the private promotion plan and scan reports, plus these public files:
 
 - `provenance.json`: source commit, index and architecture digests, base inputs, runtime checks, scan evidence hashes and SBOM hashes.
-- `sbom-amd64.cdx.json` and `sbom-arm64.cdx.json`: CycloneDX inventories with private staging names removed.
+- `sbom-amd64.cdx.json` and `sbom-arm64.cdx.json`: CycloneDX inventories with private staging names and optional repository tags removed. Leftover staging tags block qualification; image digests, package versions and license information are retained.
 - `SHA256SUMS`: checksums for the three evidence files.
 
 The provenance is an unsigned declared build record. It is not a signature or a SLSA attestation. Signing is a separate policy decision; the pipeline does not imply identity verification that it does not perform. Preserve the private CI artifacts before their 30-day expiry if qualification or publication will be delayed.

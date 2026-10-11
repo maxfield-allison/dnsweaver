@@ -1,20 +1,25 @@
 name: Sync to GitLab
 
-# Mirrors the public source of truth (GitHub) into the GitLab instance, which
-# runs the heavy release/build/deploy pipelines. Direction is one-way:
-#   GitHub (main, tags)  ->  GitLab
-# Nothing pushes from GitLab back to GitHub on these refs, so there is no
-# force-push race. Maintainer private work flows the other way by pushing
-# feature branches GitLab -> GitHub manually before opening a PR.
+# Mirrors authoritative GitHub source into the GitLab build project:
+#   GitHub main   -> GitLab main
+#   GitHub v*    -> GitLab v*
+# Preserve the build project's existing branch/tag contract. Branch updates
+# must fast-forward; existing tags never move. Divergence stops the job.
 #
-# GitLab is reachable from GitHub-hosted runners over HTTPS via its
-# Cloudflare-proxied hostname. Pushes are small and incremental, well within
-# Cloudflare's request-body limit.
+# The workflow uses no actions. It fetches the pushed ref with plain git and
+# the run's own read-only token, so no third-party code runs beside the GitLab
+# token and no dependency update ever edits this file. Neither token enters a
+# remote URL, a .git/config or a command line: git reads each as an
+# Authorization header from GIT_CONFIG_* variables that exist only inside the
+# step that needs it.
 #
-# Required repository secrets:
-#   GITLAB_TOKEN         - GitLab project access token with write_repository
-#   GITLAB_HOST          - e.g. gitlab.probablyfine.dev
-#   GITLAB_PROJECT_PATH  - e.g. root/dnsweaver
+# Required secrets, in the gitlab-mirror environment (deployment refs: main
+# and tags matching v*):
+#   GITLAB_TOKEN         - project access token for that project only,
+#                          write_repository, allowed to push main and
+#                          v* tags and nothing else
+#   GITLAB_HOST          - the GitLab hostname, without scheme or path
+#   GITLAB_PROJECT_PATH  - group/project path of that project
 
 on:
   push:
@@ -25,20 +30,47 @@ on:
 permissions:
   contents: read
 
+# One run per ref at a time, never cancelled: each tag's mirror run must finish.
 concurrency:
-  group: sync-to-gitlab
+  group: sync-to-gitlab-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   sync:
     name: Push to GitLab
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: gitlab-mirror
     steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
+      - name: Fetch the pushed ref from GitHub
+        env:
+          READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
 
-      - name: Push main and tags to GitLab
+          git init --quiet .
+          basic="$(printf 'x-access-token:%s' "${READ_TOKEN}" | base64 -w0)"
+          echo "::add-mask::${basic}"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
+          export GIT_CONFIG_VALUE_0="Authorization: Basic ${basic}"
+          export GIT_TERMINAL_PROMPT=0
+
+          # Full history of the pushed ref, under a private name so nothing
+          # here depends on which branch an empty repository starts on.
+          git fetch --no-tags --quiet "https://github.com/${GITHUB_REPOSITORY}.git" "+${GITHUB_REF}:refs/sync/source"
+          fetched="$(git rev-parse "refs/sync/source^{commit}")"
+          if [ "${GITHUB_REF}" != "${GITHUB_REF#refs/tags/}" ]; then
+            if [ "${fetched}" != "${GITHUB_SHA}" ]; then
+              echo "::error::Tag ${GITHUB_REF_NAME} names ${fetched} on GitHub, but this run was started for ${GITHUB_SHA}. Tags are immutable; refusing to mirror a moved tag."
+              exit 1
+            fi
+          elif ! git merge-base --is-ancestor "${GITHUB_SHA}" "${fetched}"; then
+            echo "::error::GitHub ${GITHUB_REF} at ${fetched} does not contain ${GITHUB_SHA}, the commit this run was started for."
+            exit 1
+          fi
+
+      - name: Push main or the tag to GitLab
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
           GITLAB_HOST: ${{ secrets.GITLAB_HOST }}
@@ -47,41 +79,68 @@ jobs:
           set -euo pipefail
 
           if [ -z "${GITLAB_TOKEN}" ] || [ -z "${GITLAB_HOST}" ] || [ -z "${GITLAB_PROJECT_PATH}" ]; then
-            echo "::error::GITLAB_TOKEN, GITLAB_HOST, and GITLAB_PROJECT_PATH secrets must be set."
+            echo "::error::GITLAB_TOKEN, GITLAB_HOST and GITLAB_PROJECT_PATH must be set in the gitlab-mirror environment."
+            exit 1
+          fi
+          if [[ ! "${GITLAB_HOST}" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || [[ ! "${GITLAB_PROJECT_PATH}" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::GITLAB_HOST must be a bare hostname and GITLAB_PROJECT_PATH a group/project path."
             exit 1
           fi
 
-          git remote add gitlab "https://oauth2:${GITLAB_TOKEN}@${GITLAB_HOST}/${GITLAB_PROJECT_PATH}.git"
+          # GitLab accepts a project access token as the password of HTTP Basic
+          # authentication. The encoded form is masked too, because GitHub only
+          # masks the secret exactly as stored.
+          basic="$(printf 'oauth2:%s' "${GITLAB_TOKEN}" | base64 -w0)"
+          echo "::add-mask::${basic}"
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0="http.https://${GITLAB_HOST}/.extraheader"
+          export GIT_CONFIG_VALUE_0="Authorization: Basic ${basic}"
+          export GIT_TERMINAL_PROMPT=0
+          remote="https://${GITLAB_HOST}/${GITLAB_PROJECT_PATH}.git"
+          branch_ref="refs/heads/main"
 
           if [ "${GITHUB_REF}" != "${GITHUB_REF#refs/tags/}" ]; then
             tag="${GITHUB_REF_NAME}"
-            # Peel both sides to the commit they reference. The runner's local
-            # tag ref (written by actions/checkout) is typically lightweight and
-            # resolves straight to the commit, whereas an annotated tag on GitLab
-            # has a distinct tag-object SHA. Comparing raw SHAs would therefore
-            # always mismatch for annotated tags; comparing peeled commits is the
-            # correct immutability check.
-            local_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"
-            remote_object="$(git ls-remote gitlab "refs/tags/${tag}" | cut -f1)"
-            remote_commit="$(git ls-remote gitlab "refs/tags/${tag}^{}" | cut -f1)"
-            # Lightweight remote tags have no peeled (^{}) entry; fall back to the
-            # object SHA, which is the commit itself in that case.
-            remote_commit="${remote_commit:-$remote_object}"
+            if [[ "${tag}" != v* ]]; then
+              echo "::error::Only v* tags are mirrored; ${tag} is not one."
+              exit 1
+            fi
+            # Compare the commits both tags point at. An annotated tag's object
+            # ID differs from its commit, and GitLab lists the peeled commit as
+            # <tag>^{}; a lightweight tag has no peeled entry. The tag object
+            # itself is pushed, so an annotated tag stays annotated.
+            tag_ref="refs/tags/${tag}"
+            listing="$(git ls-remote "${remote}" "${tag_ref}" "${tag_ref}^{}")"
+            remote_object="$(awk -v ref="${tag_ref}" '$2 == ref {print $1}' <<<"${listing}")"
+            remote_commit="$(awk -v ref="${tag_ref}^{}" '$2 == ref {print $1}' <<<"${listing}")"
+            remote_commit="${remote_commit:-${remote_object}}"
             if [ -z "${remote_object}" ]; then
-              echo "Syncing tag ${tag} -> GitLab"
-              git push gitlab "refs/tags/${tag}:refs/tags/${tag}"
-            elif [ "${remote_commit}" = "${local_commit}" ]; then
-              # Tag already mirrored (e.g. pushed to both remotes during a
-              # release cut). Idempotent success — tags are immutable, so never
-              # force-overwrite them.
-              echo "Tag ${tag} already on GitLab pointing at ${local_commit}; nothing to do."
+              echo "Syncing tag ${tag}"
+              git push "${remote}" "refs/sync/source:${tag_ref}"
+            elif [ "${remote_commit}" = "${GITHUB_SHA}" ]; then
+              echo "Tag ${tag} is already mirrored at ${GITHUB_SHA}."
             else
-              echo "::error::Tag ${tag} exists on GitLab at commit ${remote_commit} but GitHub has ${local_commit}. Refusing to overwrite an existing tag."
+              echo "::error::Tag ${tag} exists on GitLab at ${remote_commit}, but GitHub has ${GITHUB_SHA}. Tags are immutable; refusing to move it."
               exit 1
             fi
           else
-            echo "Syncing main -> GitLab"
-            # Fetch the remote-tracking ref so --force-with-lease has a baseline.
-            git fetch gitlab main || true
-            git push gitlab "HEAD:refs/heads/main" --force-with-lease
+            if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+              echo "::error::Only main and v* tags are mirrored; ${GITHUB_REF} is neither."
+              exit 1
+            fi
+            # A missing main (the first sync) is fine; a diverged one is not.
+            status=0
+            git ls-remote --exit-code "${remote}" "${branch_ref}" >/dev/null || status=$?
+            if [ "${status}" -eq 0 ]; then
+              git fetch --no-tags --quiet "${remote}" "+${branch_ref}:refs/remotes/gitlab/main"
+              if ! git merge-base --is-ancestor refs/remotes/gitlab/main "${GITHUB_SHA}"; then
+                echo "::error::GitLab main is not an ancestor of ${GITHUB_SHA}. Refusing to rewrite it."
+                exit 1
+              fi
+            elif [ "${status}" -ne 2 ]; then
+              echo "::error::Could not read the GitLab mirror (git exit ${status})."
+              exit 1
+            fi
+            echo "Syncing ${GITHUB_SHA} to main"
+            git push "${remote}" "${GITHUB_SHA}:${branch_ref}"
           fi

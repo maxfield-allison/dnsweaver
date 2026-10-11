@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+<!-- towncrier release notes start -->
+
 ## [3.0.0] - 2026-09-17
 
 This major release changes the management listener to loopback by default. Before upgrading, review remote health probes and Prometheus scrapers. Prefer the bundled local probes. If remote access is required, set `DNSWEAVER_HEALTH_ADDRESS=0.0.0.0` and `DNSWEAVER_HEALTH_ALLOW_NETWORK=true`, then restrict access with a NetworkPolicy, firewall or equivalent control. The opt-in does not provide authentication.

@@ -173,7 +173,11 @@ func NewClient(baseURL, token string, opts ...ClientOption) *Client {
 }
 
 // doRequest performs an HTTP request to the Technitium API.
-func (c *Client) doRequest(ctx context.Context, endpoint string, params url.Values) (*apiResponse, error) {
+func (c *Client) doRequest(ctx context.Context, endpoint string, params url.Values) (result *apiResponse, err error) {
+	// Older supported servers require query-string authentication. Keep that
+	// contract, but protect every returned error before callers can log it.
+	defer func() { err = redactRequestError(err, c.token) }()
+
 	// Add token to params
 	if params == nil {
 		params = url.Values{}

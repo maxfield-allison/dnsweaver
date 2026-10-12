@@ -63,7 +63,7 @@ RUN test -x dnsweaver
 # -----------------------------------------------------------------------------
 # Stage 2: Minimal Runtime (Alpine)
 # -----------------------------------------------------------------------------
-FROM ${RUNTIME_IMAGE}
+FROM ${RUNTIME_IMAGE} AS runtime
 
 # Labels
 LABEL org.opencontainers.image.title="dnsweaver" \
@@ -72,10 +72,8 @@ LABEL org.opencontainers.image.title="dnsweaver" \
     org.opencontainers.image.vendor="maxfield-allison" \
     org.opencontainers.image.base.name="alpine:3.23"
 
-# Changing CACHE_BUST invalidates Docker layer cache for apk upgrade.
-# CI passes --build-arg CACHE_BUST=$CI_PIPELINE_ID so every pipeline
-# runs a fresh apk upgrade, even if the base image hash is unchanged.
-ARG CACHE_BUST=dev
+# Release builds bypass this stage's cache so package upgrades run again.
+# Keep build identifiers out of arguments: their values enter image history.
 ARG RUNTIME_PACKAGES_SHA256
 
 # Install runtime dependencies (no wget/curl — reduces attack surface)

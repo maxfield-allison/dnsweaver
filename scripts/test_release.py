@@ -17,6 +17,39 @@ OLD = "sha256:" + "c" * 64
 REPOS = ["ghcr.io/example/dnsweaver", "docker.io/example/dnsweaver"]
 
 
+def metadata_fixture(arch="amd64", history=None):
+    config = {
+        "architecture": arch,
+        "os": "linux",
+        "config": {
+            "Labels": {
+                "org.opencontainers.image.revision": SOURCE,
+                "org.opencontainers.image.version": "v3.0.0",
+                "org.opencontainers.image.source": "https://github.com/maxfield-allison/dnsweaver",
+            }
+        },
+        "history": history or [{"created_by": "RUN apk upgrade --no-cache # buildkit"}],
+    }
+    config_bytes = json.dumps(config).encode()
+    manifest_bytes = json.dumps(
+        {
+            "schemaVersion": 2,
+            "config": {
+                "digest": r.digest(config_bytes),
+                "size": len(config_bytes),
+            },
+        }
+    ).encode()
+    image = {
+        "source": SOURCE,
+        "version": "v3.0.0",
+        "arch": arch,
+        "digest": r.digest(manifest_bytes),
+        "image": "staging.invalid/example/dnsweaver@" + r.digest(manifest_bytes),
+    }
+    return manifest_bytes, config_bytes, image
+
+
 class FakeRegistry:
     def __init__(self, plan):
         self.values = {plan["image"]: NEW}
@@ -289,6 +322,112 @@ class SBOMScanTests(unittest.TestCase):
         self.assertFalse((self.directory / "amd64/qualified.json").exists())
 
 
+class ImageMetadataTests(unittest.TestCase):
+    def test_known_staging_metadata_in_config_is_rejected(self):
+        for command in (
+            "ARG CACHE_BUST=123",
+            "RUN |1 CACHE_BUST=123 apk upgrade",
+            "LABEL build=CI_PIPELINE_ID",
+            "LABEL registry=staging.invalid",
+            "LABEL ref=candidate-" + SOURCE + "-123-amd64",
+        ):
+            with self.subTest(command=command):
+                manifest, config, image = metadata_fixture(
+                    history=[{"created_by": command}]
+                )
+                with self.assertRaisesRegex(ValueError, "private staging metadata"):
+                    r.image_metadata(manifest, config, image)
+
+    def test_config_bytes_and_candidate_identity_are_bound(self):
+        manifest, config, image = metadata_fixture()
+        for manifest_bytes, config_bytes, identity in (
+            (manifest + b"\n", config, image),
+            (manifest, config + b"\n", image),
+            (manifest, config, {**image, "arch": "arm64"}),
+            (manifest, config, {**image, "source": "d" * 40}),
+            (manifest, config, {**image, "version": "v2.8.2"}),
+        ):
+            with self.subTest(identity=identity), self.assertRaises(ValueError):
+                r.image_metadata(manifest_bytes, config_bytes, identity)
+        self.assertEqual(
+            r.image_metadata(manifest, config, image),
+            {"status": "passed", "config_digest": r.digest(config)},
+        )
+
+    def build(self, directory, history=None):
+        manifest, config, image = metadata_fixture(history=history)
+        calls = []
+
+        def builder(*args, **kwargs):
+            calls.append(args)
+            if args[:2] == ("docker", "info"):
+                output = "amd64\n"
+            elif args[:3] == ("git", "show", "-s"):
+                output = "2026-01-01T00:00:00Z\n"
+            elif args[:3] == ("docker", "buildx", "build"):
+                r.write_json(
+                    directory / "amd64/build.json",
+                    {"containerimage.digest": image["digest"]},
+                )
+                output = ""
+            else:
+                raise AssertionError("unexpected build operation")
+            return subprocess.CompletedProcess(args, 0, output, "")
+
+        with (
+            patch.object(r, "OUT", directory),
+            patch.object(r, "source_identity", return_value=(SOURCE, "v3.0.0")),
+            patch.dict(
+                os.environ,
+                {
+                    "CI_REGISTRY_IMAGE": "staging.invalid/example/dnsweaver",
+                    "CI_PIPELINE_ID": "123",
+                },
+            ),
+            patch.object(r, "run", side_effect=builder),
+            patch.object(r, "Registry") as registry,
+            patch.object(r, "runtime_checks", return_value={}) as runtime,
+        ):
+            registry.return_value.resolve.return_value = image["digest"]
+            registry.return_value.raw.return_value = manifest
+            registry.return_value.config.return_value = config
+            if history:
+                with self.assertRaisesRegex(ValueError, "private staging metadata"):
+                    r.build("amd64")
+                runtime.assert_not_called()
+            else:
+                r.build("amd64")
+        return calls
+
+    def test_build_refreshes_runtime_without_exporting_ci_argument(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            calls = self.build(directory)
+            command = next(c for c in calls if c[:3] == ("docker", "buildx", "build"))
+            self.assertIn("--no-cache-filter", command)
+            self.assertEqual(command[command.index("--no-cache-filter") + 1], "runtime")
+            build_args = [
+                command[i + 1]
+                for i, value in enumerate(command)
+                if value == "--build-arg"
+            ]
+            self.assertFalse(
+                any(
+                    "CACHE_BUST" in value or "123" == value.split("=", 1)[-1]
+                    for value in build_args
+                )
+            )
+            image = r.read_json(directory / "amd64/image.json")
+            self.assertEqual(image["metadata"]["status"], "passed")
+            self.assertTrue((directory / "amd64/config.private.json").exists())
+
+    def test_leaking_build_never_writes_qualified_image_record(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            self.build(directory, [{"created_by": "ARG CACHE_BUST=123"}])
+            self.assertFalse((directory / "amd64/image.json").exists())
+
+
 class QualificationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -300,8 +439,11 @@ class QualificationTests(unittest.TestCase):
             folder.mkdir()
             (folder / f"sbom-{arch}.cdx.json").write_text('{}\n')
             (folder / "scan.private.json").write_text('{}\n')
-            record = {"source": SOURCE, "version": "v3.0.0", "arch": arch, "digest": NEW,
-                "image": "staging.invalid/dnsweaver@" + NEW,
+            manifest, config, identity = metadata_fixture(arch)
+            (folder / "manifest.private.json").write_bytes(manifest)
+            (folder / "config.private.json").write_bytes(config)
+            record = {**identity,
+                "metadata": r.image_metadata(manifest, config, identity),
                 "inputs": r.read_json(r.ROOT / "ci/release-inputs.json"),
                 "runtime": {"architecture": arch, "version": "v3.0.0", "health": "passed", "pending_provider_readiness": "passed", "loopback_and_network_opt_in": "passed"},
                 "scan": {"status": "passed", "ignore_sha256": r.digest((r.ROOT / ".trivyignore").read_bytes()), "report_sha256": r.digest(b'{}\n')},
@@ -322,6 +464,7 @@ class QualificationTests(unittest.TestCase):
             ("runtime", {**self.records["arm64"]["runtime"], "architecture": "amd64"}),
             ("inputs", {**self.records["arm64"]["inputs"], "builder": "golang:latest"}),
             ("scan", {**self.records["arm64"]["scan"], "ignore_sha256": OLD}),
+            ("metadata", {"status": "passed", "config_digest": OLD}),
             ("sbom", {"file": "../amd64/sbom-amd64.cdx.json", "sha256": r.digest(b'{}\n')})]
         for key, value in changes:
             with self.subTest(key=key, value=value):
@@ -332,13 +475,14 @@ class QualificationTests(unittest.TestCase):
                     self.check()
 
     def test_artifact_tampering(self):
-        for filename in ("sbom-arm64.cdx.json", "scan.private.json"):
+        for filename in ("sbom-arm64.cdx.json", "scan.private.json", "manifest.private.json", "config.private.json"):
             with self.subTest(filename=filename):
                 path = self.directory / "arm64" / filename
+                original = path.read_bytes()
                 path.write_text("tampered")
                 with self.assertRaises(ValueError):
                     self.check()
-                path.write_text('{}\n')
+                path.write_bytes(original)
 
 
 class SourceIdentityTests(unittest.TestCase):

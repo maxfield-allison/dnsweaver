@@ -1,0 +1,1 @@
+Container builds no longer include CI identifiers in image history. Qualification now checks the original image config by digest and rejects known staging metadata. Runtime packages still refresh for each release build.

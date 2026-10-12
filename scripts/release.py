@@ -72,6 +72,9 @@ class Registry:
     def raw(self, ref):
         return run("skopeo", "inspect", "--raw", "docker://" + ref).stdout.encode()
 
+    def config(self, ref):
+        return run("skopeo", "inspect", "--config", "--raw", "docker://" + ref).stdout.encode()
+
     def resolve(self, ref):
         return digest(self.raw(ref))
 
@@ -156,12 +159,12 @@ def build(arch):
     repository = env("CI_REGISTRY_IMAGE")
     tag = f"{repository}:candidate-{sha}-{env('CI_PIPELINE_ID')}-{arch}"
     build_date = run("git", "show", "-s", "--format=%cI", sha).stdout.strip()
-    run("docker", "buildx", "build", "--pull", "--platform", "linux/" + arch,
+    run("docker", "buildx", "build", "--pull", "--no-cache-filter", "runtime", "--platform", "linux/" + arch,
         "--provenance=false", "--build-arg", "BUILDER_IMAGE=" + inputs["builder"],
         "--build-arg", "RUNTIME_IMAGE=" + inputs["runtime"], "--build-arg", "VERSION=" + version,
         "--build-arg", "BUILDER_PACKAGES_SHA256=" + package_hash(inputs["builder_packages"]),
         "--build-arg", "RUNTIME_PACKAGES_SHA256=" + package_hash(inputs["runtime_packages"]),
-        "--build-arg", "BUILD_DATE=" + build_date, "--build-arg", "CACHE_BUST=" + env("CI_PIPELINE_ID"),
+        "--build-arg", "BUILD_DATE=" + build_date,
         "--label", "org.opencontainers.image.revision=" + sha,
         "--label", "org.opencontainers.image.version=" + version,
         "--metadata-file", str(directory / "build.json"), "--tag", tag, "--push", ".")
@@ -171,9 +174,56 @@ def build(arch):
     ref = repository + "@" + image_digest
     if Registry().resolve(ref) != image_digest:
         raise ValueError("registry content differs from build result")
+    identity = {"source": sha, "version": version, "arch": arch, "digest": image_digest, "image": ref}
+    manifest_bytes = Registry().raw(ref)
+    config_bytes = Registry().config(ref)
+    (directory / "manifest.private.json").write_bytes(manifest_bytes)
+    (directory / "config.private.json").write_bytes(config_bytes)
+    metadata = image_metadata(manifest_bytes, config_bytes, identity)
     runtime = runtime_checks(ref, arch, version)
-    write_json(directory / "image.json", {"schema": 1, "source": sha, "version": version, "arch": arch,
-        "image": ref, "digest": image_digest, "inputs": inputs, "runtime": runtime})
+    write_json(directory / "image.json", {"schema": 1, **identity,
+        "inputs": inputs, "runtime": runtime, "metadata": metadata})
+
+
+def image_metadata(
+    manifest_bytes: bytes, config_bytes: bytes, image: dict[str, Any]
+) -> dict[str, str]:
+    """Bind the original config to the image and reject known staging metadata."""
+    manifest = json.loads(manifest_bytes)
+    config = json.loads(config_bytes)
+    descriptor = manifest["config"]
+    if (
+        digest(manifest_bytes) != image["digest"]
+        or digest(config_bytes) != descriptor["digest"]
+        or len(config_bytes) != descriptor["size"]
+    ):
+        raise ValueError("image metadata is not digest-bound")
+    labels = config.get("config", {}).get("Labels", {})
+    if (
+        config.get("architecture") != image["arch"]
+        or config.get("os") != "linux"
+        or any(
+            labels.get(key) != expected
+            for key, expected in {
+                "org.opencontainers.image.revision": image["source"],
+                "org.opencontainers.image.version": image["version"],
+                "org.opencontainers.image.source": "https://github.com/maxfield-allison/dnsweaver",
+            }.items()
+        )
+    ):
+        raise ValueError("image metadata belongs to another candidate")
+    serialized = json.dumps(config)
+    private_host = image["image"].split("/", 1)[0]
+    if (
+        private_host in serialized
+        or "CACHE_BUST" in serialized
+        or re.search(
+            r"candidate-[0-9a-f]{40}-[0-9]+|\bCI_(?:PIPELINE|JOB|PROJECT|RUNNER)_[A-Z0-9_]+\b",
+            serialized,
+        )
+    ):
+        raise ValueError("image config contains private staging metadata")
+    return {"status": "passed", "config_digest": descriptor["digest"]}
 
 
 def package_hash(packages):
@@ -257,6 +307,10 @@ def qualification(directory, source, version):
             raise ValueError("scan used a different exception policy")
         if record["scan"]["report_sha256"] != digest((directory / arch / "scan.private.json").read_bytes()):
             raise ValueError("scan report does not match qualification")
+        metadata = image_metadata((directory / arch / "manifest.private.json").read_bytes(),
+                                  (directory / arch / "config.private.json").read_bytes(), record)
+        if record.get("metadata") != metadata:
+            raise ValueError("image metadata differs from qualification")
         sbom = directory / arch / record["sbom"]["file"]
         if sbom.name != f"sbom-{arch}.cdx.json" or sbom.parent != directory / arch or digest(sbom.read_bytes()) != record["sbom"]["sha256"]:
             raise ValueError("SBOM does not match qualification")
@@ -297,7 +351,7 @@ def provenance(records, sha, version, index_digest):
     return {"schema": 1, "source": {"repository": "https://github.com/maxfield-allison/dnsweaver", "commit": sha},
         "version": version, "index_digest": index_digest, "signing": records[0]["inputs"]["signing"],
         "provenance_kind": "declared build and qualification record; not a signed attestation",
-        "architectures": [{k: r[k] for k in ("arch", "digest", "inputs", "runtime", "scan", "sbom")} for r in records]}
+        "architectures": [{k: r[k] for k in ("arch", "digest", "inputs", "runtime", "metadata", "scan", "sbom")} for r in records]}
 
 
 def checksums(assets):

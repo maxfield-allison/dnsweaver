@@ -9,11 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
-## [3.0.3] - 2026-10-12
+## [3.1.0] - 2026-10-12
+
+### Added
+
+- **UniFi Network provider.** A new `unifi` provider type manages DNS records on UniFi OS consoles (Dream Machine, Cloud Gateway, Cloud Key) and UniFi OS Server through the official Integration API, using only an API key. Supports A, AAAA, CNAME, TXT and SRV records with standard TXT ownership tracking and native in-place updates. Only user-defined DNS policies are managed, so console-derived entries are never touched. Requires UniFi Network 10.6 or later, and clients receive answers only through a UniFi gateway; the legacy standalone Network Application does not expose the Integration API and is not supported. See [docs/providers/unifi.md](docs/providers/unifi.md). ([#200](https://github.com/maxfield-allison/dnsweaver/issues/200))
 
 ### Fixed
 
-- Container builds no longer include CI identifiers in image history. Qualification now checks the original image config by digest and rejects known staging metadata. Runtime packages still refresh for each release build.
+- Caddy hostname extraction now ignores indexed directive labels such as `caddy_0.reverse_proxy` and `caddy_0.tls`. Only site labels declare hostnames, so upstream addresses and directive arguments no longer become DNS records. ([#211](https://github.com/maxfield-allison/dnsweaver/issues/211))
+- Release SBOMs omit staging repository tags, and qualification checks the original image config by digest for known staging metadata. Runtime packages refresh for every release build. Public evidence retains image digests, package versions and license information.
 
 ### Security
 
@@ -1691,8 +1696,8 @@ release workflow.
 - GitLab CI/CD pipeline with GitHub release automation
 - Docker Hub and GitHub Container Registry publishing
 
-[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v3.0.3...HEAD
-[3.0.3]: https://github.com/maxfield-allison/dnsweaver/compare/v3.0.2...v3.0.3
+[Unreleased]: https://github.com/maxfield-allison/dnsweaver/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/maxfield-allison/dnsweaver/compare/v3.0.2...v3.1.0
 [3.0.2]: https://github.com/maxfield-allison/dnsweaver/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/maxfield-allison/dnsweaver/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/maxfield-allison/dnsweaver/compare/v2.8.2...v3.0.0

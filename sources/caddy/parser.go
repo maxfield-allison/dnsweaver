@@ -8,9 +8,9 @@ import (
 
 // labelPrefix identifies labels that declare Caddy hostnames.
 //
-// The parser accepts exactly "caddy" or any label beginning with "caddy_"
-// (e.g. "caddy_0", "caddy_1"). Labels like "caddy.reverse_proxy" or
-// "caddy.tls" are Caddy directive labels, not hostname labels, and are
+// The parser accepts exactly "caddy" or a label beginning with "caddy_"
+// without a dot (e.g. "caddy_0", "caddy_1"). Labels like
+// "caddy.reverse_proxy" or "caddy_0.tls" are directive labels and are
 // intentionally ignored.
 const (
 	labelName   = "caddy"
@@ -91,10 +91,10 @@ func (p *Parser) ExtractHostnames(labels map[string]string) []Extraction {
 }
 
 // isCaddyHostnameLabel reports whether the label key declares Caddy
-// hostnames. Matches exactly "caddy" or any key beginning with "caddy_".
-// Directive-style keys such as "caddy.reverse_proxy" are excluded.
+// hostnames. Matches exactly "caddy" or a dot-free key beginning with "caddy_".
+// Directive-style keys such as "caddy_0.reverse_proxy" are excluded.
 func isCaddyHostnameLabel(key string) bool {
-	return key == labelName || strings.HasPrefix(key, labelPrefix)
+	return key == labelName || (strings.HasPrefix(key, labelPrefix) && !strings.Contains(key, "."))
 }
 
 // splitHostnames splits a label value on commas or whitespace and returns

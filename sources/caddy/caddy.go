@@ -70,8 +70,8 @@ func (c *Caddy) Name() string {
 // Extract parses Caddy-style labels and returns discovered hostnames.
 //
 // Recognizes labels named "caddy" or "caddy_<n>" (any suffix following an
-// underscore). Each label value may contain one or more hostnames separated
-// by commas or whitespace. Hostnames are returned in input order with
+// underscore, without a dot). Each label value may contain one or more hostnames
+// separated by commas or whitespace. Hostnames are returned in label-key order with
 // duplicates removed.
 //
 // Returns an empty slice if no recognized labels are found.

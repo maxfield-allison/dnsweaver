@@ -110,6 +110,26 @@ func TestCaddy_Extract_Cases(t *testing.T) {
 			want: []string{"app.example.com"},
 		},
 		{
+			name: "ignore indexed directives beside hostname labels",
+			labels: map[string]string{
+				"caddy_0":                    "komodo.example.com",
+				"caddy_0.reverse_proxy":      "192.0.2.102:9120",
+				"caddy_0.tls":                "internal",
+				"caddy_1":                    "www.example.com",
+				"caddy_1.reverse_proxy":      "upstream.example.com",
+				"caddy_1.header.X-Forwarded": "proxy.example.com",
+			},
+			want: []string{"komodo.example.com", "www.example.com"},
+		},
+		{
+			name: "indexed directives alone declare no hostnames",
+			labels: map[string]string{
+				"caddy_0.reverse_proxy": "upstream.example.com",
+				"caddy_1.tls":           "internal",
+			},
+			want: nil,
+		},
+		{
 			name: "empty value",
 			labels: map[string]string{
 				"caddy":   "",

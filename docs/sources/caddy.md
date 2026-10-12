@@ -57,9 +57,13 @@ labels:
   caddy: app.example.com
   caddy.reverse_proxy: "{{upstreams 8080}}"   # ignored
   caddy.tls: internal                          # ignored
+  caddy_0: www.example.com
+  caddy_0.reverse_proxy: "{{upstreams 8080}}" # ignored
+  caddy_0.tls: internal                       # ignored
 ```
 
-Only labels named exactly `caddy` or beginning with `caddy_` are parsed.
+Only labels named exactly `caddy` or beginning with `caddy_` without a dot
+declare hostnames. Dotted directive keys are ignored, including indexed directives.
 
 ## Supported Record Types
 

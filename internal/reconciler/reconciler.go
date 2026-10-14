@@ -120,6 +120,9 @@ type Reconciler struct {
 	// during this process lifetime; it is deliberately empty after restart.
 	previousDesired     map[desiredSetKey]previousDesiredSet
 	pendingReplacements map[replacementKey]replacementRecovery
+	// A confirmed answer write whose ownership publication failed may be
+	// repaired by this process. This proof is disposable and empty after restart.
+	pendingMemberOwnership map[memberOwnershipRepairKey]memberOwnershipRepair
 
 	// reconcileMu serializes full Reconcile() calls to prevent concurrent
 	// reconciliation cycles from interleaving (e.g., periodic timer firing
@@ -249,6 +252,16 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 		slog.Bool("complete", extracted.Complete),
 	)
 
+	if !dryRun && r.config.OwnershipTracking {
+		for _, instance := range r.providers.All() {
+			if migrator, ok := instance.Provider.(provider.OwnershipMigrator); ok {
+				if err := migrator.MigrateOwnership(ctx); err != nil {
+					return nil, fmt.Errorf("preparing ownership for %s: %w", instance.Name(), err)
+				}
+			}
+		}
+	}
+
 	// Step 3: Build record cache for all providers (single List() call per provider).
 	// Built even in dry-run mode so orphan cleanup can report accurate record counts.
 	cache := newRecordCache(ctx, r.providers, r.logger)
@@ -263,6 +276,9 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 		result.AddAction(action)
 	}
 	blockedReplacements := r.retryReplacements(ctx, cache, result)
+	for key := range r.retryMemberOwnership(ctx, cache, result) {
+		blockedReplacements[key] = true
+	}
 	sets, previous := r.reconciliationSets(compiled, cache)
 	nextPrevious := make(map[desiredSetKey]previousDesiredSet, len(previous)+len(compiled.Sets))
 	for key, prior := range previous {

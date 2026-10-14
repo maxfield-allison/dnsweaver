@@ -13,6 +13,9 @@ import (
 	"github.com/miekg/dns"
 )
 
+// TCP transport is required for large ownership RRsets.
+const transportTCP = "tcp"
+
 // Sentinel errors for RFC 2136 operations.
 var (
 	// ErrNotConfigured is returned when the client is not properly configured.
@@ -96,7 +99,7 @@ func NewClient(config *Config, opts ...ClientOption) (*Client, error) {
 	}
 
 	if config.UseTCP {
-		c.dnsClient.Net = "tcp"
+		c.dnsClient.Net = transportTCP
 	} else {
 		c.dnsClient.Net = "udp"
 	}
@@ -430,6 +433,14 @@ func (c *Client) Server() string {
 	return c.config.GetServer()
 }
 
+// UseTCP selects reliable transport for compact ownership RRsets and updates.
+// It is configured before the provider begins reconciliation.
+func (c *Client) UseTCP() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.dnsClient.Net = transportTCP
+}
+
 // LastUpdate returns the time of the last successful update operation.
 func (c *Client) LastUpdate() time.Time {
 	c.mu.RLock()
@@ -439,25 +450,16 @@ func (c *Client) LastUpdate() time.Time {
 
 // exchangeWithContext performs DNS exchange with context support.
 func (c *Client) exchangeWithContext(ctx context.Context, msg *dns.Msg) (*dns.Msg, time.Duration, error) {
-	// Create a channel for the result
-	type result struct {
-		resp *dns.Msg
-		rtt  time.Duration
-		err  error
+	resp, rtt, err := c.dnsClient.ExchangeContext(ctx, msg, c.config.GetServer())
+	if err == nil && resp != nil && resp.Truncated {
+		tcp := *c.dnsClient
+		tcp.Net = transportTCP
+		resp, rtt, err = tcp.ExchangeContext(ctx, msg, c.config.GetServer())
+		if err == nil && resp != nil && resp.Truncated {
+			return nil, rtt, fmt.Errorf("truncated DNS response over TCP")
+		}
 	}
-	ch := make(chan result, 1)
-
-	go func() {
-		resp, rtt, err := c.dnsClient.Exchange(msg, c.config.GetServer())
-		ch <- result{resp, rtt, err}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil, 0, ctx.Err()
-	case r := <-ch:
-		return r.resp, r.rtt, r.err
-	}
+	return resp, rtt, err
 }
 
 // checkResponse checks the DNS response for errors.

@@ -37,6 +37,7 @@ dnsweaver --config /etc/dnsweaver/config.yml
 | `DNSWEAVER_CLEANUP_ORPHANS` | `true` | Delete DNS records when workloads are removed |
 | `DNSWEAVER_CLEANUP_ON_STOP` | `true` | Delete DNS records when containers stop |
 | `DNSWEAVER_OWNERSHIP_TRACKING` | `true` | Use TXT records to track record ownership |
+| `DNSWEAVER_OWNERSHIP_STORAGE` | `legacy` | Ownership representation: per-member TXT or opt-in `compact` DNS pages. See [migration and active writers](ownership.md). |
 | `DNSWEAVER_ADOPT_EXISTING` | `false` | Global default for adopting existing DNS records. In managed mode, adoption permits ownership creation and updates or replacement of matching unowned records. |
 | `DNSWEAVER_DEFAULT_TTL` | `300` | Default TTL for DNS records (seconds) |
 | `DNSWEAVER_RECONCILE_INTERVAL` | `60s` | Periodic reconciliation interval |

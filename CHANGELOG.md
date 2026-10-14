@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## [3.2.0] - 2026-10-14
+
+### Changed
+
+- Compact ownership is available through `DNSWEAVER_OWNERSHIP_STORAGE=compact` for TXT-capable providers with zone discovery. It stores claims in compressed pages and per-owner manifests, with no volume or database requirement. Legacy TXT storage remains the default for this release. Upgrade every shared-zone writer before opting in. Selecting `legacy` on the new binary verifies restored per-member markers and any required discovery catalog before removing compact claims. Distinct active owners retain each other's compatible claims; incomplete or conflicting state prevents destructive reconciliation. The running process retries failed claim publication after a confirmed answer write, using disposable proof of that write. Cloudflare uses a qualified smaller TXT value bound. Same-owner replicas and simultaneous writes to provider APIs that replace whole RRsets still require provider-specific coordination. See the ownership storage guide for migration headroom and recovery limits.
+
+
 ## [3.1.1] - 2026-10-12
 
 ### Security

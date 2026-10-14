@@ -1,0 +1,22 @@
+{
+  "records": [
+    {
+      "hostname": "_dw-p.f16d05ec6b29248d.ea38b9af0848fe3004d3a274a697d185.example.com",
+      "type": "TXT",
+      "target": "dnsweaver-page=v1:H4sIAAAAAAAC_z2Muw4CIRQF_4UaKYyVCcX2bmdnjLmBI6LshfBY2Rj_XS3ccjKTOb0E0wSxFxfL5QmakRWlpNBpSgHKxElIMVNov-iG7Cs56DWWnkslNtBX32vLkBwrtIvBgmWGidluKmWHqsfjYznchzb6XV_VkqCHP32HxUfWW_E-fwAfxDxSmwAAAA",
+      "ttl": 300
+    },
+    {
+      "hostname": "_dnsweaver-state.f16d05ec6b29248d.example.com",
+      "type": "TXT",
+      "target": "dnsweaver-state=v1:eyJ2ZXJzaW9uIjoxLCJvd25lciI6ImZpeHR1cmUiLCJyZXZpc2lvbiI6MSwicHJldmlvdXMiOiIiLCJwYWdlcyI6WyJlYTM4YjlhZjA4NDhmZTMwMDRkM2EyNzRhNjk3ZDE4NTk1Y2Y4MGU5NGFiZDRjODg3OGNkNGUzNjBkNzk1Mjk2Il0sImVudHJpZXMiOjF9",
+      "ttl": 300
+    }
+  ],
+  "marker": {
+    "hostname": "_dnsweaver.app.example.com",
+    "type": "TXT",
+    "target": "heritage=dnsweaver,instance=fixture,note=golden,record-target=MTkyLjAuMi4x,record-type=A,record-version=2",
+    "ttl": 300
+  }
+}

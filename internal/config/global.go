@@ -23,6 +23,7 @@ const (
 	DefaultCleanupOrphans       = true
 	DefaultCleanupOnStop        = true
 	DefaultOwnershipTracking    = true
+	DefaultOwnershipStorage     = "legacy"
 	DefaultAdoptExisting        = false
 	DefaultTTL                  = 300
 	DefaultReconcileInterval    = 60 * time.Second
@@ -60,6 +61,7 @@ type GlobalConfig struct {
 	CleanupOrphans     bool          // If true, delete DNS records for removed workloads
 	CleanupOnStop      bool          // If true, delete DNS records when containers stop; if false, only when removed
 	OwnershipTracking  bool          // If true, use TXT records to track record ownership
+	OwnershipStorage   string        // compact DNS pages or legacy per-member TXT
 	AdoptExisting      bool          // If true, adopt existing DNS records by creating ownership TXT records
 	DefaultTTL         int           // Default TTL for records if not specified per-provider
 	ReconcileInterval  time.Duration // How often to reconcile DNS records
@@ -302,6 +304,14 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 		cfg.OwnershipTracking = parseBool(ownershipStr, DefaultOwnershipTracking)
 	} else {
 		cfg.OwnershipTracking = DefaultOwnershipTracking
+	}
+
+	cfg.OwnershipStorage = getEnv("DNSWEAVER_OWNERSHIP_STORAGE")
+	if cfg.OwnershipStorage == "" {
+		cfg.OwnershipStorage = DefaultOwnershipStorage
+	}
+	if cfg.OwnershipStorage != "compact" && cfg.OwnershipStorage != "legacy" {
+		errs = append(errs, configErr("DNSWEAVER_OWNERSHIP_STORAGE", "must be compact or legacy"))
 	}
 
 	// Parse ADOPT_EXISTING

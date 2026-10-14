@@ -126,6 +126,7 @@ func runValidate() error {
 	fmt.Printf("  Shutdown Timeout:   %s\n", cfg.ShutdownTimeout())
 	fmt.Printf("  Health Port:        %d\n", cfg.HealthPort())
 	fmt.Printf("  Health Address:     %s\n", cfg.HealthAddress())
+	fmt.Printf("  Ownership storage:  %s\n", cfg.Global.OwnershipStorage)
 	if cfg.InstanceID() != "" {
 		fmt.Printf("  Instance ID:        %s\n", cfg.InstanceID())
 	}
@@ -221,6 +222,9 @@ func run() error {
 	// The manager handles graceful initialization - providers that fail to connect
 	// are retried in the background instead of causing a fatal error.
 	providerRegistry := provider.NewRegistry(logger)
+	if cfg.OwnershipTracking() {
+		providerRegistry.SetOwnershipStorage(cfg.Global.OwnershipStorage)
+	}
 	registerProviderFactories(providerRegistry)
 
 	// Set instance ID for multi-instance coordination (#84)

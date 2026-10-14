@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/httputil"
@@ -36,10 +37,14 @@ type apiMessage struct {
 
 // apiResponse is the standard Cloudflare API response wrapper.
 type apiResponse struct {
-	Success  bool            `json:"success"`
-	Errors   []apiError      `json:"errors"`
-	Messages []apiMessage    `json:"messages"`
-	Result   json.RawMessage `json:"result"`
+	Success    bool            `json:"success"`
+	Errors     []apiError      `json:"errors"`
+	Messages   []apiMessage    `json:"messages"`
+	Result     json.RawMessage `json:"result"`
+	ResultInfo *struct {
+		Page       int `json:"page"`
+		TotalPages int `json:"total_pages"`
+	} `json:"result_info"`
 }
 
 // zoneResult represents a zone from the Cloudflare API.
@@ -251,30 +256,65 @@ func (c *Client) GetZoneID(ctx context.Context, domain string) (string, error) {
 	return "", fmt.Errorf("no zone found for domain %s", domain)
 }
 
-// ListRecords returns all DNS records of the specified type in the given zone.
+// GetZoneName resolves the DNS name for a configured zone ID.
+func (c *Client) GetZoneName(ctx context.Context, zoneID string) (string, error) {
+	resp, err := c.doRequest(ctx, http.MethodGet, "/zones/"+url.PathEscape(zoneID), nil)
+	if err != nil {
+		return "", fmt.Errorf("getting zone: %w", err)
+	}
+	var zone zoneResult
+	if err := json.Unmarshal(resp.Result, &zone); err != nil || zone.Name == "" {
+		return "", fmt.Errorf("zone response has no valid name")
+	}
+	return zone.Name, nil
+}
+
+// ListRecords returns all pages of DNS records of the specified type.
 func (c *Client) ListRecords(ctx context.Context, zoneID string, recordType string) ([]dnsRecord, error) {
 	params := url.Values{}
 	params.Set("type", recordType)
-	params.Set("per_page", "100") // Max per page
-
-	path := fmt.Sprintf("/zones/%s/dns_records?%s", zoneID, params.Encode())
-	resp, err := c.doRequest(ctx, http.MethodGet, path, nil)
-	if err != nil {
-		return nil, fmt.Errorf("listing records: %w", err)
+	params.Set("per_page", "100")
+	var records []dnsRecord
+	seen := make(map[string]bool)
+	for page := 1; page <= 10000; page++ {
+		params.Set("page", strconv.Itoa(page))
+		path := fmt.Sprintf("/zones/%s/dns_records?%s", zoneID, params.Encode())
+		resp, err := c.doRequest(ctx, http.MethodGet, path, nil)
+		if err != nil {
+			return nil, fmt.Errorf("listing records page %d: %w", page, err)
+		}
+		var batch []dnsRecord
+		if err := json.Unmarshal(resp.Result, &batch); err != nil {
+			return nil, fmt.Errorf("parsing records response: %w", err)
+		}
+		if batch == nil {
+			return nil, fmt.Errorf("DNS record listing is missing its result array")
+		}
+		for _, record := range batch {
+			if record.ID == "" {
+				continue
+			}
+			if seen[record.ID] {
+				return nil, fmt.Errorf("DNS record appeared on multiple listing pages")
+			}
+			seen[record.ID] = true
+		}
+		records = append(records, batch...)
+		if resp.ResultInfo != nil {
+			if page == 1 && resp.ResultInfo.TotalPages == 0 && len(batch) == 0 {
+				return records, nil
+			}
+			if resp.ResultInfo.Page != page || resp.ResultInfo.TotalPages < page {
+				return nil, fmt.Errorf("inconsistent DNS record pagination")
+			}
+			if page == resp.ResultInfo.TotalPages {
+				return records, nil
+			}
+		} else if len(batch) < 100 {
+			return records, nil
+		}
 	}
-
-	var records dnsRecordsResponse
-	if err := json.Unmarshal(resp.Result, &records.Result); err != nil {
-		return nil, fmt.Errorf("parsing records response: %w", err)
-	}
-
-	c.logger.Debug("listed records",
-		slog.String("zone_id", zoneID),
-		slog.String("type", recordType),
-		slog.Int("count", len(records.Result)),
-	)
-
-	return records.Result, nil
+	return nil, fmt.Errorf("DNS record pagination exceeded 10000 pages")
 }
 
 // CreateRecord creates a new DNS record in the specified zone.

@@ -78,6 +78,19 @@ var (
 	)
 )
 
+// Ownership storage metrics.
+var (
+	// OwnershipStorageMode reports the configured DNS ownership representation.
+	OwnershipStorageMode = promauto.NewGaugeVec(prometheus.GaugeOpts{Namespace: Namespace, Name: "ownership_storage_mode", Help: "Effective DNS ownership storage mode (1=enabled)."}, []string{labelProvider, "mode"})
+	// OwnershipStateValid reports the last ownership snapshot validation result.
+	OwnershipStateValid = promauto.NewGaugeVec(prometheus.GaugeOpts{Namespace: Namespace, Name: "ownership_state_valid", Help: "Whether the last ownership snapshot was complete and valid."}, []string{labelProvider})
+	// OwnershipEntries counts committed compact claims for this process's owner.
+	OwnershipEntries = promauto.NewGaugeVec(prometheus.GaugeOpts{Namespace: Namespace, Name: "ownership_entries", Help: "Committed compact ownership entries for the local logical owner."}, []string{labelProvider})
+	// OwnershipStateRecords counts observed local ownership TXT records, including
+	// predecessor manifests, legacy markers and discoverable staged pages.
+	OwnershipStateRecords = promauto.NewGaugeVec(prometheus.GaugeOpts{Namespace: Namespace, Name: "ownership_state_records", Help: "Observed physical ownership TXT records for the local logical owner."}, []string{labelProvider})
+)
+
 // Record operation metrics.
 var (
 	// RecordsCreatedTotal counts DNS records created.

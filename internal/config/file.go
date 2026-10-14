@@ -68,6 +68,7 @@ type FileReconcilerConfig struct {
 	CleanupOrphans    *bool  `yaml:"cleanup_orphans,omitempty"`    // Delete records for removed workloads
 	CleanupOnStop     *bool  `yaml:"cleanup_on_stop,omitempty"`    // Delete records when containers stop
 	OwnershipTracking *bool  `yaml:"ownership_tracking,omitempty"` // Use TXT records for ownership
+	OwnershipStorage  string `yaml:"ownership_storage,omitempty"`  // compact or legacy
 	AdoptExisting     *bool  `yaml:"adopt_existing,omitempty"`     // Adopt pre-existing DNS records
 	InstanceID        string `yaml:"instance_id,omitempty"`        // Unique ID for multi-instance coordination
 }
@@ -166,6 +167,7 @@ func (c *FileConfig) interpolateEnvVars() {
 		c.Reconciler.Interval = InterpolateEnvVars(c.Reconciler.Interval)
 		c.Reconciler.ShutdownTimeout = InterpolateEnvVars(c.Reconciler.ShutdownTimeout)
 		c.Reconciler.InstanceID = InterpolateEnvVars(c.Reconciler.InstanceID)
+		c.Reconciler.OwnershipStorage = InterpolateEnvVars(c.Reconciler.OwnershipStorage)
 	}
 
 	c.Platform = InterpolateEnvVars(c.Platform)
@@ -259,6 +261,7 @@ func (c *FileConfig) ToGlobalConfig() *GlobalConfig {
 		CleanupOrphans:       DefaultCleanupOrphans,
 		CleanupOnStop:        DefaultCleanupOnStop,
 		OwnershipTracking:    DefaultOwnershipTracking,
+		OwnershipStorage:     DefaultOwnershipStorage,
 		AdoptExisting:        DefaultAdoptExisting,
 		DefaultTTL:           DefaultTTL,
 		ReconcileInterval:    DefaultReconcileInterval,
@@ -328,6 +331,9 @@ func (c *FileConfig) ToGlobalConfig() *GlobalConfig {
 			if timeout, err := time.ParseDuration(c.Reconciler.ShutdownTimeout); err == nil && timeout >= time.Second {
 				cfg.ShutdownTimeout = timeout
 			}
+		}
+		if c.Reconciler.OwnershipStorage != "" {
+			cfg.OwnershipStorage = c.Reconciler.OwnershipStorage
 		}
 		if c.Reconciler.InstanceID != "" {
 			cfg.InstanceID = c.Reconciler.InstanceID

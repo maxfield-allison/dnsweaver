@@ -80,8 +80,18 @@ func (r Record) ToRR() (dns.RR, error) {
 		return &dns.CNAME{Hdr: header, Target: target}, nil
 
 	case dns.TypeTXT:
-		// TXT records can contain multiple strings
-		return &dns.TXT{Hdr: header, Txt: []string{r.RData}}, nil
+		if !ownershipTXTName(r.Name) {
+			return &dns.TXT{Hdr: header, Txt: []string{r.RData}}, nil
+		}
+		// One TXT RR may contain multiple wire strings, each at most 255 bytes.
+		text := r.RData
+		var parts []string
+		for len(text) > 255 {
+			parts = append(parts, text[:255])
+			text = text[255:]
+		}
+		parts = append(parts, text)
+		return &dns.TXT{Hdr: header, Txt: parts}, nil
 
 	case dns.TypeMX:
 		target := r.RData
@@ -159,7 +169,11 @@ func RecordFromRR(rr dns.RR) (Record, error) {
 		record.RData = v.Target
 
 	case *dns.TXT:
-		record.RData = strings.Join(v.Txt, " ")
+		separator := " "
+		if ownershipTXTName(header.Name) {
+			separator = ""
+		}
+		record.RData = strings.Join(v.Txt, separator)
 
 	case *dns.MX:
 		record.RData = v.Mx
@@ -185,6 +199,11 @@ func RecordFromRR(rr dns.RR) (Record, error) {
 	}
 
 	return record, nil
+}
+
+func ownershipTXTName(name string) bool {
+	name = strings.ToLower(name)
+	return strings.HasPrefix(name, "_dnsweaver-state.") || strings.HasPrefix(name, "_dw-p.") || strings.HasPrefix(name, "_dnsweaver.")
 }
 
 // NewARecord creates a new A record.

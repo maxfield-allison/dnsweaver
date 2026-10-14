@@ -57,12 +57,15 @@ type Factory func(cfg FactoryConfig) (Provider, error)
 
 // Registry manages provider type factories and active provider instances.
 type Registry struct {
-	mu         sync.RWMutex
-	factories  map[string]Factory           // type name -> factory function
-	instances  []*ProviderInstance          // instances in priority order
-	byName     map[string]*ProviderInstance // instance name -> instance
-	instanceID string                       // dnsweaver instance ID for multi-instance mode
-	logger     *slog.Logger
+	mu               sync.RWMutex
+	factories        map[string]Factory           // type name -> factory function
+	instances        []*ProviderInstance          // instances in priority order
+	byName           map[string]*ProviderInstance // instance name -> instance
+	instanceID       string                       // dnsweaver instance ID for multi-instance mode
+	compactOwnership bool
+	legacyOwnership  bool
+	ownershipMutexes map[ProviderIdentity]*sync.Mutex
+	logger           *slog.Logger
 }
 
 // NewRegistry creates a new provider registry.
@@ -71,10 +74,11 @@ func NewRegistry(logger *slog.Logger) *Registry {
 		logger = slog.Default()
 	}
 	return &Registry{
-		factories: make(map[string]Factory),
-		instances: make([]*ProviderInstance, 0),
-		byName:    make(map[string]*ProviderInstance),
-		logger:    logger,
+		factories:        make(map[string]Factory),
+		instances:        make([]*ProviderInstance, 0),
+		byName:           make(map[string]*ProviderInstance),
+		ownershipMutexes: make(map[ProviderIdentity]*sync.Mutex),
+		logger:           logger,
 	}
 }
 
@@ -84,6 +88,22 @@ func (r *Registry) SetInstanceID(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.instanceID = id
+}
+
+// SetCompactOwnership selects DNS-backed compact storage before creating providers.
+// Unsupported providers retain their existing capability-specific ownership behavior.
+func (r *Registry) SetCompactOwnership(enabled bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.compactOwnership = enabled
+}
+
+// SetOwnershipStorage enables compact-aware reads in either DNS storage mode.
+func (r *Registry) SetOwnershipStorage(mode string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.compactOwnership = mode == "compact"
+	r.legacyOwnership = mode == "legacy"
 }
 
 // RegisterFactory registers a provider factory for a given type.
@@ -143,6 +163,42 @@ func (r *Registry) CreateInstance(cfg ProviderInstanceConfig) error {
 	provider, err := factory(factoryCfg)
 	if err != nil {
 		return fmt.Errorf("creating provider %s: %w", cfg.Name, err)
+	}
+	if (r.compactOwnership || r.legacyOwnership) && provider.Capabilities().SupportsOwnershipTXT {
+		identity := IdentityOf(provider)
+		zone := cfg.ProviderConfig["ZONE"]
+		if identity.Type == "cloudflare" {
+			zone = ""
+		}
+		if zone == "" && identity.Type != "cloudflare" {
+			zone = identity.Zone
+		}
+		_, resolvable := provider.(OwnershipZoneResolver)
+		if zone != "" || resolvable {
+			mutex := r.ownershipMutexes[identity]
+			if mutex == nil {
+				mutex = &sync.Mutex{}
+				r.ownershipMutexes[identity] = mutex
+			}
+			if enabler, ok := provider.(interface{ EnableCompactOwnership() }); ok {
+				enabler.EnableCompactOwnership()
+			}
+			if r.legacyOwnership {
+				if enabler, ok := provider.(interface{ EnableLegacyOwnership() }); ok {
+					enabler.EnableLegacyOwnership()
+				}
+			}
+			storage, storageErr := NewCompactOwnershipProvider(provider, r.instanceID, zone, r.logger, mutex)
+			err = storageErr
+			if err != nil {
+				return fmt.Errorf("configuring compact ownership for %s: %w", cfg.Name, err)
+			}
+			storage.legacy = r.legacyOwnership
+			provider = storage
+			r.logger.Info("DNS ownership storage enabled", "provider", cfg.Name, "owner", r.instanceID, "compact", r.compactOwnership)
+		} else {
+			r.logger.Info("using provider-native ownership", "provider", cfg.Name, "reason", "no DNS zone enumeration")
+		}
 	}
 
 	// Create domain matcher

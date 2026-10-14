@@ -127,6 +127,7 @@ nav:
       - Operational Modes: configuration/modes.md
       - Secrets Management: configuration/secrets.md
       - Multi-Instance: configuration/multi-instance.md
+      - Ownership Storage: configuration/ownership.md
   - Providers:
       - providers/index.md
       - Technitium: providers/technitium.md
@@ -170,5 +171,7 @@ nav:
       - Development Setup: contributing/development.md
       - Releases: contributing/releases.md
       - Architecture: contributing/architecture.md
+      - Ownership Format: contributing/ownership-format.md
+      - Ownership Qualification: contributing/ownership-qualification.md
       - Adding a Provider: contributing/adding-provider.md
       - Adding a Source: contributing/adding-source.md

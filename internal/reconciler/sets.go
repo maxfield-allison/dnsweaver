@@ -222,6 +222,7 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 				managed = forgetRecordMember(managed, existing)
 			}
 		}
+		actions = append(actions, r.cleanupAbsentMemberClaims(ctx, set, cache)...)
 	}
 
 	if legacyUpgradeComplete && !r.isDryRun() {
@@ -238,6 +239,41 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 	}
 
 	return actions, managed
+}
+
+// A crash can remove an answer before retiring its marker. Complete discovery
+// may withdraw that exact local claim when neither desired nor DNS data contains
+// the member. Foreign and ambiguous hostname-level claims remain untouched.
+func (r *Reconciler) cleanupAbsentMemberClaims(ctx context.Context, set *desiredRecordSet, cache *recordCache) []Action {
+	instance := set.Instance
+	if r.isDryRun() || !r.config.OwnershipTracking || !instance.Provider.Capabilities().SupportsOwnershipTXT {
+		return nil
+	}
+	data, _ := cache.getExistingRecords(instance.Name(), set.Key.Hostname, set.Key.RecordType)
+	var actions []Action
+	for _, marker := range cache.ownershipRecords(instance.Name(), set.Key.Hostname) {
+		owned, owner, member, _ := provider.ParseMemberOwnershipValue(marker.Target)
+		if !owned || owner != instance.InstanceID || member == nil || member.Type != set.Key.RecordType || recordMemberPresent(data, *member) {
+			continue
+		}
+		desired := false
+		for _, claim := range set.Members {
+			desired = desired || provider.SameRecordMember(*member, claim.Record)
+		}
+		if desired {
+			continue
+		}
+		member.Hostname = set.Key.Hostname
+		action := memberAction(ActionSkip, StatusSuccess, instance, *member, "absent member ownership retired")
+		if err := instance.DeleteMember(ctx, marker); err != nil && !errors.Is(err, provider.ErrNotFound) {
+			action.Status = StatusFailed
+			action.Error = fmt.Sprintf("retiring absent member ownership: %v", err)
+		} else {
+			cache.removeRecord(instance.Name(), marker)
+		}
+		actions = append(actions, action)
+	}
+	return actions
 }
 
 func rememberRecordMember(records []provider.Record, record provider.Record) []provider.Record {

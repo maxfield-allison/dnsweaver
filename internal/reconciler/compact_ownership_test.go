@@ -133,6 +133,46 @@ func TestReconcileCompactConflictingOwnerKeepsForeignCNAME(t *testing.T) {
 	}
 }
 
+func TestReconcileCompactCrashAfterDataDeletionRetiresOnlyAbsentLocalClaim(t *testing.T) {
+	ctx := context.Background()
+	dns := newTestMockProvider("dns")
+	member := provider.Record{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "192.0.2.10", TTL: 300}
+	src := newTestMockSource("native", *hintedA(member.Hostname, member.Target))
+	r := compactReconciler(t, dns, "docker", src, false)
+	if _, err := r.Reconcile(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Model the crash boundary after deleting data, before removing ownership.
+	if err := dns.Delete(ctx, member); err != nil {
+		t.Fatal(err)
+	}
+	foreign := provider.MemberOwnershipRecord(member.Hostname, 300, "offline-owner", member, nil)
+	dns.AddRecord(foreign)
+	src.hostnames = nil
+	restarted := compactReconciler(t, dns, "docker", src, false)
+	result, err := restarted.Reconcile(ctx)
+	if err != nil || len(result.Failed()) != 0 {
+		t.Fatalf("crash recovery = %+v, %v", result, err)
+	}
+	logical, err := restarted.providers.All()[0].Provider.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range logical {
+		if provider.IsOwnershipRecord(record.Hostname) && provider.MatchesOwnership(record.Target, "docker") {
+			t.Fatal("absent local claim survived restart cleanup")
+		}
+	}
+	raw, _ := dns.List(ctx)
+	foreignPresent := false
+	for _, record := range raw {
+		foreignPresent = foreignPresent || record.Hostname == foreign.Hostname && record.Target == foreign.Target
+	}
+	if !foreignPresent {
+		t.Fatal("cleanup removed an offline owner's claim")
+	}
+}
+
 var _ source.Source = (*testMockSource)(nil)
 
 func TestReconcileLegacyTXTForeignProtectionRemainsIntact(t *testing.T) {

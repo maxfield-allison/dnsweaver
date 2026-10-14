@@ -33,6 +33,11 @@ func TestCloudflareOwnershipMigrationConformance(t *testing.T) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			if provider.IsOwnershipStateRecord(record.Name) && len(record.Content) > ownershipTXTValueBytes {
+				t.Error("ownership write exceeds the qualified Cloudflare value bound")
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 			nextID++
 			record.ID = strconv.Itoa(nextID)
 			records[record.ID] = record

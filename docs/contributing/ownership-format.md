@@ -21,6 +21,8 @@ Each page is a TXT record at `_dw-p.<owner-hash-16>.<page-hash-32>.<zone>`. Its 
 
 Gzip headers contain no timestamp or process identity. Entries sort by name and then value. Digests cover the complete encoded TXT value. A page is at most 3,500 encoded bytes; its expanded JSON is at most 256 KiB. A manifest is at most 3,500 encoded bytes, references at most 64 distinct pages, and describes at most 16,384 distinct entries. Provider limits may require smaller pages. Unknown fields, unsupported versions, invalid ownership values, duplicate entries, oversized input and checksum mismatches are errors.
 
+An adapter may implement `OwnershipTXTValueLimiter.OwnershipTXTValueBytes` to impose a smaller bound on new pages and manifests. Cloudflare currently supplies 2,000 bytes based on live qualification. All readers keep the format's 3,500-byte bound. A lower write bound therefore does not make an existing v1 snapshot unreadable. The writer checks the encoded manifest against the backend bound before staging any pages.
+
 ## Publishing and reading
 
 The writer reads current state, creates missing immutable pages, reads them back, checks that its previous manifest has not changed, then publishes a new manifest. A timeout after any write requires readback before deciding whether the operation succeeded. A matching conflict is idempotent. A conflict alone is not evidence of success.

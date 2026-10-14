@@ -32,6 +32,14 @@ type Provider struct {
 	ownershipZoneName string
 }
 
+// Live qualification found content-dependent rejection of large encoded TXT
+// values despite acceptance of repetitive 3,500-byte probes. Keep new ownership
+// pages and manifests within a conservative bound; readers still accept v1.
+const ownershipTXTValueBytes = 2000
+
+// OwnershipTXTValueBytes returns the qualified bound for new ownership values.
+func (p *Provider) OwnershipTXTValueBytes() int { return ownershipTXTValueBytes }
+
 // ProviderOption is a functional option for configuring the Provider.
 type ProviderOption func(*Provider)
 

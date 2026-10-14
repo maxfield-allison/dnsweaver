@@ -37,6 +37,10 @@ func RunOwnershipMigrationConformance(t *testing.T, factory OwnershipProcessFact
 	ctx := context.Background()
 	const owner = "migration-test"
 	native := factory(t, owner, "")
+	valueLimit := provider.DefaultOwnershipPageBytes
+	if limiter, ok := native.(provider.OwnershipTXTValueLimiter); ok {
+		valueLimit = min(valueLimit, limiter.OwnershipTXTValueBytes())
+	}
 	var members, markers []provider.Record
 	for i := range 16 {
 		members = append(members, provider.Record{
@@ -84,7 +88,7 @@ func RunOwnershipMigrationConformance(t *testing.T, factory OwnershipProcessFact
 			t.Fatal("migration retained an own legacy marker")
 		}
 	}
-	if stateCount < 3 || stateCount >= len(markers) || largestPage < 3000 || largestPage > provider.DefaultOwnershipPageBytes {
+	if stateCount < 3 || stateCount >= len(markers) || largestPage < min(3000, valueLimit-300) || largestPage > valueLimit {
 		t.Fatalf("migration count=%d largest page=%d; expected multiple pages near the byte bound", stateCount, largestPage)
 	}
 	t.Logf("%d claims: %d compact TXT records; largest page %d bytes", len(markers), stateCount, largestPage)

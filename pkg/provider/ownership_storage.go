@@ -41,6 +41,12 @@ type OwnershipZoneResolver interface {
 	OwnershipZone(context.Context) (string, error)
 }
 
+// OwnershipTXTValueLimiter bounds new encoded ownership values for a backend.
+// Readers retain the persisted format's full bound for existing snapshots.
+type OwnershipTXTValueLimiter interface {
+	OwnershipTXTValueBytes() int
+}
+
 // OwnershipMigrator moves this owner's legacy markers into verified compact
 // state. The reconciler invokes it only outside dry-run with tracking enabled.
 type OwnershipMigrator interface {
@@ -95,7 +101,14 @@ func NewCompactOwnershipProvider(backend Provider, owner, zone string, logger *s
 	if enabler, ok := backend.(interface{ EnableCompactOwnership() }); ok {
 		enabler.EnableCompactOwnership()
 	}
-	return &CompactOwnershipProvider{Provider: backend, owner: owner, zone: normalizeOwnershipName(zone), mu: mutex, logger: logger, maxBytes: DefaultOwnershipPageBytes, identity: IdentityOf(backend)}, nil
+	maxBytes := DefaultOwnershipPageBytes
+	if limiter, ok := backend.(OwnershipTXTValueLimiter); ok {
+		maxBytes = min(maxBytes, limiter.OwnershipTXTValueBytes())
+		if maxBytes < 256 {
+			return nil, fmt.Errorf("compact ownership requires a TXT value bound of at least 256 bytes")
+		}
+	}
+	return &CompactOwnershipProvider{Provider: backend, owner: owner, zone: normalizeOwnershipName(zone), mu: mutex, logger: logger, maxBytes: maxBytes, identity: IdentityOf(backend)}, nil
 }
 
 // Identity preserves the physical backend rather than the decorator's name.
@@ -337,6 +350,9 @@ func (p *CompactOwnershipProvider) publish(ctx context.Context, previous *owners
 	value, err := encodeOwnershipManifest(manifest)
 	if err != nil {
 		return err
+	}
+	if len(value) > p.maxBytes {
+		return fmt.Errorf("%w: ownership manifest exceeds the provider TXT value bound", ErrOwnershipState)
 	}
 	name := OwnershipOwnerManifestName(zone, p.owner)
 	if discovery, ok := p.Provider.(OwnershipDiscoveryProvider); ok {

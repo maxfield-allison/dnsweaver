@@ -15,6 +15,8 @@ The environment variable overrides `reconciler.ownership_storage`. `--validate` 
 
 Compact storage packs exact ownership claims and metadata into compressed, immutable TXT pages. Each owner has a manifest describing its current pages. Pages contain at most 3,500 encoded bytes, so the number of records depends on the claims and their metadata. The migration test packs 80 ordinary A-record claims into one page plus one manifest, compared with 80 legacy markers. A larger snapshot uses additional pages.
 
+Cloudflare uses a conservative 2,000-byte bound for new pages and manifests. Live tests found that some larger encoded values were rejected even when repetitive TXT values of the same size were accepted. Other providers use the format's 3,500-byte bound unless their adapter supplies a lower limit. Readers retain the full v1 format bound for existing snapshots. A manifest that cannot fit its provider's bound stops publication before any writes.
+
 One claim still needs a page and a manifest, so small owners can use more TXT records than legacy storage. These counts measure DNS record overhead. Publication and readback add API calls; fewer stored records does not establish faster reconciliation or fewer requests.
 
 Provider APIs use `_dnsweaver-state.<owner-hash>.<zone>` for manifests and `_dw-p.<owner-hash>.<page-hash>.<zone>` for pages. RFC 2136 queries the known name `_dnsweaver-state.<zone>` and then its referenced pages. Its compact writes use TCP and do not update the shared hostname catalog. Existing catalog records remain available for legacy discovery.
@@ -57,6 +59,8 @@ Before enabling compact storage:
 Use a consistent provider access method for writers sharing a zone. RFC 2136 discovers the common anchor only; it cannot enumerate owner-specific manifests published through another provider API. Mixing those access methods in one zone is not qualified. A raw zone backup is evidence for recovery, but restoring an old whole-zone export can overwrite other active owners' newer changes. Pause affected writers and reconcile those changes before a manual restore.
 
 Missing pages, invalid checksums, unsupported versions and competing histories make the ownership snapshot unavailable. Reconciliation preserves DNS data and reports the error. Repair the zone from its retained records or backup. Deleting manifests to silence the error discards ownership evidence. A DNS answer created just before ownership publication fails may need explicit adoption to repair its claim.
+
+After a confirmed answer write whose ownership publication fails, the running process retains a disposable repair intent. A later complete cycle verifies the exact answer, TTL and provider options, checks foreign claims, and retries its member marker. Failed repairs remain errors and block changes at that name. Changed or missing data invalidates the intent. This adds no volume or external dependency. A process crash loses that local proof, so an unclaimed answer still requires explicit adoption or manual review after restart. Staged pages alone never grant ownership.
 
 ## Observability
 

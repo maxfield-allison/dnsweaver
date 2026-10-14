@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -82,6 +83,85 @@ func stateTestMember(i int) Record {
 }
 func stateTestMarker(owner string, r Record) Record {
 	return MemberOwnershipRecord(r.Hostname, 300, owner, r, map[string]string{"proxied": "true", "note": "preserve"})
+}
+
+type limitedStateTestDNS struct {
+	*stateTestDNS
+	valueBytes int
+}
+
+func (d *limitedStateTestDNS) OwnershipTXTValueBytes() int { return d.valueBytes }
+
+func TestOwnershipProviderValueBoundKeepsExistingPagesReadable(t *testing.T) {
+	ctx := context.Background()
+	dns := &stateTestDNS{}
+	var markers []Record
+	for i := range 20 {
+		var opaque strings.Builder
+		for part := range 8 {
+			fmt.Fprintf(&opaque, "%x", sha256.Sum256(fmt.Appendf(nil, "member-%d-part-%d", i, part)))
+		}
+		member := stateTestMember(i)
+		markers = append(markers, MemberOwnershipRecord(member.Hostname, 300, "limited", member, map[string]string{"opaque": opaque.String()}))
+	}
+	dns.records = slices.Clone(markers)
+	if err := stateTestProvider(t, dns, "limited").MigrateOwnership(ctx); err != nil {
+		t.Fatal(err)
+	}
+	large := slices.ContainsFunc(dns.records, func(record Record) bool { return len(record.Target) > 2000 })
+	if !large {
+		t.Fatal("fixture did not persist a page above the new write bound")
+	}
+	limited, err := NewCompactOwnershipProvider(&limitedStateTestDNS{dns, 2000}, "limited", "example.com", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logical, err := limited.List(ctx)
+	if err != nil || len(logical) != len(markers) {
+		t.Fatal("lower write bound made existing v1 pages unreadable", err)
+	}
+	dns.createFailure = func(record Record) error {
+		if IsOwnershipStateRecord(record.Hostname) && len(record.Target) > 2000 {
+			return fmt.Errorf("backend value limit exceeded")
+		}
+		return nil
+	}
+	added := stateTestMarker("limited", stateTestMember(21))
+	if err := limited.Create(ctx, added); err != nil {
+		t.Fatal(err)
+	}
+	for _, record := range dns.records {
+		if IsOwnershipStateRecord(record.Hostname) && len(record.Target) > 2000 {
+			t.Fatal("publication retained an oversized active value")
+		}
+	}
+	logical, err = limited.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range append(markers, added) {
+		if !exactOwnershipRecordPresent(logical, marker) {
+			t.Fatal("smaller-page publication lost an exact claim or its metadata")
+		}
+	}
+}
+
+func TestOwnershipProviderManifestValueBoundPrecedesWrites(t *testing.T) {
+	dns := &stateTestDNS{}
+	for i := range 20 {
+		dns.records = append(dns.records, stateTestMarker("limited", stateTestMember(i)))
+	}
+	p, err := NewCompactOwnershipProvider(&limitedStateTestDNS{dns, 256}, "limited", "example.com", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = p.MigrateOwnership(context.Background())
+	if !errors.Is(err, ErrOwnershipState) || !strings.Contains(err.Error(), "manifest exceeds") || dns.writes != 0 {
+		t.Fatalf("oversized manifest must preserve legacy claims before mutation: writes=%d err=%v", dns.writes, err)
+	}
+	if _, err := NewCompactOwnershipProvider(&limitedStateTestDNS{dns, 255}, "limited", "example.com", nil, nil); err == nil {
+		t.Fatal("accepted an unusably small ownership value bound")
+	}
 }
 
 func TestCompactOwnershipMigrationAndDisposableRestart(t *testing.T) {

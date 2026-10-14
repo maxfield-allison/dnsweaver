@@ -118,6 +118,7 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 				managed = rememberRecordMember(managed, record)
 				cache.addRecord(instance.Name(), record)
 				if err := r.ensureMemberOwnership(ctx, instance, record, cache); err != nil {
+					r.rememberMemberOwnershipRepair(instance, record)
 					action.Status = StatusFailed
 					action.Error = fmt.Sprintf("creating member ownership: %v", err)
 					r.logger.Warn("failed to create member ownership record",
@@ -179,6 +180,9 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 					legacyUpgradeComplete = false
 					desiredWritesSucceeded = false
 				} else if err := r.ensureMemberOwnership(ctx, instance, record, cache); err != nil {
+					r.rememberMemberOwnershipRepair(instance, record)
+					action.Status = StatusFailed
+					action.Error = fmt.Sprintf("creating member ownership: %v", err)
 					legacyUpgradeComplete = false
 					desiredWritesSucceeded = false
 					r.logger.Warn("failed to create member ownership record",
@@ -195,9 +199,12 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 			continue
 		}
 
-		actions = append(actions, memberAction(ActionSkip, StatusSkipped, instance, record, errRecordAlreadyExists))
+		action := memberAction(ActionSkip, StatusSkipped, instance, record, errRecordAlreadyExists)
 		if mayManage && !r.isDryRun() {
 			if err := r.ensureMemberOwnership(ctx, instance, record, cache); err != nil {
+				action.Status = StatusFailed
+				action.Error = fmt.Sprintf("creating member ownership: %v", err)
+				desiredWritesSucceeded = false
 				legacyUpgradeComplete = false
 				r.logger.Warn("failed to create member ownership record",
 					slog.String("provider", instance.Name()),
@@ -209,6 +216,7 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 		} else if hasLegacyOwnership {
 			legacyUpgradeComplete = false
 		}
+		actions = append(actions, action)
 	}
 
 	if allowRemovals && desiredWritesSucceeded && instance.Mode.AllowsDelete() {

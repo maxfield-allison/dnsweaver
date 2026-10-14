@@ -100,7 +100,7 @@ jobs:
           ./scripts/govulncheck-gate.sh
       - name: Retain govulncheck evidence
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: govulncheck-evidence
           path: .artifacts/govulncheck

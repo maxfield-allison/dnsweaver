@@ -2,6 +2,8 @@
 
 Version 1 stores ownership in the DNS zone. It requires no local state volume or separate service. The consumer is any dnsweaver process reading the same physical provider and zone. Each logical owner publishes its own snapshot. Local provider names are not part of the namespace.
 
+The independently serialized fixture in `pkg/provider/testdata/ownership-v1.json` checks persisted compatibility. Later implementations must continue to read it.
+
 ## Records
 
 Zone-enumerating APIs store each owner's manifests at `_dnsweaver-state.<owner-hash-16>.<zone>`. This avoids unrelated writers changing one TXT RRset, including APIs that replace an entire RRset. RFC 2136 uses the known discovery name `_dnsweaver-state.<zone>` and exact-value DNS UPDATE operations. It needs no shared mutable index or AXFR. Readers recognize both forms. Each TXT value is one manifest, prefixed `dnsweaver-state=v1:` and followed by base64url JSON without padding. The object has these fields:

@@ -4,11 +4,35 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
+
+func TestOwnershipFormatReadsPublishedV1Fixture(t *testing.T) {
+	payload, err := os.ReadFile("testdata/ownership-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Records []Record `json:"records"`
+		Marker  Record   `json:"marker"`
+	}
+	if err := json.Unmarshal(payload, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	logical, err := ExpandOwnershipState("example.com", fixture.Records)
+	if err != nil || len(logical) != 1 || !exactOwnershipRecordPresent(logical, fixture.Marker) {
+		t.Fatalf("v1 persisted wire compatibility: %+v, %v", logical, err)
+	}
+	owned, owner, member, metadata := ParseMemberOwnershipValue(logical[0].Target)
+	if !owned || owner != "fixture" || member == nil || member.Type != RecordTypeA || member.Target != "192.0.2.1" || metadata["note"] != "golden" {
+		t.Fatal("v1 member or metadata semantics changed")
+	}
+}
 
 func TestOwnershipFormatDeterministicPaginationAndMemberMetadata(t *testing.T) {
 	var entries []OwnershipEntry

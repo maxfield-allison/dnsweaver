@@ -35,6 +35,7 @@ func Factory() provider.Factory {
 		// Create the provider
 		p := &Provider{
 			name:    cfg.Name,
+			server:  providerCfg.Server,
 			zone:    providerCfg.Zone,
 			ttl:     providerCfg.TTL,
 			client:  client,

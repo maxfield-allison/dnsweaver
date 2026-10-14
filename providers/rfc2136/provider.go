@@ -225,6 +225,40 @@ func (p *Provider) ListOwnershipState(ctx context.Context) ([]provider.Record, e
 	return records, nil
 }
 
+// RestoreLegacyDiscovery restores and reads back the catalog used by old
+// binaries before compact claims are retired. It also repairs discovery when a
+// previous attempt wrote a marker but failed to publish its catalog entry.
+func (p *Provider) RestoreLegacyDiscovery(ctx context.Context, markers []provider.Record) error {
+	if p.catalog == nil {
+		return fmt.Errorf("%w: legacy hostname catalog unavailable", provider.ErrOwnershipState)
+	}
+	for _, marker := range markers {
+		name := provider.ExtractHostnameFromOwnership(marker.Hostname)
+		if name == "" {
+			return fmt.Errorf("%w: invalid legacy ownership name", provider.ErrOwnershipState)
+		}
+		if err := p.catalog.Add(ctx, name); err != nil {
+			return err
+		}
+	}
+	// Load reads authoritative DNS again rather than trusting the local cache
+	// populated by Add, including after an ambiguous update response.
+	if err := p.catalog.Load(ctx); err != nil {
+		return err
+	}
+	for _, marker := range markers {
+		name := provider.ExtractHostnameFromOwnership(marker.Hostname)
+		present, err := p.catalog.Contains(ctx, name)
+		if err != nil {
+			return err
+		}
+		if !present {
+			return fmt.Errorf("%w: legacy catalog readback missing %s", provider.ErrOwnershipState, name)
+		}
+	}
+	return nil
+}
+
 // Ping checks connectivity to the DNS server.
 func (p *Provider) Ping(ctx context.Context) error {
 	return p.client.Ping(ctx)

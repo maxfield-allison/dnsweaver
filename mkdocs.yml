@@ -172,5 +172,6 @@ nav:
       - Releases: contributing/releases.md
       - Architecture: contributing/architecture.md
       - Ownership Format: contributing/ownership-format.md
+      - Ownership Qualification: contributing/ownership-qualification.md
       - Adding a Provider: contributing/adding-provider.md
       - Adding a Source: contributing/adding-source.md

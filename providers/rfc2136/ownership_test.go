@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 )
 
 // The fixture handles real DNS wire messages and exact-value UPDATEs over TCP.
-func compactDNSServer(t *testing.T) string {
+func compactDNSServer(t *testing.T, rejectUpdate ...func(*dns.Msg) bool) string {
 	t.Helper()
 	listener, err := new(net.ListenConfig).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
@@ -32,7 +33,22 @@ func compactDNSServer(t *testing.T) string {
 		reply.SetReply(request)
 		reply.Authoritative = true
 		if request.Opcode == dns.OpcodeUpdate {
+			for _, reject := range rejectUpdate {
+				if reject(request) {
+					reply.Rcode = dns.RcodeRefused
+					_ = w.WriteMsg(reply)
+					return
+				}
+			}
 			for _, rr := range request.Ns {
+				if rr.Header().Class == dns.ClassANY {
+					for i := len(records) - 1; i >= 0; i-- {
+						if records[i].Header().Name == rr.Header().Name && records[i].Header().Rrtype == rr.Header().Rrtype {
+							records = append(records[:i], records[i+1:]...)
+						}
+					}
+					continue
+				}
 				incoming, _ := dnsupdate.RecordFromRR(rr)
 				found := -1
 				for i, existing := range records {
@@ -75,6 +91,78 @@ func compactDNSServer(t *testing.T) string {
 		}
 	})
 	return listener.Addr().String()
+}
+
+func TestRFC2136ReverseMigrationRequiresLegacyDiscovery(t *testing.T) {
+	ctx := context.Background()
+	var rejectCatalog atomic.Bool
+	rejectCatalog.Store(true)
+	address := compactDNSServer(t, func(msg *dns.Msg) bool {
+		for _, rr := range msg.Ns {
+			if strings.HasPrefix(rr.Header().Name, dnsupdate.CatalogPrefix) && rejectCatalog.Load() {
+				return true
+			}
+		}
+		return false
+	})
+	newProcess := func(mode string) provider.Provider {
+		registry := provider.NewRegistry(nil)
+		registry.SetInstanceID("docker")
+		registry.SetOwnershipStorage(mode)
+		registry.RegisterFactory("rfc2136", Factory())
+		if err := registry.CreateInstance(provider.ProviderInstanceConfig{
+			Name: "dns", TypeName: "rfc2136", RecordType: provider.RecordTypeA, Target: "192.0.2.1", TTL: 300,
+			Domains:        []string{"*.example.com"},
+			ProviderConfig: map[string]string{"SERVER": address, "ZONE": "example.com.", "USE_TCP": "true"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		instance, _ := registry.Get("dns")
+		return instance.Provider
+	}
+	compact := newProcess("compact")
+	member := provider.Record{Hostname: "app.example.com", Type: provider.RecordTypeA, Target: "192.0.2.1", TTL: 300}
+	marker := provider.MemberOwnershipRecord(member.Hostname, 300, "docker", member, nil)
+	if err := compact.Create(ctx, member); err != nil {
+		t.Fatal(err)
+	}
+	if err := compact.Create(ctx, marker); err != nil {
+		t.Fatal(err)
+	}
+	legacy := newProcess("legacy").(provider.OwnershipMigrator)
+	if err := legacy.MigrateOwnership(ctx); err == nil {
+		t.Fatal("rollback completed despite failed legacy hostname discovery")
+	}
+	// A new compact process must still recover the claim after the failure.
+	listed, err := newProcess("compact").List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMember := func(records []provider.Record, want provider.Record) {
+		t.Helper()
+		for _, record := range records {
+			if record.Hostname == want.Hostname && provider.SameRecordMember(record, want) {
+				return
+			}
+		}
+		t.Fatalf("missing recovered record %s %s", want.Hostname, want.Type)
+	}
+	assertMember(listed, marker)
+	rejectCatalog.Store(false)
+	if err := newProcess("legacy").(provider.OwnershipMigrator).MigrateOwnership(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// This undecorated reader follows the old binary's catalog-only path.
+	oldReader, err := New("old", &Config{Server: address, Zone: "example.com.", UseTCP: true, TTL: 300, Timeout: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed, err = oldReader.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMember(listed, marker)
+	assertMember(listed, member)
 }
 
 func TestRFC2136CompactOwnershipDiscoversAfterRestartWithoutCatalog(t *testing.T) {

@@ -8,10 +8,75 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/maxfield-allison/dnsweaver/internal/testutil"
 	"github.com/maxfield-allison/dnsweaver/pkg/provider"
 )
+
+func TestCloudflareOwnershipMigrationConformance(t *testing.T) {
+	var mu sync.Mutex
+	records := make(map[string]dnsRecord)
+	nextID := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		path := "/zones/zone-id/dns_records"
+		switch {
+		case r.URL.Path == "/zones/zone-id":
+			_ = json.NewEncoder(w).Encode(successResponse(zoneResult{ID: "zone-id", Name: "example.com"}))
+		case r.URL.Path == path && r.Method == http.MethodPost:
+			var record dnsRecord
+			if err := json.NewDecoder(r.Body).Decode(&record); err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			nextID++
+			record.ID = strconv.Itoa(nextID)
+			records[record.ID] = record
+			_ = json.NewEncoder(w).Encode(successResponse(record))
+		case r.URL.Path == path && r.Method == http.MethodGet:
+			listed := []dnsRecord{}
+			for _, record := range records {
+				if kind := r.URL.Query().Get("type"); kind != "" && kind != record.Type {
+					continue
+				}
+				if name := r.URL.Query().Get("name"); name != "" && name != record.Name {
+					continue
+				}
+				if record.Type == "TXT" && (provider.IsOwnershipStateRecord(record.Name) || provider.IsDnsweaverOwned(record.Content)) {
+					var parts []string
+					for start := 0; start < len(record.Content); start += 255 {
+						parts = append(parts, strconv.Quote(record.Content[start:min(start+255, len(record.Content))]))
+					}
+					record.Content = strings.Join(parts, " ")
+				}
+				listed = append(listed, record)
+			}
+			_ = json.NewEncoder(w).Encode(successResponse(listed))
+		case strings.HasPrefix(r.URL.Path, path+"/") && r.Method == http.MethodDelete:
+			delete(records, strings.TrimPrefix(r.URL.Path, path+"/"))
+			_ = json.NewEncoder(w).Encode(successResponse(map[string]string{}))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	testutil.RunOwnershipMigrationConformance(t, func(t *testing.T, owner, storage string) provider.Provider {
+		factory := func(provider.FactoryConfig) (provider.Provider, error) {
+			p, err := New("dns", &Config{ZoneID: "zone-id", Token: "test-token", TTL: 300})
+			if err != nil {
+				return nil, err
+			}
+			p.logger = testutil.QuietLogger()
+			p.client = NewClient("test-token", WithAPIEndpoint(server.URL), WithLogger(p.logger))
+			return p, nil
+		}
+		return testutil.OwnershipRegistryProvider(t, owner, storage, "cloudflare", factory, map[string]string{})
+	})
+}
 
 func TestClientOwnershipPaginationAndZoneIDResolution(t *testing.T) {
 	for _, failedPage := range []bool{false, true} {

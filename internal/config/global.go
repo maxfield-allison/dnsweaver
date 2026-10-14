@@ -23,7 +23,7 @@ const (
 	DefaultCleanupOrphans       = true
 	DefaultCleanupOnStop        = true
 	DefaultOwnershipTracking    = true
-	DefaultOwnershipStorage     = "compact"
+	DefaultOwnershipStorage     = "legacy"
 	DefaultAdoptExisting        = false
 	DefaultTTL                  = 300
 	DefaultReconcileInterval    = 60 * time.Second

@@ -19,7 +19,7 @@ func TestOwnershipStorageDefaultAndEnvironmentValidation(t *testing.T) {
 			}
 			want := mode
 			if want == "" {
-				want = "compact"
+				want = "legacy"
 			}
 			if cfg.OwnershipStorage != want {
 				t.Fatalf("storage=%q want=%q", cfg.OwnershipStorage, want)

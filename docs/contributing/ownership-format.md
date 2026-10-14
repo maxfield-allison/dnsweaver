@@ -31,7 +31,7 @@ Cleanup visits predecessors from oldest to newest. It removes their pages that t
 
 ## Compatibility and active writers
 
-Readers continue to recognize existing per-member ownership TXT records. Migration copies only the current owner's markers into verified pages before deleting those exact markers. It must not run during dry-run or when ownership tracking is disabled. Reverse migration writes and verifies legacy markers before removing compact state. An older binary cannot be assumed to read compact state.
+Readers continue to recognize existing per-member ownership TXT records. Migration copies only the current owner's markers into verified pages before deleting those exact markers. It must not run during dry-run or when ownership tracking is disabled. Reverse migration writes and verifies legacy markers before removing compact state. Backends with separate legacy enumeration must also restore and read back that discovery state through `OwnershipLegacyDiscoveryRestorer.RestoreLegacyDiscovery`. Marker readback alone cannot confirm a catalog write. A failure retains the compact snapshot for retry after restart. An older binary cannot be assumed to read compact state.
 
 Distinct owners can publish and reconcile concurrently without rewriting one shared TXT value. A stable instance ID belongs to the logical source scope, not to a pod or container incarnation. Compatible shared claims must survive withdrawal by one owner. A failed discovery, disconnected process or expired heartbeat is not removal of its resources.
 

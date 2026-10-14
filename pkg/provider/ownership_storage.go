@@ -47,6 +47,12 @@ type OwnershipMigrator interface {
 	MigrateOwnership(context.Context) error
 }
 
+// OwnershipLegacyDiscoveryRestorer verifies separate legacy enumeration before
+// reverse migration retires compact claims. Marker readback cannot verify it.
+type OwnershipLegacyDiscoveryRestorer interface {
+	RestoreLegacyDiscovery(context.Context, []Record) error
+}
+
 // SharedOwnership retains a DNS member while another logical owner claims it.
 // ReleaseSharedOwnership withdraws only this owner's claim when retention applies.
 type SharedOwnership interface {
@@ -505,10 +511,17 @@ func (p *CompactOwnershipProvider) MigrateOwnership(ctx context.Context) error {
 }
 
 func (p *CompactOwnershipProvider) restoreLegacy(ctx context.Context, snapshot *ownershipSnapshot) error {
+	markers := make([]Record, 0, len(snapshot.entries[p.owner]))
 	for _, entry := range snapshot.entries[p.owner] {
 		marker := Record{Hostname: entry.Name, Type: RecordTypeTXT, Target: entry.Value, TTL: 300}
 		if err := p.createVerified(ctx, marker); err != nil {
 			return fmt.Errorf("restoring legacy marker: %w", err)
+		}
+		markers = append(markers, marker)
+	}
+	if restorer, ok := p.Provider.(OwnershipLegacyDiscoveryRestorer); ok && len(markers) > 0 {
+		if err := restorer.RestoreLegacyDiscovery(ctx, markers); err != nil {
+			return fmt.Errorf("restoring legacy discovery: %w", err)
 		}
 	}
 	if len(snapshot.entries[p.owner]) > 0 {

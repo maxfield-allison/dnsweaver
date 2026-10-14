@@ -386,6 +386,64 @@ func TestCompactOwnershipReverseMigrationPreservesClaimsOnQuotaFailure(t *testin
 	}
 }
 
+func TestCompactOwnershipMigrationAt200RecordQuota(t *testing.T) {
+	for _, free := range []int{0, 1, 2} {
+		t.Run(fmt.Sprintf("free-%d", free), func(t *testing.T) {
+			ctx := context.Background()
+			dns := &stateTestDNS{limit: 200}
+			for i := range 80 {
+				dns.records = append(dns.records, stateTestMember(i), stateTestMarker("a", stateTestMember(i)))
+			}
+			for i := range 40 - free {
+				dns.records = append(dns.records, Record{Hostname: fmt.Sprintf("user-%d.example.com", i), Type: RecordTypeTXT, Target: "operator-data"})
+			}
+			p := stateTestProvider(t, dns, "a")
+			err := p.MigrateOwnership(ctx)
+			if free < 2 && err == nil || free == 2 && err != nil {
+				t.Fatalf("migration with %d free slots: %v", free, err)
+			}
+			logical, err := stateTestProvider(t, dns, "a").List(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := range 80 {
+				if !exactOwnershipRecordPresent(logical, stateTestMarker("a", stateTestMember(i))) || !exactOwnershipRecordPresent(logical, stateTestMember(i)) {
+					t.Fatal("migration lost a claim or answer")
+				}
+			}
+			if free < 2 {
+				for i := range 80 {
+					if !exactOwnershipRecordPresent(dns.records, stateTestMarker("a", stateTestMember(i))) {
+						t.Fatal("quota failure removed a legacy marker")
+					}
+				}
+				return
+			}
+			if len(dns.records) != 120 {
+				t.Fatalf("post-migration count=%d, want 120", len(dns.records))
+			}
+			legacy := stateTestProvider(t, dns, "a")
+			legacy.legacy = true
+			// All 80 legacy markers fit, but the retirement manifest needs one
+			// more slot before obsolete compact records can be removed safely.
+			if err := legacy.MigrateOwnership(ctx); err == nil {
+				t.Fatal("rollback completed without retirement-manifest headroom")
+			}
+			snapshot, err := stateTestProvider(t, dns, "a").snapshot(ctx)
+			if err != nil || len(snapshot.entries["a"]) != 80 {
+				t.Fatal("failed rollback retired compact claims", err)
+			}
+			dns.limit = 201
+			if err := legacy.MigrateOwnership(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if len(dns.records) != 199 {
+				t.Fatalf("rollback count=%d, want 198 original records plus empty manifest", len(dns.records))
+			}
+		})
+	}
+}
+
 func TestCompactOwnershipCorruptOrForkedStatePreventsDataMutations(t *testing.T) {
 	for _, failure := range []string{"missing-page", "corrupt-page", "fork", "unknown-version"} {
 		t.Run(failure, func(t *testing.T) {

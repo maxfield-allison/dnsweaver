@@ -246,6 +246,11 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 // the member. Foreign and ambiguous hostname-level claims remain untouched.
 func (r *Reconciler) cleanupAbsentMemberClaims(ctx context.Context, set *desiredRecordSet, cache *recordCache) []Action {
 	instance := set.Instance
+	// The legacy provider path intentionally retains absent-answer markers.
+	// Shared ownership stores support exact claim withdrawal and fresh validation.
+	if _, supported := instance.Provider.(provider.SharedOwnership); !supported {
+		return nil
+	}
 	if r.isDryRun() || !r.config.OwnershipTracking || !instance.Provider.Capabilities().SupportsOwnershipTXT {
 		return nil
 	}

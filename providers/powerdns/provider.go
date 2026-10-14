@@ -260,6 +260,10 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 	return nil
 }
 
+// OwnershipReplacesRRset marks the API's read-modify-write member operations.
+// Compact ownership uses separate owner names; shared data RRsets remain guarded.
+func (p *Provider) OwnershipReplacesRRset() bool { return true }
+
 // Delete removes a DNS record using read-modify-write: it drops the matching
 // content and REPLACEs the rrset with the remainder, or DELETEs the rrset when
 // no records remain. Absent records are a no-op. Survivors' TTL and Disabled

@@ -54,6 +54,7 @@ reconciler:
   cleanup_orphans: true   # Delete records for removed containers
   cleanup_on_stop: true   # Delete records when containers stop (not just remove)
   ownership_tracking: true # Use TXT records to track record ownership
+  ownership_storage: compact # compact DNS pages; legacy restores per-member TXT
   adopt_existing: false   # Adopt pre-existing DNS records by creating TXT records
 
 # Docker connection settings

@@ -138,11 +138,22 @@ func (r *Reconciler) reconcileDesiredSetWithState(ctx context.Context, set *desi
 		existing := sameType[existingIndex]
 		_, hasMemberOwnership := cache.memberOwnershipRecord(instance.Name(), record, instance.InstanceID)
 		adopt := r.effectiveAdoptExisting(desiredMember.Claim, instance)
+		shared := false
+		sharing, supportsSharing := instance.Provider.(provider.SharedOwnership)
+		if supportsSharing && r.config.OwnershipTracking && !hasMemberOwnership && !hasLegacyOwnership {
+			var err error
+			shared, err = sharing.CanShareOwnership(ctx, existing, record)
+			if err != nil {
+				actions = append(actions, memberAction(ActionCreate, StatusFailed, instance, record, err.Error()))
+				desiredWritesSucceeded = false
+				continue
+			}
+		}
 		mayManage := !r.config.OwnershipTracking || !instance.Mode.RequiresOwnership() ||
-			hasMemberOwnership || adopt || hasLegacyOwnership ||
+			hasMemberOwnership || adopt || hasLegacyOwnership || shared ||
 			(!instance.Provider.Capabilities().SupportsOwnershipTXT && recordMemberPresent(previous, existing))
 		if record.Type == provider.RecordTypeTXT {
-			mayManage = !cache.foreignMemberOwnership(instance.Name(), record, instance.InstanceID) &&
+			mayManage = supportsSharing && hasMemberOwnership || shared || !cache.foreignMemberOwnership(instance.Name(), record, instance.InstanceID) &&
 				(hasMemberOwnership || recordMemberPresent(previous, existing) || adopt)
 		}
 		if mayManage && !r.isDryRun() {
@@ -253,7 +264,8 @@ func (r *Reconciler) mayDeleteMember(instance *provider.ProviderInstance, record
 		return false
 	}
 	if record.Type == provider.RecordTypeTXT {
-		if cache.foreignMemberOwnership(instance.Name(), record, instance.InstanceID) {
+		_, compact := instance.Provider.(provider.SharedOwnership)
+		if !compact && cache.foreignMemberOwnership(instance.Name(), record, instance.InstanceID) {
 			return false
 		}
 		_, owned := cache.memberOwnershipRecord(instance.Name(), record, instance.InstanceID)
@@ -281,6 +293,22 @@ func (r *Reconciler) deleteSetMember(ctx context.Context, instance *provider.Pro
 	action := memberAction(ActionDelete, StatusSuccess, instance, record, "")
 	if r.isDryRun() {
 		return action, true
+	}
+	if sharing, ok := instance.Provider.(provider.SharedOwnership); ok {
+		retained, err := sharing.ReleaseSharedOwnership(ctx, record)
+		if err != nil {
+			action.Status = StatusFailed
+			action.Error = err.Error()
+			return action, false
+		}
+		if retained {
+			if marker, owned := cache.memberOwnershipRecord(instance.Name(), record, instance.InstanceID); owned {
+				cache.removeRecord(instance.Name(), marker)
+			}
+			action.Type = ActionSkip
+			action.Error = "ownership released; DNS member retained for another owner"
+			return action, true
+		}
 	}
 	if err := instance.DeleteMember(ctx, record); err != nil && !errors.Is(err, provider.ErrNotFound) {
 		action.Status = StatusFailed

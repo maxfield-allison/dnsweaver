@@ -233,6 +233,13 @@ func mergeGlobalConfig(base *GlobalConfig) (*GlobalConfig, []*ConfigError) {
 		cfg.OwnershipTracking = parseBool(v, cfg.OwnershipTracking)
 	}
 
+	if v := getEnv("DNSWEAVER_OWNERSHIP_STORAGE"); v != "" {
+		cfg.OwnershipStorage = v
+	}
+	if cfg.OwnershipStorage != "compact" && cfg.OwnershipStorage != "legacy" {
+		errs = append(errs, configErr("DNSWEAVER_OWNERSHIP_STORAGE", "must be compact or legacy"))
+	}
+
 	if v := getEnv("DNSWEAVER_ADOPT_EXISTING"); v != "" {
 		cfg.AdoptExisting = parseBool(v, cfg.AdoptExisting)
 	}

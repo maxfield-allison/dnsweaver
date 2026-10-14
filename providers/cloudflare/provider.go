@@ -26,8 +26,10 @@ type Provider struct {
 	logger     *slog.Logger
 
 	// zoneIDOnce ensures zone ID lookup happens only once
-	zoneIDOnce sync.Once
-	zoneIDErr  error
+	zoneIDOnce        sync.Once
+	zoneIDErr         error
+	ownershipZoneMu   sync.Mutex
+	ownershipZoneName string
 }
 
 // ProviderOption is a functional option for configuring the Provider.
@@ -259,10 +261,14 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 		return nil, fmt.Errorf("listing TXT records: %w", err)
 	}
 	for _, r := range txtRecords {
+		content, contentErr := compactTXTContent(r.Name, r.Content)
+		if contentErr != nil {
+			return nil, contentErr
+		}
 		records = append(records, provider.Record{
 			Hostname:   r.Name,
 			Type:       provider.RecordTypeTXT,
-			Target:     r.Content,
+			Target:     content,
 			TTL:        r.TTL,
 			ProviderID: r.ID,
 		})
@@ -302,6 +308,86 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 	)
 
 	return records, nil
+}
+
+// OwnershipZone resolves the name even when configuration supplies only an ID.
+func (p *Provider) OwnershipZone(ctx context.Context) (string, error) {
+	p.ownershipZoneMu.Lock()
+	defer p.ownershipZoneMu.Unlock()
+	if p.ownershipZoneName != "" {
+		return p.ownershipZoneName, nil
+	}
+	zoneID, err := p.ZoneID(ctx)
+	if err != nil {
+		return "", err
+	}
+	zone, err := p.client.GetZoneName(ctx, zoneID)
+	if err == nil {
+		p.ownershipZoneName = zone
+	}
+	return zone, err
+}
+
+// ListOwnershipState uses the paginated TXT endpoint for publication readbacks.
+func (p *Provider) ListOwnershipState(ctx context.Context) ([]provider.Record, error) {
+	zoneID, err := p.ZoneID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := p.client.ListRecords(ctx, zoneID, "TXT")
+	if err != nil {
+		return nil, err
+	}
+	records := make([]provider.Record, 0, len(raw))
+	for _, r := range raw {
+		content, err := compactTXTContent(r.Name, r.Content)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, provider.Record{Hostname: r.Name, Type: provider.RecordTypeTXT, Target: content, TTL: r.TTL, ProviderID: r.ID})
+	}
+	return records, nil
+}
+
+// Cloudflare can return one TXT RR as quoted wire strings. Compact payloads
+// concatenate those strings; unrelated user TXT retains its existing meaning.
+func compactTXTContent(name, value string) (string, error) {
+	state := provider.IsOwnershipStateRecord(name)
+	if (!state && !provider.IsOwnershipRecord(name)) || !strings.HasPrefix(value, "\"") {
+		return value, nil
+	}
+	var content strings.Builder
+	rest := value
+	for rest != "" {
+		if rest[0] != '"' {
+			return "", fmt.Errorf("%w: invalid quoted ownership TXT", provider.ErrOwnershipState)
+		}
+		end := 1
+		for end < len(rest) {
+			if rest[end] == '\\' {
+				end += 2
+				continue
+			}
+			if rest[end] == '"' {
+				break
+			}
+			end++
+		}
+		if end >= len(rest) {
+			return "", fmt.Errorf("%w: unterminated quoted ownership TXT", provider.ErrOwnershipState)
+		}
+		decoded, err := strconv.Unquote(rest[:end+1])
+		if err != nil {
+			return "", fmt.Errorf("%w: invalid quoted ownership TXT", provider.ErrOwnershipState)
+		}
+		content.WriteString(decoded)
+		rest = strings.TrimSpace(rest[end+1:])
+	}
+	decoded := content.String()
+	if !state && !provider.IsDnsweaverOwned(decoded) {
+		return value, nil
+	}
+	return decoded, nil
 }
 
 // Create adds a new DNS record.

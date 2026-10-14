@@ -249,6 +249,16 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 		slog.Bool("complete", extracted.Complete),
 	)
 
+	if !dryRun && r.config.OwnershipTracking {
+		for _, instance := range r.providers.All() {
+			if migrator, ok := instance.Provider.(provider.OwnershipMigrator); ok {
+				if err := migrator.MigrateOwnership(ctx); err != nil {
+					return nil, fmt.Errorf("preparing ownership for %s: %w", instance.Name(), err)
+				}
+			}
+		}
+	}
+
 	// Step 3: Build record cache for all providers (single List() call per provider).
 	// Built even in dry-run mode so orphan cleanup can report accurate record counts.
 	cache := newRecordCache(ctx, r.providers, r.logger)

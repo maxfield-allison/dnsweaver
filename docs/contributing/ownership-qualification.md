@@ -1,12 +1,12 @@
 # Compact ownership qualification
 
-Compact ownership is opt-in in its first release. DNS remains the only required state backend. This qualification scope covers ownership migration, recovery, and provider boundaries. It does not establish strict fencing for same-owner replicas or a completed public release.
+Compact ownership is opt-in in its first release. DNS remains the only required state backend. This qualification scope covers ownership migration, recovery, and provider boundaries. It does not establish strict fencing for same-owner replicas.
 
 ## Retained automated evidence
 
 | Provider | Current automated evidence | Real backend qualification still required |
 | --- | --- | --- |
-| Cloudflare | Registry wiring, paginated TXT listing, zone-ID resolution, quoted TXT strings, migration, restart, metadata and sibling preservation, reverse migration; live distinct-owner and authoritative wire checks described below | Restricted DNS token, 200-record quota, broader account and TXT limits, throttling, adversarial stale/in-flight writes |
+| Cloudflare | Registry wiring, paginated TXT listing, zone-ID resolution, quoted TXT strings, migration, restart, metadata and sibling preservation, reverse migration; live distinct-owner and authoritative wire checks described below | Restricted DNS token, quota exhaustion and temporary peak headroom beyond the observed production migration/reversal, broader account and TXT limits, throttling, adversarial stale/in-flight writes |
 | Technitium | Registry wiring, HTTP form and JSON record round trips, migration, restart, metadata and sibling preservation, reverse migration; live server 15.6 and five authoritative nodes described below | Other supported versions, adversarial stale/in-flight writes |
 | OVH | Signed HTTP requests, quoted TXT, exact record IDs, zone refresh calls, migration, restart, metadata and sibling preservation, reverse migration | Long TXT API representation and limits, refresh visibility, throttling, concurrent distinct owners |
 | PowerDNS | Registry wiring, quoted TXT, whole-RRset replacement, exact sibling preservation, migration, restart, reverse migration | Supported server and backend versions, long TXT wire answers, disjoint ownership writes, documented data RRset restrictions |
@@ -49,7 +49,7 @@ Valid mixed-member wire tests used 19 A, AAAA, CNAME and SRV claims with 512-byt
 
 Cloudflare rejected a 3,124-byte encoded page with HTTP 400 and API code 1000. The rejection reproduced under a neutral name and with explicit quoted character strings. Repetitive 3,500-byte content and truncated encoded values through 2,500 bytes were accepted; a 3,500-byte opaque hex value was rejected. These observations do not establish a universal size threshold. The adapter now limits new pages and manifests to a conservative 2,000 bytes. Failed publication preserved legacy claims, and each test cleaned its owned records. Readers still accept the full persisted v1 format bound.
 
-The disposable Cloudflare zone reported a quota of 1,000 records. The real 200-record quota remains unqualified; the generic quota fixture covers forward and reverse headroom. The existing DNS-scoped credential could not access that historical zone, so this run used another existing authorized credential. A minimally scoped live token remains a qualification gap. API request savings and broad latency claims are not established.
+The disposable Cloudflare zone reported a quota of 1,000 records. A later [production canary](#production-canary-follow-up-on-2026-10-14) exercised migration and reversal in a real 200-record zone. Quota exhaustion and temporary peak headroom remain separate qualification gaps; the generic quota fixture covers forward and reverse headroom failures. The existing DNS-scoped credential could not access that historical zone, so this run used another existing authorized credential. A minimally scoped live token remains a qualification gap. API request savings and broad latency claims are not established.
 
 The opt-in live harness is excluded from ordinary builds and skips without `DNSWEAVER_LIVE_CONFIG`. Supply a protected JSON file with `Provider`, `Zone`, `ZoneID` (Cloudflare) or `URL` (Technitium), `TokenFile`, `Target`, `RecordType`, a fresh `qa-` `Prefix`, two distinct scoped `Owners`, `Kubeconfig`, `DockerAddress`, `SSHKey`, and an `Output` directory. Wire tests also require explicit `NameServers` as `address:53`. Configure `AutoHTTPS` to exercise Technitium companions. Credentials are read inside the process; snapshots and actor logs are private files.
 
@@ -61,6 +61,18 @@ DNSWEAVER_LIVE_CONFIG=/path/to/protected-config.json /path/to/ownership-live.tes
 
 Both tests require an initially empty inventory of provider-managed record types. Each cleans only its fresh QA names and owner namespaces, leaving outside records untouched and failing on an unexpected inventory. Give each run a separate output directory and verify cleanup before the next run. `scripts/ownership_live_preflight.py` captures immutable baselines and current provider quota; creating a local zone requires its explicit flag. `scripts/ownership_live_txt_probe.py` isolates a rejected Cloudflare page using the optional offline `TestOwnershipPrepareProbe` preparation step. It is a transport experiment; truncated probe values never grant ownership.
 
+## Production canary follow-up on 2026-10-14
+
+After upgrading every reader in the shared zones to v3.2.0, one owner was switched to compact storage. The canary covered Cloudflare and Technitium 15.6. Its 21 per-claim ownership TXT records became six compact TXT records, a reduction of 15 records (71%).
+
+The Cloudflare zone had a 200-record limit. Its observed count was 182 before migration, 176 in compact mode, 183 in the verified legacy reversal state and 176 after compact was re-enabled. The reversal count is an observed state, not a measured peak. This qualifies those migration and reversal paths within a real 200-record zone; quota-exhaustion behavior and broader account limits still need separate qualification.
+
+A fresh container reconstructed its claims from DNS. Real Docker and Kubernetes discovery exercised compatible distinct-owner claims across compact and legacy storage. First withdrawal retained the shared answer and its metadata; final withdrawal removed it. Complete supported logical provider views matched the expected state throughout. Authoritative TCP queries checked the persisted TXT values.
+
+Reversal ran on the new binary and a pre-feature provider reader recovered every claim. Empty manifests were retained before compact was re-enabled. No older production writer was started. This verifies the restored ownership representation; full older-daemon rollback remains a separate qualification case.
+
+Minimum credential scopes, additional provider versions, same-owner fencing and stale in-flight provider writes remain open. Compact stays opt-in.
+
 ## Real backend acceptance
 
 Use disposable zones and independently configured processes. Preserve exact backend versions, candidate commit, API permissions, record counts, response formats, and cleanup receipts. A skipped credential-dependent test is a coverage gap.
@@ -71,7 +83,7 @@ Then run distinct owners concurrently over disjoint names, retain an offline own
 
 Measure both steady and peak DNS record use, API calls per change, convergence time, and cleanup after failure. The record savings are established for the retained fixtures. API and latency savings remain unmeasured. Uncommitted staged pages can consume quota after interruption and need explicit recovery guidance.
 
-Before changing the default, complete the advertised provider matrix, retain public CI and built-image evidence for the exact candidate, exercise rolling upgrade and downgrade, and publish the [migration instructions](../configuration/ownership.md#migration-and-rollback). PostgreSQL and Valkey adapters can follow separately.
+Before changing the default, complete the advertised provider matrix, retain public CI and built-image evidence for the exact candidate, exercise rolling upgrade and downgrade, and publish the [migration instructions](../configuration/ownership.md#migration-and-rollback). PostgreSQL and Valkey adapters can follow separately. Track provider qualification and the later default-change decision in [#223](https://github.com/maxfield-allison/dnsweaver/issues/223); same-owner coordination remains [#139](https://github.com/maxfield-allison/dnsweaver/issues/139).
 
 ## Provider references
 

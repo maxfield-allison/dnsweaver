@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## [3.2.1] - 2026-10-15
+
+### Changed
+
+- Document the compact ownership production canary, verified reversal in a 200-record Cloudflare zone, and remaining provider qualification limits. ([#223](https://github.com/maxfield-allison/dnsweaver/issues/223))
+- Update the Prometheus Go client to 1.25.0 and `golang.org/x/crypto` to 0.58.0.
+
+### Fixed
+
+- The Pi-hole v5 API client now authenticates to password-protected servers and reads existing A and AAAA records. Earlier releases sent a hash that Pi-hole v5 does not accept, and read custom DNS entries in the wrong field order. If you use Pi-hole v5 in API mode, check after upgrading that dnsweaver lists the records you expect.
+
+### Security
+
+- The Pi-hole v5 client now redacts the configured password and its hash from returned error text. Applications that unwrap and log the original error must apply their own redaction. In v0.4.1 through v3.2.0, failed requests and some error responses carried the request URL, and with it the `auth` parameter, into returned errors and logs. Pi-hole v5 did not accept the exposed hash for API calls, but anyone who could read it could test password guesses offline. A recovered password gives full access to the Pi-hole admin interface and API. Weak or reused passwords are most at risk. The Pi-hole v6 API client and Pi-hole file mode are not affected by this issue. If affected logs may have been read by someone else, upgrade or stop every affected instance. Then change the Pi-hole web interface password and update it in dnsweaver before restarting affected instances. Change the password anywhere else it was reused. Earlier log entries remain sensitive after upgrading; review access to application logs, exported logs and backups, and handle retained entries as sensitive data. If an immediate upgrade is unavailable, restrict access to error output and log stores. This does not prevent further exposure while an affected instance keeps making requests.
+
+
 ## [3.2.0] - 2026-10-14
 
 ### Changed

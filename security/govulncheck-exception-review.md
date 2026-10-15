@@ -4,14 +4,14 @@ This record explains the dependency exceptions enforced by [`govulncheck-excepti
 
 ## Scan evidence
 
-The accepted policy was revalidated on 2026-09-16 with:
+The accepted policy was revalidated on 2026-10-15 with:
 
-- Go 1.26.8
+- Go 1.26.9
 - govulncheck v1.8.0
-- vulnerability database `https://vuln.go.dev`, last modified `2026-09-15T18:39:25Z`
+- vulnerability database `https://vuln.go.dev`, last modified `2026-10-08T22:31:09Z`
 - symbol-level source mode across `./...`
 
-The completed structured scan contained 285 OSV records and normalized six findings. The gate matched the following exact scopes:
+The completed structured scan contained 309 OSV records and normalized the same six findings as the 2026-09-16 review. The gate matched the following exact scopes:
 
 | Advisory | Module and version | Reachability | Exact package set |
 | --- | --- | --- | --- |
@@ -20,7 +20,7 @@ The completed structured scan contained 285 OSV records and normalized six findi
 | GO-2026-5617 | `github.com/docker/docker@v28.5.2+incompatible` | module | empty |
 | GO-2026-5668 | `github.com/docker/docker@v28.5.2+incompatible` | module | empty |
 | GO-2026-5746 | `github.com/docker/docker@v28.5.2+incompatible` | module | empty |
-| GO-2026-5932 | `golang.org/x/crypto@v0.57.0` | module | empty |
+| GO-2026-5932 | `golang.org/x/crypto@v0.58.0` | module | empty |
 
 The exact package set for GO-2026-4883 and GO-2026-4887 is:
 
@@ -57,11 +57,11 @@ GO-2026-4883 and GO-2026-4887 describe Docker daemon plugin and authorization be
 
 GO-2026-5617, GO-2026-5668, and GO-2026-5746 were module-only findings. Their affected Docker daemon archive and copy functions are not imported or called by dnsweaver.
 
-GO-2026-5932 was a module-only finding for `golang.org/x/crypto/openpgp`. dnsweaver imports `golang.org/x/crypto/ssh` and `golang.org/x/crypto/ssh/knownhosts`, not an OpenPGP package.
+GO-2026-5932 was a module-only finding for `golang.org/x/crypto/openpgp`. dnsweaver imports `golang.org/x/crypto/ssh` and `golang.org/x/crypto/ssh/knownhosts`, not an OpenPGP package. Updating `golang.org/x/crypto` from v0.57.0 to v0.58.0 leaves the finding module-only with an empty package set.
 
 ## Maintainer decision
 
-Maintainer Max Allison accepted only the six exact scopes above on 2026-09-16. The next review date is 2026-10-16 and the hard expiry is 2026-12-16. A missing decision, due review, expired entry, different module version, different package set, or changed reachability fails the gate.
+Maintainer Max Allison first accepted these exceptions on 2026-09-16 and renewed the six exact scopes above on 2026-10-15, with `golang.org/x/crypto` at v0.58.0. The next review date is 2026-11-16 and the hard expiry remains 2026-12-16. For a reported finding, a missing accepted decision, due review, expired entry, or mismatch in module, version, package set, or reachability fails the gate.
 
 GO-2026-4883 and GO-2026-4887 require immediate review when any of these conditions occurs:
 

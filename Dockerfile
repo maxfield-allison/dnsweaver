@@ -15,7 +15,7 @@
 # Multi-arch support: amd64 + arm64
 # =============================================================================
 
-ARG GO_VERSION=1.26.9
+ARG GO_VERSION=1.26.10
 ARG GO_ALPINE_VERSION=3.24
 ARG ALPINE_VERSION=3.23
 ARG BUILDER_IMAGE=golang:${GO_VERSION}-alpine${GO_ALPINE_VERSION}

@@ -149,7 +149,7 @@ the application never runs as root. A socket proxy is still the stronger option.
 
 ### Custom UID and GID
 
-Use Docker's `--user UID:GID` or Compose's `user` setting to run with your own numeric identity. The entrypoint honors an already non-root user and preserves its supplementary groups. The default remains 1000:1000 when no user override is supplied.
+Starting with v3.2.2, use Docker's `--user UID:GID` or Compose's `user` setting to run with your own numeric identity. The entrypoint honors an already non-root user and preserves its supplementary groups. The default remains 1000:1000 when no user override is supplied.
 
 ```yaml
 services:

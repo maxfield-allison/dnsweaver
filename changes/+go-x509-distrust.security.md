@@ -1,1 +1,0 @@
-Build with Go 1.26.10 to reject compromised intermediate certificates covered by GO-2026-6809 (CVE-2026-111943). Refresh the pinned container inputs and package inventories used for release qualification.

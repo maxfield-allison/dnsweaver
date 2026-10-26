@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## [3.2.2] - 2026-10-26
+
+### Fixed
+
+- Stop listing a CNAME repeatedly when an RFC2136 server returns it in answers to multiple record-type queries. Managed orphan cleanup can remove the record again, and CNAME target records are not duplicated into the managed listing. ([#228](https://github.com/maxfield-allison/dnsweaver/issues/228))
+- Honor Docker's `user: UID:GID` setting and preserve supplementary groups supplied through `group_add`. Default startup still drops to 1000:1000 and configures Docker socket access automatically. With an explicit non-root user, supply the socket's group through `group_add` and ensure mounted files have the required permissions. ([#230](https://github.com/maxfield-allison/dnsweaver/issues/230))
+
+### Security
+
+- Build with Go 1.26.10 to reject compromised intermediate certificates covered by GO-2026-6809 (CVE-2026-111943). Refresh the pinned container inputs and package inventories used for release qualification.
+
+
 ## [3.2.1] - 2026-10-15
 
 ### Changed

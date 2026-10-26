@@ -110,6 +110,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 #
 # If you don't mount the docker socket (k8s-only, socket proxy), the entrypoint
 # skips the GID logic entirely.
+# An explicit non-root user bypasses setup and keeps its supplied groups.
 
 # Expose health port
 EXPOSE 8080

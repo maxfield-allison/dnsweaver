@@ -22,7 +22,7 @@ workflow:
 .rules-code-changes: &rules-code-changes
   - if: $CI_COMMIT_TAG
   - if: $CI_COMMIT_BRANCH == "main"
-    changes: &code-files ["{**/*.go,go.mod,go.sum,.golangci.yml,.gitlab-ci.yml,.github/workflows/*.yml,scripts/govulncheck-gate.sh,scripts/test-govulncheck-gate.sh,security/govulncheck-exceptions.json,scripts/ci-lint.sh,scripts/release.py,scripts/test_release.py,ci/release-inputs.json,.gitleaks.toml,Dockerfile,.dockerignore,docker/entrypoint.sh,scripts/test-image-healthcheck.sh,testdata/image-healthcheck-config.yml,.trivyignore}"]
+    changes: &code-files ["{**/*.go,go.mod,go.sum,.golangci.yml,.gitlab-ci.yml,.github/workflows/*.yml,scripts/govulncheck-gate.sh,scripts/test-govulncheck-gate.sh,security/govulncheck-exceptions.json,scripts/ci-lint.sh,scripts/release.py,scripts/test_release.py,ci/release-inputs.json,.gitleaks.toml,Dockerfile,.dockerignore,docker/entrypoint.sh,scripts/test-image-healthcheck.sh,scripts/test-image-user.sh,testdata/image-healthcheck-config.yml,.trivyignore}"]
   - if: $CI_COMMIT_BRANCH =~ /^(feature|bugfix|hotfix|fix)\//
     changes: *code-files
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -33,7 +33,7 @@ workflow:
 .rules-docker: &rules-docker
   - if: $CI_COMMIT_TAG
   - if: $CI_COMMIT_BRANCH == "main"
-    changes: &docker-files ["{**/*.go,go.mod,go.sum,Dockerfile,.dockerignore,.gitlab-ci.yml,docker/entrypoint.sh,scripts/test-image-healthcheck.sh,testdata/image-healthcheck-config.yml,scripts/release.py,scripts/test_release.py,ci/release-inputs.json,.trivyignore}"]
+    changes: &docker-files ["{**/*.go,go.mod,go.sum,Dockerfile,.dockerignore,.gitlab-ci.yml,docker/entrypoint.sh,scripts/test-image-healthcheck.sh,scripts/test-image-user.sh,testdata/image-healthcheck-config.yml,scripts/release.py,scripts/test_release.py,ci/release-inputs.json,.trivyignore}"]
   - if: $CI_COMMIT_BRANCH =~ /^(feature|bugfix|hotfix|fix)\//
     changes: *docker-files
   - if: $CI_PIPELINE_SOURCE == "merge_request_event"

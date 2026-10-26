@@ -105,6 +105,7 @@ def runtime_checks(ref, arch, version):
     if not reported.startswith(f"dnsweaver {version} (built "):
         raise ValueError("image did not report the requested version")
     run("sh", "scripts/test-image-healthcheck.sh", ref)
+    run("sh", "scripts/test-image-user.sh", ref)
     # Verify the actual kernel listener on each architecture, not just config
     # parsing. Use the Docker API copy path for remote runner daemons.
     for network in (False, True):
@@ -140,7 +141,7 @@ def runtime_checks(ref, arch, version):
         finally:
             if created:
                 run("docker", "rm", "-f", name, check=False)
-    return {"architecture": arch, "version": version, "health": "passed", "pending_provider_readiness": "passed", "loopback_and_network_opt_in": "passed"}
+    return {"architecture": arch, "version": version, "health": "passed", "pending_provider_readiness": "passed", "loopback_and_network_opt_in": "passed", "user_override": "passed"}
 
 
 def build(arch):
@@ -297,7 +298,7 @@ def qualification(directory, source, version):
             raise ValueError("qualification belongs to another candidate")
         if not DIGEST.fullmatch(record["digest"]) or not record["image"].endswith("@" + record["digest"]):
             raise ValueError("qualification is not digest-bound")
-        if record["scan"]["status"] != "passed" or any(record["runtime"].get(k) != "passed" for k in ("health", "pending_provider_readiness", "loopback_and_network_opt_in")):
+        if record["scan"]["status"] != "passed" or any(record["runtime"].get(k) != "passed" for k in ("health", "pending_provider_readiness", "loopback_and_network_opt_in", "user_override")):
             raise ValueError("candidate checks did not pass")
         if record["runtime"]["architecture"] != arch or record["runtime"]["version"] != version:
             raise ValueError("runtime evidence belongs to another candidate")

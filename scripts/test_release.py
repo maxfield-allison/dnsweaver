@@ -445,7 +445,7 @@ class QualificationTests(unittest.TestCase):
             record = {**identity,
                 "metadata": r.image_metadata(manifest, config, identity),
                 "inputs": r.read_json(r.ROOT / "ci/release-inputs.json"),
-                "runtime": {"architecture": arch, "version": "v3.0.0", "health": "passed", "pending_provider_readiness": "passed", "loopback_and_network_opt_in": "passed"},
+                "runtime": {"architecture": arch, "version": "v3.0.0", "health": "passed", "pending_provider_readiness": "passed", "loopback_and_network_opt_in": "passed", "user_override": "passed"},
                 "scan": {"status": "passed", "ignore_sha256": r.digest((r.ROOT / ".trivyignore").read_bytes()), "report_sha256": r.digest(b'{}\n')},
                 "sbom": {"file": f"sbom-{arch}.cdx.json", "sha256": r.digest(b'{}\n')}}
             self.records[arch] = record
@@ -456,6 +456,12 @@ class QualificationTests(unittest.TestCase):
 
     def test_complete_candidate(self):
         self.assertEqual(len(self.check()), 2)
+
+    def test_user_override_runtime_check_is_required(self):
+        self.records["amd64"]["runtime"].pop("user_override")
+        r.write_json(self.directory / "amd64/qualified.json", self.records["amd64"])
+        with self.assertRaisesRegex(ValueError, "candidate checks did not pass"):
+            self.check()
 
     def test_tampered_identity_runtime_inputs_policy_and_path(self):
         changes = [("source", "d" * 40), ("version", "v2.8.2"), ("arch", "amd64"),
@@ -525,20 +531,21 @@ class RuntimeOwnershipTests(unittest.TestCase):
         self.assertFalse(any(c[:2] == ("docker", "rm") for c in calls))
 
 
-    def test_shell_healthcheck_does_not_clean_up_failed_create(self):
-        with tempfile.TemporaryDirectory() as directory:
-            folder = Path(directory)
-            docker = folder / "docker"
-            log = folder / "calls.log"
-            docker.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_DOCKER_LOG"\nexit 1\n')
-            docker.chmod(0o755)
-            environment = {**os.environ, "PATH": str(folder) + os.pathsep + os.environ["PATH"], "TEST_DOCKER_LOG": str(log)}
-            result = subprocess.run(["sh", str(r.ROOT / "scripts/test-image-healthcheck.sh"), "fixture"],
-                                    env=environment, capture_output=True, text=True, check=False)
-            self.assertNotEqual(result.returncode, 0)
-            calls = log.read_text().splitlines()
-            self.assertEqual(len(calls), 1)
-            self.assertTrue(calls[0].startswith("create "))
+    def test_shell_checks_do_not_clean_up_failed_create(self):
+        for script in ("test-image-healthcheck.sh", "test-image-user.sh"):
+            with self.subTest(script=script), tempfile.TemporaryDirectory() as directory:
+                folder = Path(directory)
+                docker = folder / "docker"
+                log = folder / "calls.log"
+                docker.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$TEST_DOCKER_LOG"\nexit 1\n')
+                docker.chmod(0o755)
+                environment = {**os.environ, "PATH": str(folder) + os.pathsep + os.environ["PATH"], "TEST_DOCKER_LOG": str(log)}
+                result = subprocess.run(["sh", str(r.ROOT / "scripts" / script), "fixture"],
+                                        env=environment, capture_output=True, text=True, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                calls = log.read_text().splitlines()
+                self.assertEqual(len(calls), 1)
+                self.assertTrue(calls[0].startswith("create "))
 
 
 class GitHubAPITests(unittest.TestCase):

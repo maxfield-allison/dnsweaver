@@ -147,6 +147,23 @@ environment:
 The process still drops to `uid 1000` — only a supplementary group is added, so
 the application never runs as root. A socket proxy is still the stronger option.
 
+### Custom UID and GID
+
+Use Docker's `--user UID:GID` or Compose's `user` setting to run with your own numeric identity. The entrypoint honors an already non-root user and preserves its supplementary groups. The default remains 1000:1000 when no user override is supplied.
+
+```yaml
+services:
+  dnsweaver:
+    image: ghcr.io/maxfield-allison/dnsweaver:latest
+    user: "1001:1001"
+    group_add:
+      - "999" # Replace with the group ID of your host's Docker socket.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+```
+
+For a direct socket mount, find its group with `stat -c '%g' /var/run/docker.sock` and supply that value through `group_add`. Automatic socket-group setup and `DNSWEAVER_DOCKER_GID` apply to the default root-start path; an explicitly non-root entrypoint cannot change group membership. With a socket proxy, omit the socket mount and `group_add`. Mounted configuration and credential files must be readable by your chosen user, and any configured log directory must be writable. The entrypoint does not change ownership of mounted files.
+
 ### Synology (Container Manager)
 
 Synology's Container Manager mounts `/var/run/docker.sock` as `root:root` and

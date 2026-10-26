@@ -17,7 +17,8 @@
 #     should use a socket proxy (recommended) or opt in with DNSWEAVER_DOCKER_GID.
 #   - If no socket is mounted (k8s-only mode, socket proxy, etc.), skip the
 #     logic entirely and just drop privileges.
-#   - Always exec the binary as the unprivileged dnsweaver user via su-exec.
+#   - Honor an explicit non-root container user without changing its groups.
+#   - Otherwise exec the binary as the dnsweaver user via su-exec.
 #
 # Escape hatch (DNSWEAVER_DOCKER_GID): explicitly grant the dnsweaver user
 # membership in a specific GID. Intended for platforms with a root-owned socket
@@ -27,6 +28,12 @@
 # =============================================================================
 
 set -e
+
+# Docker's user/group_add and Kubernetes securityContext already establish the
+# requested identity. A non-root process cannot edit groups or use su-exec.
+if [ "$(id -u)" != "0" ]; then
+    exec /usr/local/bin/dnsweaver "$@"
+fi
 
 DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
 

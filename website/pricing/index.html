@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dnsweaver · Pricing</title>
+<meta name="description" content="A seven-second detour through imaginary prices. dnsweaver is free and MIT-licensed.">
+<link rel="stylesheet" href="css/common.css">
+<link rel="stylesheet" href="css/dnsweaver.css">
+<link rel="stylesheet" href="css/theme-dnsweaver.css">
+<link rel="canonical" href="https://dnsweaver.com/pricing/">
+<meta name="theme-color" content="#0b1726">
+<meta property="og:title" content="dnsweaver · Pricing">
+<meta property="og:description" content="Every plan is free. Rivet takes care of the pricing.">
+<meta property="og:url" content="https://dnsweaver.com/pricing/">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://dnsweaver.com/pricing/img/dnsweaver-poster-wide.jpg">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<a class="skip-link" href="#offer">Skip to the free offer</a>
+
+<header class="site-header wrap">
+  <a class="brand" href="/" id="top">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><defs><mask id="dnsw-mask"><rect width="64" height="64" fill="white"/><path d="M12 43 C 27 43, 37 21, 48 21" stroke="black" stroke-width="11" fill="none" stroke-linecap="round"/></mask></defs><path d="M12 21 C 27 21, 37 43, 48 43" stroke="#56D9F2" stroke-width="5.5" fill="none" stroke-linecap="round" mask="url(#dnsw-mask)"/><path d="M12 43 C 27 43, 37 21, 48 21" stroke="#2EC8A6" stroke-width="5.5" fill="none" stroke-linecap="round"/><circle cx="10.5" cy="21" r="4.2" fill="#56D9F2"/><circle cx="10.5" cy="43" r="4.2" fill="#2EC8A6"/><circle cx="54.5" cy="21" r="4" fill="none" stroke="#2EC8A6" stroke-width="3.2"/><circle cx="54.5" cy="43" r="4" fill="none" stroke="#56D9F2" stroke-width="3.2"/></svg>
+    <span><span class="dns">dns</span>weaver</span>
+  </a>
+  <nav class="site-nav" aria-label="Main navigation"><ul><li class="nav-optional"><a href="/">Home</a></li><li class="nav-optional"><a href="https://maxfield-allison.github.io/dnsweaver/">Docs</a></li><li><a href="/pricing/" aria-current="page">Pricing</a></li></ul></nav>
+</header>
+
+<main>
+  <section class="hero wrap" aria-labelledby="pricing-title">
+    <div class="hero__intro">
+      <h1 id="pricing-title">Pricing</h1>
+      <p class="lede">Monthly rates, resolved while you wait.</p>
+    </div>
+
+    <div class="stage" data-stage>
+      <div class="stage__viewport">
+        <picture class="stage__poster">
+          <source media="(max-width: 640px)" srcset="img/dnsweaver-poster-tall.jpg">
+          <img src="img/dnsweaver-poster-wide.jpg" alt="Rivet the jackdaw stands at a night-shift telephone switchboard. The price cord is plugged into his brass washer, which he has pressed into an empty jack, and the rate board reads $0 for every plan.">
+        </picture>
+        <canvas class="stage__canvas" role="img" aria-label="Animated illustration: at a switchboard, the price keeps forwarding to more expensive jacks until Rivet the jackdaw seats his brass washer in an empty jack and plugs the price into it, so it resolves to zero."></canvas>
+        <div class="stage__grain" aria-hidden="true"></div>
+      </div>
+      <div class="stage__bar">
+        <p class="stage__note">A short silent scene, about seven seconds, then Rivet idles.</p>
+        <div class="stage__controls" role="group" aria-label="Scene controls">
+          <button class="control" type="button" disabled data-action="replay">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v3h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span data-label>Replay</span>
+          </button>
+          <button class="control" type="button" disabled data-action="pause" aria-pressed="false">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3v10M11 3v10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+            <span data-label>Pause</span>
+          </button>
+          <button class="control" type="button" disabled data-action="skip">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l6 5-6 5zM12 3v10" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+            <span>Skip to free</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="offer" aria-labelledby="offer-title">
+    <div class="wrap">
+      <h2 id="offer-title">Every plan resolves to $0.</h2>
+      <p>dnsweaver is free and MIT-licensed. There is no paid tier, no per-record charge and no hosted service to sign up for. All three plans are the same single binary: it reads hostnames from your containers, VMs and clusters and keeps matching records in your DNS providers.</p>
+      <ul class="plans">
+        <li class="plan">
+          <h3>Homelab</h3>
+          <p class="price">$0 <small>per month</small></p>
+          <p>A Docker host, a Traefik label and your own resolver.</p>
+        </li>
+        <li class="plan">
+          <h3>Cluster</h3>
+          <p class="price">$0 <small>per month</small></p>
+          <p>Kubernetes, Proxmox and Incus records from one binary.</p>
+        </li>
+        <li class="plan">
+          <h3>Fleet</h3>
+          <p class="price">$0 <small>per month</small></p>
+          <p>Split-horizon records from the same labels, internal and public.</p>
+        </li>
+      </ul>
+      <div class="actions">
+        <a class="button button--primary" href="/#get-started">Get dnsweaver</a>
+        <a class="button" href="https://maxfield-allison.github.io/dnsweaver/">Read the docs</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="why-title">
+    <div class="wrap">
+      <h2 id="why-title">Why it costs nothing</h2>
+      <p class="measure">I build these tools with a lot of help from AI, for my own homelab first. Sharing what comes out of that freely feels like the right way to pass it along. Paid software and the people who make it are worth paying for; this is my choice for these projects.</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="support-title">
+    <div class="wrap">
+      <h2 id="support-title">If you want to help anyway</h2>
+      <p class="measure">Support is optional and goes to ProbablyFine, the home for my free projects. It helps cover the costs of publishing them, starting with code signing. It does not buy features, priority support or a say in the roadmap.</p>
+      <div class="actions">
+        <a class="button button--primary" href="https://github.com/sponsors/maxfield-allison?metadata_campaign=dnsweaver-pricing" rel="noopener">Sponsor on GitHub</a>
+      </div>
+      <p class="measure">Free ways to help are just as welcome:</p>
+      <ul class="help-list measure">
+        <li>Tell someone who still creates DNS records by hand.</li>
+        <li>Report a bug you can reproduce.</li>
+        <li>Improve the docs or send a fix.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer"><div class="wrap"><p>dnsweaver is a <a href="https://probablyfine.dev/">ProbablyFine</a> project. Rivet the jackdaw works the night shift.</p><p><a href="https://github.com/maxfield-allison/dnsweaver">Source</a> · <a href="https://maxfield-allison.github.io/dnsweaver/">Documentation</a> · <a href="/privacy/">Privacy</a> · <a href="https://probablyfine.dev/support/">About sponsorship</a></p></div></footer>
+
+<div class="sr-only" aria-live="polite" id="announcer"></div>
+<script type="module" src="js/pages/dnsweaver.js"></script>
+</body>
+</html>

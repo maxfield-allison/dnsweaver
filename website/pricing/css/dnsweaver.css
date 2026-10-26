@@ -1,0 +1,58 @@
+/* dnsweaver: the brand's navy, cyan and teal; Sora and JetBrains Mono. */
+@font-face {
+  font-family: Sora;
+  src: url("../fonts/sora-variable.woff2") format("woff2");
+  font-weight: 400 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../fonts/jetbrains-mono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+  --bg: #0a1422;
+  --surface: #0f1d31;
+  --surface-strong: #132540;
+  --ink: #e9f7fb;
+  --ink-soft: #a7bccb;
+  --line: #1f3552;
+  --accent: #56d9f2;
+  --on-accent: #06121f;
+  --link: #56d9f2;
+  --focus: #2ec8a6;
+  --price: #56d9f2;
+  --font-body: Sora, system-ui, sans-serif;
+  --font-display: Sora, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --stage-bg: #060c16;
+  --stage-shadow: 0 30px 80px -40px rgba(86, 217, 242, 0.35), 0 0 0 1px #1f3552;
+  --control-bg: #0f1d31;
+  --control-border: #1f3552;
+  --ribbon-bg: #0f1d31;
+  --vignette: rgba(0, 2, 8, 0.6);
+  --ribbon-ink: #a7bccb;
+}
+
+.hero h1,
+.section h2 {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.brand .dns {
+  color: #56d9f2;
+}
+
+.plan {
+  border-color: #1f3552;
+}
+
+.plan .price {
+  font-weight: 400;
+  text-shadow: 0 0 16px rgba(86, 217, 242, 0.35);
+}

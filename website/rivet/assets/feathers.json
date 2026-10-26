@@ -1,0 +1,59 @@
+[
+  {
+    "id": "rivet-primary-1",
+    "file": "primary-feathers-v1.png",
+    "source": {
+      "x": 36,
+      "y": 123,
+      "width": 1191,
+      "height": 309
+    },
+    "fit": {
+      "a": 0.000816,
+      "b": 0.000928,
+      "c": -0.000148,
+      "d": 0.005121,
+      "e": 0.0307,
+      "f": -1.5648
+    },
+    "sha256": "081d1c955865a8145ad576c911e435a0d391bbecee5ffd45dd3785286d8c646f"
+  },
+  {
+    "id": "rivet-secondary-1",
+    "file": "secondary-feathers-v1.png",
+    "source": {
+      "x": 84,
+      "y": 159,
+      "width": 1116,
+      "height": 279
+    },
+    "fit": {
+      "a": 0.000886,
+      "b": 0.000573,
+      "c": -0.000108,
+      "d": 0.004718,
+      "e": 0.0193,
+      "f": -1.1004
+    },
+    "sha256": "c244262f3d6c0d0dbcad9824a8a31cdd16af302157779c9d9ee1c20409dc3981"
+  },
+  {
+    "id": "rivet-lesser-covert-1",
+    "file": "small-feathers-v1.png",
+    "source": {
+      "x": 133,
+      "y": 481,
+      "width": 417,
+      "height": 251
+    },
+    "fit": {
+      "a": 0.002409,
+      "b": 8.4e-05,
+      "c": -4.4e-05,
+      "d": 0.004529,
+      "e": 0.002,
+      "f": -0.5913
+    },
+    "sha256": "dac43a3651367b3bdaf62a39d9c8de9331c21ddf612fad24e87d136dcb7bd198"
+  }
+]

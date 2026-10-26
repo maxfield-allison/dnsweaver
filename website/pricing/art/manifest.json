@@ -1,0 +1,367 @@
+{
+  "format": 1,
+  "coordinateNotes": "Asset file paths are relative to this manifest. Source rectangles and anchors are pixels. World rectangles are scene coordinates; rig rectangles are bone-local rig units. Original PNGs are unmodified.",
+  "assets": [
+    {
+      "id": "dnsweaver-far",
+      "file": "dnsweaver/exchange-far-v1.png",
+      "sha256": "f5ef5e1f533ebde7b59f7ab77e49070b2ea1e323976afed3edb66661b5f69cbd",
+      "width": 1254,
+      "height": 1254,
+      "piece": "environment-far",
+      "source": {
+        "x": 0,
+        "y": 0,
+        "width": 1254,
+        "height": 1254
+      },
+      "world": {
+        "x": -900,
+        "y": -1027,
+        "width": 1800,
+        "height": 1800
+      },
+      "depth": 0.94,
+      "notes": "Painted worktop begins near y=824px (65.7%); world top aligns that horizon to live shelf y=155."
+    },
+    {
+      "id": "rivet-body",
+      "file": "rivet/rivet-design-v1.png",
+      "sha256": "5d449c0df32f79bfe406fb300f0a7ffb1e7d94869c397daa752972633d624e5e",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-body",
+      "source": {
+        "x": 34,
+        "y": 72,
+        "width": 393,
+        "height": 342
+      },
+      "design": "original-painted"
+    },
+    {
+      "id": "rivet-head",
+      "file": "rivet/rivet-design-v1.png",
+      "sha256": "5d449c0df32f79bfe406fb300f0a7ffb1e7d94869c397daa752972633d624e5e",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-head",
+      "source": {
+        "x": 446,
+        "y": 64,
+        "width": 370,
+        "height": 350
+      },
+      "design": "original-painted"
+    },
+    {
+      "id": "rivet-primary-1",
+      "file": "rivet/primary-feathers-v1.png",
+      "sha256": "081d1c955865a8145ad576c911e435a0d391bbecee5ffd45dd3785286d8c646f",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-primary",
+      "source": {
+        "x": 36,
+        "y": 123,
+        "width": 1191,
+        "height": 309
+      },
+      "variant": 1
+    },
+    {
+      "id": "rivet-primary-2",
+      "file": "rivet/primary-feathers-v1.png",
+      "sha256": "081d1c955865a8145ad576c911e435a0d391bbecee5ffd45dd3785286d8c646f",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-primary",
+      "source": {
+        "x": 34,
+        "y": 585,
+        "width": 1190,
+        "height": 179
+      },
+      "variant": 2
+    },
+    {
+      "id": "rivet-primary-3",
+      "file": "rivet/primary-feathers-v1.png",
+      "sha256": "081d1c955865a8145ad576c911e435a0d391bbecee5ffd45dd3785286d8c646f",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-primary",
+      "source": {
+        "x": 35,
+        "y": 891,
+        "width": 1190,
+        "height": 271
+      },
+      "variant": 3
+    },
+    {
+      "id": "rivet-secondary-1",
+      "file": "rivet/secondary-feathers-v1.png",
+      "sha256": "c244262f3d6c0d0dbcad9824a8a31cdd16af302157779c9d9ee1c20409dc3981",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-secondary",
+      "variant": 1,
+      "source": {
+        "x": 84,
+        "y": 159,
+        "width": 1116,
+        "height": 279
+      }
+    },
+    {
+      "id": "rivet-secondary-2",
+      "file": "rivet/secondary-feathers-v1.png",
+      "sha256": "c244262f3d6c0d0dbcad9824a8a31cdd16af302157779c9d9ee1c20409dc3981",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-secondary",
+      "variant": 2,
+      "source": {
+        "x": 80,
+        "y": 548,
+        "width": 1125,
+        "height": 217
+      }
+    },
+    {
+      "id": "rivet-secondary-3",
+      "file": "rivet/secondary-feathers-v1.png",
+      "sha256": "c244262f3d6c0d0dbcad9824a8a31cdd16af302157779c9d9ee1c20409dc3981",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-secondary",
+      "variant": 3,
+      "source": {
+        "x": 80,
+        "y": 840,
+        "width": 1099,
+        "height": 288
+      }
+    },
+    {
+      "id": "rivet-tail-1",
+      "file": "rivet/tail-feathers-v1.png",
+      "sha256": "842ffe208d702053552600fc14850b7b6c6de7c6f4dde2231000de7cb8a17900",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-tail",
+      "variant": 1,
+      "source": {
+        "x": 70,
+        "y": 158,
+        "width": 1140,
+        "height": 290
+      }
+    },
+    {
+      "id": "rivet-tail-2",
+      "file": "rivet/tail-feathers-v1.png",
+      "sha256": "842ffe208d702053552600fc14850b7b6c6de7c6f4dde2231000de7cb8a17900",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-tail",
+      "variant": 2,
+      "source": {
+        "x": 69,
+        "y": 568,
+        "width": 1138,
+        "height": 197
+      }
+    },
+    {
+      "id": "rivet-tail-3",
+      "file": "rivet/tail-feathers-v1.png",
+      "sha256": "842ffe208d702053552600fc14850b7b6c6de7c6f4dde2231000de7cb8a17900",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-tail",
+      "variant": 3,
+      "source": {
+        "x": 69,
+        "y": 866,
+        "width": 1142,
+        "height": 293
+      }
+    },
+    {
+      "id": "rivet-upper-mandible",
+      "file": "rivet/mandibles-v1.png",
+      "sha256": "d321dab33e4552d17b851dcfb565c854b7def2c71a3db2209dda4a55e9b5ee36",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-upper-mandible",
+      "source": {
+        "x": 164,
+        "y": 229,
+        "width": 1018,
+        "height": 499
+      }
+    },
+    {
+      "id": "rivet-lower-mandible",
+      "file": "rivet/mandibles-v1.png",
+      "sha256": "d321dab33e4552d17b851dcfb565c854b7def2c71a3db2209dda4a55e9b5ee36",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-lower-mandible",
+      "source": {
+        "x": 182,
+        "y": 839,
+        "width": 960,
+        "height": 205
+      }
+    },
+    {
+      "id": "rivet-greater-covert-1",
+      "file": "rivet/small-feathers-v1.png",
+      "sha256": "dac43a3651367b3bdaf62a39d9c8de9331c21ddf612fad24e87d136dcb7bd198",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-greater-covert",
+      "source": {
+        "x": 67,
+        "y": 90,
+        "width": 538,
+        "height": 325
+      },
+      "variant": 1
+    },
+    {
+      "id": "rivet-greater-covert-2",
+      "file": "rivet/small-feathers-v1.png",
+      "sha256": "dac43a3651367b3bdaf62a39d9c8de9331c21ddf612fad24e87d136dcb7bd198",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-greater-covert",
+      "source": {
+        "x": 679,
+        "y": 93,
+        "width": 534,
+        "height": 317
+      },
+      "variant": 2
+    },
+    {
+      "id": "rivet-lesser-covert-1",
+      "file": "rivet/small-feathers-v1.png",
+      "sha256": "dac43a3651367b3bdaf62a39d9c8de9331c21ddf612fad24e87d136dcb7bd198",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-lesser-covert",
+      "source": {
+        "x": 133,
+        "y": 481,
+        "width": 417,
+        "height": 251
+      },
+      "variant": 1
+    },
+    {
+      "id": "rivet-lesser-covert-2",
+      "file": "rivet/small-feathers-v1.png",
+      "sha256": "dac43a3651367b3bdaf62a39d9c8de9331c21ddf612fad24e87d136dcb7bd198",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-lesser-covert",
+      "source": {
+        "x": 732,
+        "y": 489,
+        "width": 416,
+        "height": 244
+      },
+      "variant": 2
+    },
+    {
+      "id": "rivet-thigh-tuft",
+      "file": "rivet/small-feathers-v1.png",
+      "sha256": "dac43a3651367b3bdaf62a39d9c8de9331c21ddf612fad24e87d136dcb7bd198",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-thigh-tuft",
+      "source": {
+        "x": 139,
+        "y": 763,
+        "width": 292,
+        "height": 467
+      }
+    },
+    {
+      "id": "rivet-tertial-1",
+      "file": "rivet/small-feathers-v1.png",
+      "sha256": "dac43a3651367b3bdaf62a39d9c8de9331c21ddf612fad24e87d136dcb7bd198",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-tertial",
+      "source": {
+        "x": 534,
+        "y": 867,
+        "width": 683,
+        "height": 254
+      },
+      "variant": 1
+    },
+    {
+      "id": "dnsweaver-washer",
+      "file": "props-v1.png",
+      "sha256": "2e219b9b43083f99dd3f52e9c9bdf2db6acecf817f04fecc46e6373fed7a3704",
+      "width": 1254,
+      "height": 1254,
+      "piece": "prop-washer",
+      "source": {
+        "x": 480,
+        "y": 51,
+        "width": 305,
+        "height": 310
+      }
+    },
+    {
+      "id": "dnsweaver-jack-bezel",
+      "file": "props-v1.png",
+      "sha256": "2e219b9b43083f99dd3f52e9c9bdf2db6acecf817f04fecc46e6373fed7a3704",
+      "width": 1254,
+      "height": 1254,
+      "piece": "prop-jack-bezel",
+      "source": {
+        "x": 889,
+        "y": 62,
+        "width": 292,
+        "height": 299
+      }
+    },
+    {
+      "id": "dnsweaver-plug",
+      "file": "props-v1.png",
+      "sha256": "2e219b9b43083f99dd3f52e9c9bdf2db6acecf817f04fecc46e6373fed7a3704",
+      "width": 1254,
+      "height": 1254,
+      "piece": "prop-patch-plug",
+      "source": {
+        "x": 63,
+        "y": 994,
+        "width": 540,
+        "height": 167
+      }
+    },
+    {
+      "id": "rivet-head-open",
+      "file": "rivet/rivet-design-v1.png",
+      "sha256": "5d449c0df32f79bfe406fb300f0a7ffb1e7d94869c397daa752972633d624e5e",
+      "width": 1254,
+      "height": 1254,
+      "piece": "rivet-head-open",
+      "source": {
+        "x": 879,
+        "y": 64,
+        "width": 366,
+        "height": 349
+      },
+      "design": "original-painted"
+    }
+  ]
+}

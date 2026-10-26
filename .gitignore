@@ -51,3 +51,10 @@ site/
 /release/
 /public/
 __pycache__/
+
+# Product website build and browser evidence.
+/build/website/
+/website-tests/node_modules/
+/website-tests/test-results/
+/website-tests/playwright-report/
+!/website/rivet/vendor/

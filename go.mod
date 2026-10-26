@@ -7,7 +7,7 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/miekg/dns v1.1.73
-	github.com/pkg/sftp v1.13.11
+	github.com/pkg/sftp v1.13.12
 	github.com/prometheus/client_golang v1.25.0
 	golang.org/x/crypto v0.58.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1

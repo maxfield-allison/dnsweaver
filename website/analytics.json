@@ -1,0 +1,40 @@
+{
+  "product": "dnsweaver",
+  "website_id": "cc65b305-04f1-412b-89ce-f66abdb1afb9",
+  "app_host": "dnsweaver.com",
+  "docs_host": "maxfield-allison.github.io",
+  "docs_prefix": "/dnsweaver/",
+  "campaign_values": {
+    "utm_source": [
+      "bluesky",
+      "facebook",
+      "linkedin",
+      "reddit",
+      "threads",
+      "viva",
+      "instagram",
+      "hackernews",
+      "github",
+      "probablyfine",
+      "newsletter"
+    ],
+    "utm_medium": [
+      "social",
+      "referral",
+      "email"
+    ],
+    "utm_campaign": [
+      "dnsweaver-launch"
+    ],
+    "utm_content": [
+      "launch",
+      "megathread",
+      "policy",
+      "sample",
+      "article",
+      "followup",
+      "story",
+      "readme"
+    ]
+  }
+}

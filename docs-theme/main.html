@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block extrahead %}
+  {{ super() }}
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  {% if config.extra.product_analytics.website_id %}
+  <script defer src="{{ 'assets/javascripts/analytics.js' | url }}"
+    data-product="dnsweaver"
+    data-website-id="{{ config.extra.product_analytics.website_id | e }}"
+    data-app-host="dnsweaver.com"
+    data-docs-host="maxfield-allison.github.io"
+    data-docs-prefix="/dnsweaver/"
+    data-surface="docs"
+    data-utm-values='{{ config.extra.product_analytics.campaign_values | tojson }}'></script>
+  {% endif %}
+{% endblock %}

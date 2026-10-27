@@ -13,6 +13,7 @@ copyright: |
 
 theme:
   name: material
+  custom_dir: docs-theme
   palette:
     # Light mode
     - media: "(prefers-color-scheme: light)"
@@ -65,6 +66,7 @@ extra_javascript:
   - assets/javascripts/mermaid-init.js
 
 extra:
+  product_analytics: {"website_id":"cc65b305-04f1-412b-89ce-f66abdb1afb9","campaign_values":{"utm_source":["bluesky","facebook","linkedin","reddit","threads","viva","instagram","hackernews","github","probablyfine","newsletter"],"utm_medium":["social","referral","email"],"utm_campaign":["dnsweaver-launch"],"utm_content":["launch","megathread","policy","sample","article","followup","story","readme"]}}
   generator: false
   status:
     new: Recently added
@@ -175,3 +177,4 @@ nav:
       - Ownership Qualification: contributing/ownership-qualification.md
       - Adding a Provider: contributing/adding-provider.md
       - Adding a Source: contributing/adding-source.md
+  - Website privacy: privacy.md

@@ -24,7 +24,7 @@ jobs:
     name: Lint & Vet
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -53,7 +53,7 @@ jobs:
     name: Release failure fixtures
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - run: python3 -m unittest discover -s scripts -p test_release.py -v
       - run: python3 -m unittest discover -s scripts -p test_sync_workflow.py -v
 
@@ -61,7 +61,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -73,7 +73,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -89,7 +89,7 @@ jobs:
     name: Vulnerability Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod

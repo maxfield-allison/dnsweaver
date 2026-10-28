@@ -1,0 +1,1 @@
+Update `github.com/pkg/sftp` to 1.13.12. The SFTP client now rejects malformed server replies, and the release fixes GHSA-xgcg-wgmj-5rw3, GHSA-47hq-m6q9-3rm6 and GHSA-h959-g3h6-w76c. dnsweaver uses only the SFTP client and never calls `Client.RemoveAll`, so earlier releases were not affected by those advisories.

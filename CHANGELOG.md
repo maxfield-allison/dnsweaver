@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## [3.2.3] - 2026-10-28
+
+### Changed
+
+- Add website and documentation analytics with approved campaign labels, bounded link and search events, and published privacy details.
+
+### Fixed
+
+- When sources ask for a CNAME and another record type for the same name on the same provider, dnsweaver now skips that name and reports `CNAME cannot share a name with other desired record types`. Earlier releases could delete the existing address record and its ownership marker before creating the CNAME. Resolve the conflicting declarations and the name reconciles again on a later cycle.
+
+### Security
+
+- Update `github.com/pkg/sftp` to 1.13.12. The SFTP client now rejects malformed server replies, and the release fixes GHSA-xgcg-wgmj-5rw3, GHSA-47hq-m6q9-3rm6 and GHSA-h959-g3h6-w76c. dnsweaver uses only the SFTP client and never calls `Client.RemoveAll`, so earlier releases were not affected by those advisories.
+- Update `golang.org/x/net` to 0.62.0 for GO-2026-6866 (CVE-2026-97045). dnsweaver does not build the affected `golang.org/x/net/html` package. The update restores the vulnerability gate without adding an exception.
+
+
 ## [3.2.2] - 2026-10-26
 
 ### Fixed

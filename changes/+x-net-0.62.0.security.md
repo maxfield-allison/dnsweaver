@@ -1,1 +1,0 @@
-Update `golang.org/x/net` to 0.62.0 for GO-2026-6866 (CVE-2026-97045). dnsweaver does not build the affected `golang.org/x/net/html` package. The update restores the vulnerability gate without adding an exception.

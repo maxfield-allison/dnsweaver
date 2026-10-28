@@ -165,7 +165,8 @@ func (r *Reconciler) restoreReplacement(ctx context.Context, cache *recordCache,
 
 // Recovery precedes normal desired-state work and blocks that backend/name
 // for the entire cycle, including orphan sets for the old record type.
-func (r *Reconciler) retryReplacements(ctx context.Context, cache *recordCache, result *Result) map[replacementKey]bool {
+// Recovery at a held name stays pending without writing.
+func (r *Reconciler) retryReplacements(ctx context.Context, cache *recordCache, result *Result, held map[replacementKey]struct{}) map[replacementKey]bool {
 	blocked := make(map[replacementKey]bool)
 	r.mu.Lock()
 	pending := make(map[replacementKey]replacementRecovery, len(r.pendingReplacements))
@@ -176,6 +177,10 @@ func (r *Reconciler) retryReplacements(ctx context.Context, cache *recordCache, 
 	for key, recovery := range pending {
 		blocked[key] = true
 
+		if _, isHeld := held[key]; isHeld {
+			result.AddAction(memberAction(ActionSkip, StatusSkipped, recovery.Instance, recovery.Removed[0], "replacement recovery held: "+errCNAMEWithOtherTypes))
+			continue
+		}
 		if r.isDryRun() {
 			result.AddAction(memberAction(ActionSkip, StatusSkipped, recovery.Instance, recovery.Removed[0], "replacement recovery pending during dry-run"))
 			continue

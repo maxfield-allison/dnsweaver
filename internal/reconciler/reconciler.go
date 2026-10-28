@@ -23,6 +23,7 @@ const (
 	errNoMatchingProvider   = "no matching provider"
 	errSelfReferentialCNAME = "self-referential CNAME (target equals hostname)"
 	errMultipleCNAMEMembers = "CNAME record set cannot contain multiple members"
+	errCNAMEWithOtherTypes  = "CNAME cannot share a name with other desired record types"
 )
 
 // Reconciliation-level outcome labels used for the reconciliations_total metric.
@@ -275,9 +276,14 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 	for _, action := range compiled.Skipped {
 		result.AddAction(action)
 	}
-	blockedReplacements := r.retryReplacements(ctx, cache, result)
-	for key := range r.retryMemberOwnership(ctx, cache, result) {
+	// A contradictory name keeps every record it has until its sources agree,
+	// so pending recovery and repair writes at that name wait as well.
+	blockedReplacements := r.retryReplacements(ctx, cache, result, compiled.RejectedNames)
+	for key := range r.retryMemberOwnership(ctx, cache, result, compiled.RejectedNames) {
 		blockedReplacements[key] = true
+	}
+	for name := range compiled.RejectedNames {
+		blockedReplacements[name] = true
 	}
 	sets, previous := r.reconciliationSets(compiled, cache)
 	nextPrevious := make(map[desiredSetKey]previousDesiredSet, len(previous)+len(compiled.Sets))
@@ -297,6 +303,11 @@ func (r *Reconciler) Reconcile(ctx context.Context) (*Result, error) {
 		r.logger.Warn("desired-state snapshot is partial; suppressing member removals")
 	}
 	failedDestinations := make(map[string]bool)
+	// A rejected destination publishes nothing, so its hostname's old route on
+	// another backend must not be retired as if the move had succeeded.
+	for name := range compiled.RejectedNames {
+		failedDestinations[name.Hostname] = true
+	}
 	for _, set := range sets {
 		replacement := replacementKey{set.Key.Identity, set.Key.Hostname}
 		if blockedReplacements[replacement] {

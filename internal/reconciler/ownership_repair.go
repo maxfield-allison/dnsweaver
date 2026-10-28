@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/provider"
+	"github.com/maxfield-allison/dnsweaver/pkg/source"
 )
 
 type memberOwnershipRepairKey struct {
@@ -35,14 +36,21 @@ func (r *Reconciler) rememberMemberOwnershipRepair(instance *provider.ProviderIn
 	r.pendingMemberOwnership[key] = memberOwnershipRepair{instance, record}
 }
 
-func (r *Reconciler) retryMemberOwnership(ctx context.Context, cache *recordCache, result *Result) map[replacementKey]bool {
+// Repair at a held name stays pending without writing.
+func (r *Reconciler) retryMemberOwnership(ctx context.Context, cache *recordCache, result *Result, held map[replacementKey]struct{}) map[replacementKey]bool {
 	blocked := make(map[replacementKey]bool)
 	r.mu.Lock()
 	pending := maps.Clone(r.pendingMemberOwnership)
 	r.mu.Unlock()
 	for key, repair := range pending {
 		instance, record := repair.Instance, repair.Record
-		route := replacementKey{key.Identity, record.Hostname}
+		// Desired-set and replacement keys use the normalized hostname.
+		route := replacementKey{key.Identity, source.NormalizeHostname(record.Hostname)}
+		if _, isHeld := held[route]; isHeld {
+			blocked[route] = true
+			result.AddAction(memberAction(ActionSkip, StatusSkipped, instance, record, "member ownership repair held: "+errCNAMEWithOtherTypes))
+			continue
+		}
 		if r.isDryRun() {
 			blocked[route] = true
 			result.AddAction(memberAction(ActionSkip, StatusSkipped, instance, record, "member ownership repair pending during dry-run"))

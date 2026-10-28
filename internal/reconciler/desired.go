@@ -32,6 +32,9 @@ type desiredCompilation struct {
 	Sets              []*desiredRecordSet
 	Skipped           []Action
 	HostnameProviders map[string][]string
+	// RejectedNames are backend names whose desired record types contradict
+	// each other. Nothing at those names may be written or retired this cycle.
+	RejectedNames map[replacementKey]struct{}
 }
 
 type previousDesiredSet struct {
@@ -100,7 +103,42 @@ func (r *Reconciler) compileDesiredRecordSets(claims []*source.Hostname) desired
 		}
 	}
 
+	compiled.rejectCNAMEConflicts()
 	return compiled
+}
+
+// rejectCNAMEConflicts withdraws every desired set at a backend name where a
+// CNAME is requested alongside any other record type. DNS forbids that
+// combination (RFC 1034 §3.6.2), and reconciling the sets one at a time would
+// let the CNAME set replace the name's existing answers before any set could
+// see the contradiction. The withdrawn members are reported as skips; callers
+// must also fence the name so the empty sets for its prior records cannot
+// retire them.
+func (c *desiredCompilation) rejectCNAMEConflicts() {
+	types := make(map[replacementKey][]provider.RecordType)
+	for _, set := range c.Sets {
+		name := replacementKey{set.Key.Identity, set.Key.Hostname}
+		types[name] = append(types[name], set.Key.RecordType)
+	}
+
+	kept := make([]*desiredRecordSet, 0, len(c.Sets))
+	for _, set := range c.Sets {
+		name := replacementKey{set.Key.Identity, set.Key.Hostname}
+		// Sets are keyed by type, so more than one type with a CNAME among
+		// them is exactly the forbidden mix.
+		if len(types[name]) < 2 || !slices.Contains(types[name], provider.RecordTypeCNAME) {
+			kept = append(kept, set)
+			continue
+		}
+		if c.RejectedNames == nil {
+			c.RejectedNames = make(map[replacementKey]struct{})
+		}
+		c.RejectedNames[name] = struct{}{}
+		for _, member := range set.Members {
+			c.Skipped = append(c.Skipped, memberAction(ActionSkip, StatusSkipped, set.Instance, member.Record, errCNAMEWithOtherTypes))
+		}
+	}
+	c.Sets = kept
 }
 
 func (r *Reconciler) providersForClaim(claim *source.Hostname) ([]*provider.ProviderInstance, *Action) {
@@ -251,6 +289,10 @@ func (r *Reconciler) memberRemovalsAllowed(compiled desiredCompilation, cache *r
 		for _, member := range set.Members {
 			current[set.Key] = append(current[set.Key], member.Record)
 		}
+	}
+	// A rejected name is still wanted; its prior members are held, not lost.
+	for name := range compiled.RejectedNames {
+		currentHostnames[name.Hostname] = struct{}{}
 	}
 
 	type baselineMember struct {

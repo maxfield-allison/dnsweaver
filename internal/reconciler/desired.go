@@ -220,6 +220,9 @@ func desiredRecordForClaim(claim *source.Hostname, instance *provider.ProviderIn
 			record.Metadata = hints.Metadata
 		}
 	}
+	if record.Type == provider.RecordTypeTXT {
+		record.Target = provider.DeclaredTXT(instance.Provider, record.Target)
+	}
 	return record
 }
 

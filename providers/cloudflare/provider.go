@@ -275,7 +275,7 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 		return nil, fmt.Errorf("listing TXT records: %w", err)
 	}
 	for _, r := range txtRecords {
-		content, contentErr := compactTXTContent(r.Name, r.Content)
+		content, contentErr := listedTXTContent(r.Name, r.Content)
 		if contentErr != nil {
 			return nil, contentErr
 		}
@@ -398,6 +398,47 @@ func (p *Provider) ListOwnershipState(ctx context.Context) ([]provider.Record, e
 	return records, nil
 }
 
+// listedTXTContent returns the TXT value as it was declared. Cloudflare reads
+// TXT content back as quoted wire strings even when it was written unquoted,
+// so data TXT is compared on its decoded strings. Content that is not a
+// well-formed sequence of quoted strings is kept as listed.
+func listedTXTContent(name, value string) (string, error) {
+	if provider.IsOwnershipStateRecord(name) {
+		return compactTXTContent(name, value)
+	}
+	if provider.IsOwnershipRecord(name) {
+		content, err := compactTXTContent(name, value)
+		if err != nil {
+			return "", err
+		}
+		return provider.MapMemberOwnershipTXTTarget(content, provider.TXTPayload), nil
+	}
+	if decoded, ok := provider.DecodeTXTStrings(value); ok {
+		return decoded, nil
+	}
+	return value, nil
+}
+
+// apiContent is the content field for record. Data TXT is written so that
+// listedTXTContent reads back the same data: Cloudflare takes a value that
+// starts with a quote as presentation text, so such data is sent quoted.
+func apiContent(record provider.Record) string {
+	switch {
+	case record.Type != provider.RecordTypeTXT || provider.IsOwnershipStateRecord(record.Hostname):
+		return record.Target
+	case provider.IsOwnershipRecord(record.Hostname):
+		// Member markers keep a TXT target in the same presentation form as the
+		// declared content, which is also how earlier releases recorded it.
+		return provider.MapMemberOwnershipTXTTarget(record.Target, provider.TXTPresentation)
+	default:
+		return provider.TXTPresentation(record.Target)
+	}
+}
+
+// TXTPresentationText implements provider.TXTPresentationText: Cloudflare
+// stores TXT content as quoted presentation text.
+func (p *Provider) TXTPresentationText() {}
+
 // Cloudflare can return one TXT RR as quoted wire strings. Compact payloads
 // concatenate those strings; unrelated user TXT retains its existing meaning.
 func compactTXTContent(name, value string) (string, error) {
@@ -405,34 +446,10 @@ func compactTXTContent(name, value string) (string, error) {
 	if (!state && !provider.IsOwnershipRecord(name)) || !strings.HasPrefix(value, "\"") {
 		return value, nil
 	}
-	var content strings.Builder
-	rest := value
-	for rest != "" {
-		if rest[0] != '"' {
-			return "", fmt.Errorf("%w: invalid quoted ownership TXT", provider.ErrOwnershipState)
-		}
-		end := 1
-		for end < len(rest) {
-			if rest[end] == '\\' {
-				end += 2
-				continue
-			}
-			if rest[end] == '"' {
-				break
-			}
-			end++
-		}
-		if end >= len(rest) {
-			return "", fmt.Errorf("%w: unterminated quoted ownership TXT", provider.ErrOwnershipState)
-		}
-		decoded, err := strconv.Unquote(rest[:end+1])
-		if err != nil {
-			return "", fmt.Errorf("%w: invalid quoted ownership TXT", provider.ErrOwnershipState)
-		}
-		content.WriteString(decoded)
-		rest = strings.TrimSpace(rest[end+1:])
+	decoded, ok := provider.DecodeTXTStrings(value)
+	if !ok {
+		return "", fmt.Errorf("%w: invalid quoted ownership TXT", provider.ErrOwnershipState)
 	}
-	decoded := content.String()
 	if !state && !provider.IsDnsweaverOwned(decoded) {
 		return value, nil
 	}
@@ -481,7 +498,7 @@ func (p *Provider) Create(ctx context.Context, record provider.Record) error {
 		}
 	default:
 		recordType := string(record.Type)
-		err = p.client.CreateRecord(ctx, zoneID, recordType, record.Hostname, record.Target, ttl, proxied)
+		err = p.client.CreateRecord(ctx, zoneID, recordType, record.Hostname, apiContent(record), ttl, proxied)
 		if err != nil {
 			return fmt.Errorf("creating %s record: %w", recordType, err)
 		}
@@ -568,7 +585,7 @@ func (p *Provider) Update(ctx context.Context, existing, desired provider.Record
 
 	switch desired.Type {
 	case provider.RecordTypeA, provider.RecordTypeAAAA, provider.RecordTypeCNAME, provider.RecordTypeTXT, provider.RecordTypeNS:
-		err = p.client.UpdateRecord(ctx, zoneID, apiRecord.ID, string(desired.Type), desired.Hostname, desired.Target, ttl, proxied)
+		err = p.client.UpdateRecord(ctx, zoneID, apiRecord.ID, string(desired.Type), desired.Hostname, apiContent(desired), ttl, proxied)
 		if err != nil {
 			return fmt.Errorf("updating %s record: %w", desired.Type, err)
 		}
@@ -664,6 +681,11 @@ func cloudflareRecordMatches(apiRecord dnsRecord, record provider.Record) bool {
 		return strings.EqualFold(strings.TrimSuffix(apiRecord.Content, "."), strings.TrimSuffix(record.Target, "."))
 	}
 
+	if record.Type == provider.RecordTypeTXT {
+		content, err := listedTXTContent(apiRecord.Name, apiRecord.Content)
+		return err == nil && content == record.Target
+	}
+
 	return apiRecord.Content == record.Target
 }
 
@@ -693,6 +715,9 @@ var _ provider.Updater = (*Provider)(nil)
 
 // Ensure Provider implements provider.RecordComparer at compile time.
 var _ provider.RecordComparer = (*Provider)(nil)
+
+// Ensure Provider implements provider.TXTPresentationText at compile time.
+var _ provider.TXTPresentationText = (*Provider)(nil)
 
 // resolveProxied determines the effective proxied state for a record and
 // warns when a requested proxy is refused. Priority order:

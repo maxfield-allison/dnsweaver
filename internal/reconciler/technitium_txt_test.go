@@ -96,45 +96,47 @@ func TestReconcile_TechnitiumLegacyTXTMarkerKeepsItsValue(t *testing.T) {
 		{`"hello"`, []string{`"hello"`, "hello"}, []string{"hello"}},
 		{"hello", []string{"hello"}, []string{"hello"}},
 	}
-	for _, tt := range tests {
-		t.Run(tt.declared, func(t *testing.T) {
-			api := &fakeTechnitiumTXT{}
-			quoted := provider.Record{Hostname: host, Type: provider.RecordTypeTXT, Target: `"hello"`}
-			api.addTXT(host, quoted.Target)
-			api.addTXT(host, plain.Target)
-			marker := provider.MemberOwnershipRecord(host, 300, "", quoted, nil)
-			api.addTXT(marker.Hostname, marker.Target)
-			r, lister := newTechnitiumTXTFixture(t, api)
-			lister.AddWorkload("app", map[string]string{
-				"dnsweaver.records.txt.hostname": host,
-				"dnsweaver.records.txt.type":     "TXT",
-				"dnsweaver.records.txt.target":   tt.declared,
-			})
+	for _, storage := range []string{"", "legacy", "compact"} {
+		for _, tt := range tests {
+			t.Run(storage+"/"+tt.declared, func(t *testing.T) {
+				api := &fakeTechnitiumTXT{}
+				quoted := provider.Record{Hostname: host, Type: provider.RecordTypeTXT, Target: `"hello"`}
+				api.addTXT(host, quoted.Target)
+				api.addTXT(host, plain.Target)
+				marker := provider.MemberOwnershipRecord(host, 300, "", quoted, nil)
+				api.addTXT(marker.Hostname, marker.Target)
+				r, lister := newTechnitiumTXTFixture(t, api, storage)
+				lister.AddWorkload("app", map[string]string{
+					"dnsweaver.records.txt.hostname": host,
+					"dnsweaver.records.txt.type":     "TXT",
+					"dnsweaver.records.txt.target":   tt.declared,
+				})
 
-			if _, err := r.Reconcile(context.Background()); err != nil {
-				t.Fatalf("Reconcile: %v", err)
-			}
-			if got := api.texts(host); !slices.Equal(got, tt.afterUpgrade) {
-				t.Fatalf("TXT after upgrade = %q, want %q", got, tt.afterUpgrade)
-			}
-			for _, text := range api.texts(marker.Hostname) {
-				if provider.MatchesMemberOwnership(text, "", plain) {
-					t.Fatalf("manual hello was claimed by marker %q", text)
+				if _, err := r.Reconcile(context.Background()); err != nil {
+					t.Fatalf("Reconcile: %v", err)
 				}
-			}
+				if got := api.texts(host); !slices.Equal(got, tt.afterUpgrade) {
+					t.Fatalf("TXT after upgrade = %q, want %q", got, tt.afterUpgrade)
+				}
+				for _, text := range api.texts(marker.Hostname) {
+					if provider.MatchesMemberOwnership(text, "", plain) {
+						t.Fatalf("manual hello was claimed by marker %q", text)
+					}
+				}
 
-			lister.workloads = nil
-			if _, err := r.Reconcile(context.Background()); err != nil {
-				t.Fatalf("Reconcile after withdrawal: %v", err)
-			}
-			if got := api.texts(host); !slices.Equal(got, tt.afterWithdraw) {
-				t.Fatalf("TXT after withdrawal = %q, want %q", got, tt.afterWithdraw)
-			}
-		})
+				lister.workloads = nil
+				if _, err := r.Reconcile(context.Background()); err != nil {
+					t.Fatalf("Reconcile after withdrawal: %v", err)
+				}
+				if got := api.texts(host); !slices.Equal(got, tt.afterWithdraw) {
+					t.Fatalf("TXT after withdrawal = %q, want %q", got, tt.afterWithdraw)
+				}
+			})
+		}
 	}
 }
 
-func newTechnitiumTXTFixture(t *testing.T, api *fakeTechnitiumTXT) (*Reconciler, *testMockWorkloadLister) {
+func newTechnitiumTXTFixture(t *testing.T, api *fakeTechnitiumTXT, storage string) (*Reconciler, *testMockWorkloadLister) {
 	t.Helper()
 	server := httptest.NewServer(api.handler(t))
 	t.Cleanup(server.Close)
@@ -145,6 +147,9 @@ func newTechnitiumTXTFixture(t *testing.T, api *fakeTechnitiumTXT) (*Reconciler,
 		t.Fatalf("technitium.New: %v", err)
 	}
 	providers := provider.NewRegistry(logger)
+	if storage != "" {
+		providers.SetOwnershipStorage(storage)
+	}
 	providers.RegisterFactory("technitium-fake", func(_ provider.FactoryConfig) (provider.Provider, error) { return dns, nil })
 	if err := providers.CreateInstance(provider.ProviderInstanceConfig{
 		Name: "internal", TypeName: "technitium-fake", RecordType: provider.RecordTypeA,

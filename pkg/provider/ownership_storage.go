@@ -78,6 +78,10 @@ type CompactOwnershipProvider struct {
 	maxBytes int
 	legacy   bool
 	identity ProviderIdentity
+	// presentation is set when the backend stores TXT as presentation text.
+	// Compact entries then keep TXT member targets in that stored form, which
+	// is also how earlier releases wrote them, and are exposed decoded.
+	presentation bool
 }
 
 // NewCompactOwnershipProvider decorates a TXT-capable, zone-enumerating provider.
@@ -108,7 +112,28 @@ func NewCompactOwnershipProvider(backend Provider, owner, zone string, logger *s
 			return nil, fmt.Errorf("compact ownership requires a TXT value bound of at least 256 bytes")
 		}
 	}
-	return &CompactOwnershipProvider{Provider: backend, owner: owner, zone: normalizeOwnershipName(zone), mu: mutex, logger: logger, maxBytes: maxBytes, identity: IdentityOf(backend)}, nil
+	_, presentation := backend.(TXTPresentationText)
+	return &CompactOwnershipProvider{Provider: backend, owner: owner, zone: normalizeOwnershipName(zone), mu: mutex, logger: logger, maxBytes: maxBytes, identity: IdentityOf(backend), presentation: presentation}, nil
+}
+
+// Unwrap returns the decorated backend, so optional backend interfaces such as
+// TXTPresentationText stay discoverable through the decorator.
+func (p *CompactOwnershipProvider) Unwrap() Provider { return p.Provider }
+
+// logicalEntry is the marker value an entry stored in a page stands for.
+func (p *CompactOwnershipProvider) logicalEntry(value string) string {
+	if !p.presentation {
+		return value
+	}
+	return MapMemberOwnershipTXTTarget(value, TXTPayload)
+}
+
+// storedEntry is the inverse of logicalEntry, applied before publication.
+func (p *CompactOwnershipProvider) storedEntry(value string) string {
+	if !p.presentation {
+		return value
+	}
+	return MapMemberOwnershipTXTTarget(value, TXTPresentation)
 }
 
 // Identity preserves the physical backend rather than the decorator's name.
@@ -163,6 +188,12 @@ func (p *CompactOwnershipProvider) snapshot(ctx context.Context) (*ownershipSnap
 	}
 	if !ownershipHeadsMatch(snapshot, confirmed) {
 		return nil, fmt.Errorf("%w: ownership changed while reading", ErrOwnershipState)
+	}
+	for owner, entries := range confirmed.entries {
+		for i := range entries {
+			entries[i].Value = p.logicalEntry(entries[i].Value)
+		}
+		confirmed.entries[owner] = entries
 	}
 	p.observeSnapshot(confirmed)
 	return confirmed, nil
@@ -223,7 +254,7 @@ func (p *CompactOwnershipProvider) List(ctx context.Context) ([]Record, error) {
 		metrics.OwnershipStateValid.WithLabelValues(p.Name()).Set(0)
 		return nil, fmt.Errorf("%w: ownership changed during record listing", ErrOwnershipState)
 	}
-	return ExpandOwnershipState(zone, raw)
+	return expandOwnershipState(zone, raw, p.logicalEntry)
 }
 
 // Create intercepts ownership markers; normal data still uses the provider API.
@@ -335,7 +366,11 @@ func (p *CompactOwnershipProvider) publish(ctx context.Context, previous *owners
 	if err != nil {
 		return err
 	}
-	pages, err := packOwnershipPages(zone, p.owner, entries, p.maxBytes)
+	stored := make([]OwnershipEntry, len(entries))
+	for i, entry := range entries {
+		stored[i] = OwnershipEntry{Name: entry.Name, Value: p.storedEntry(entry.Value)}
+	}
+	pages, err := packOwnershipPages(zone, p.owner, stored, p.maxBytes)
 	if err != nil {
 		return err
 	}

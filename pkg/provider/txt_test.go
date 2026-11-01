@@ -83,6 +83,9 @@ func TestDeclaredTXT(t *testing.T) {
 	if got := DeclaredTXT(presentationProvider{}, `"\"hello\""`); got != `"hello"` {
 		t.Errorf("presentation provider: DeclaredTXT = %q, want %q", got, `"hello"`)
 	}
+	if got := DeclaredTXT(decorator{presentationProvider{}}, `"\"hello\""`); got != `"hello"` {
+		t.Errorf("decorated presentation provider: DeclaredTXT = %q, want %q", got, `"hello"`)
+	}
 	if got := DeclaredTXT(nil, `"hello"`); got != `"hello"` {
 		t.Errorf("verbatim provider: DeclaredTXT = %q, want the declared value", got)
 	}
@@ -91,3 +94,7 @@ func TestDeclaredTXT(t *testing.T) {
 type presentationProvider struct{ Provider }
 
 func (presentationProvider) TXTPresentationText() {}
+
+type decorator struct{ Provider }
+
+func (d decorator) Unwrap() Provider { return d.Provider }

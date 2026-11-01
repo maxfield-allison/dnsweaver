@@ -23,6 +23,12 @@ type ownershipSnapshot struct {
 // markers. Physical pages and manifests are excluded; ordinary records and legacy
 // markers remain visible. An invalid owner snapshot makes the entire read fail.
 func ExpandOwnershipState(zone string, records []Record) ([]Record, error) {
+	return expandOwnershipState(zone, records, func(value string) string { return value })
+}
+
+// expandOwnershipState is ExpandOwnershipState with entryValue applied to the
+// committed entries; legacy markers pass through as listed.
+func expandOwnershipState(zone string, records []Record, entryValue func(string) string) ([]Record, error) {
 	snapshot, err := decodeOwnershipSnapshot(zone, records)
 	if err != nil {
 		return nil, err
@@ -40,7 +46,7 @@ func ExpandOwnershipState(zone string, records []Record) ([]Record, error) {
 	sort.Strings(owners)
 	for _, owner := range owners {
 		for _, entry := range snapshot.entries[owner] {
-			result = append(result, Record{Hostname: entry.Name, Type: RecordTypeTXT, Target: entry.Value, TTL: 300})
+			result = append(result, Record{Hostname: entry.Name, Type: RecordTypeTXT, Target: entryValue(entry.Value), TTL: 300})
 		}
 	}
 	return result, nil

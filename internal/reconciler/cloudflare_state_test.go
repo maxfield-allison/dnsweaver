@@ -104,6 +104,10 @@ func writeCFResult(w http.ResponseWriter, result any) {
 func (f *fakeCloudflareAPI) handler() http.Handler {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /zones/{zone}", func(w http.ResponseWriter, r *http.Request) {
+		writeCFResult(w, map[string]string{"id": r.PathValue("zone"), "name": "example.com", "status": "active"})
+	})
+
 	mux.HandleFunc("GET /zones/{zone}/dns_records", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		f.mu.Lock()
@@ -212,6 +216,14 @@ func (t rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 // by the fake API, plus the workload lister feeding it.
 func newCloudflareStateFixture(t *testing.T, api *fakeCloudflareAPI, proxiedDefault bool, target string) (*Reconciler, *testMockWorkloadLister) {
 	t.Helper()
+	return newCloudflareStorageFixture(t, api, proxiedDefault, target, "")
+}
+
+// newCloudflareStorageFixture is newCloudflareStateFixture with the registry
+// ownership storage mode set before the instance is created, as the binary
+// configures it. An empty storage leaves the provider undecorated.
+func newCloudflareStorageFixture(t *testing.T, api *fakeCloudflareAPI, proxiedDefault bool, target, storage string) (*Reconciler, *testMockWorkloadLister) {
+	t.Helper()
 
 	server := httptest.NewServer(api.handler())
 	t.Cleanup(server.Close)
@@ -231,6 +243,9 @@ func newCloudflareStateFixture(t *testing.T, api *fakeCloudflareAPI, proxiedDefa
 	}
 
 	providers := provider.NewRegistry(logger)
+	if storage != "" {
+		providers.SetOwnershipStorage(storage)
+	}
 	providers.RegisterFactory("cloudflare-fake", func(_ provider.FactoryConfig) (provider.Provider, error) {
 		return cf, nil
 	})
@@ -616,5 +631,108 @@ func TestReconcile_CloudflareQuotedTXTDataOwnershipSurvivesRestart(t *testing.T)
 	}
 	if got := api.txtContents(provider.OwnershipRecordName("mail.example.com")); len(got) != 0 {
 		t.Fatalf("markers left behind = %q", got)
+	}
+}
+
+func TestReconcile_CloudflareQuotedTXTThroughOwnershipStorage(t *testing.T) {
+	// The binary always sets an ownership storage mode, which decorates the
+	// provider. Cloudflare's TXT conversion must survive the decorator: the
+	// stored content is the declared presentation text, not a quoted copy.
+	for _, storage := range []string{"legacy", "compact"} {
+		for _, declared := range []string{`"v=spf1 -all"`, `"\"hello\""`, "v=spf1 -all"} {
+			t.Run(storage+"/"+declared, func(t *testing.T) {
+				api := &fakeCloudflareAPI{quoteTXT: true}
+				r, lister := newCloudflareStorageFixture(t, api, false, "203.0.113.10", storage)
+				lister.AddWorkload("app", map[string]string{
+					"dnsweaver.records.txt.hostname": "mail.example.com",
+					"dnsweaver.records.txt.type":     "TXT",
+					"dnsweaver.records.txt.target":   declared,
+				})
+				if _, err := r.Reconcile(context.Background()); err != nil {
+					t.Fatalf("Reconcile: %v", err)
+				}
+				want := quoteTXTStrings(provider.TXTPayload(declared))
+				if strings.HasPrefix(declared, `"`) {
+					want = declared
+				}
+				if got := api.txtContents("mail.example.com"); len(got) != 1 || got[0] != want {
+					t.Fatalf("stored TXT = %q, want [%q]", got, want)
+				}
+				writes := api.txtWrites()
+				for cycle := 2; cycle <= 3; cycle++ {
+					if _, err := r.Reconcile(context.Background()); err != nil {
+						t.Fatalf("Reconcile %d: %v", cycle, err)
+					}
+				}
+				if got := api.txtWrites(); got != writes {
+					t.Fatalf("converged TXT caused %d further writes", got-writes)
+				}
+				lister.workloads = nil
+				if _, err := r.Reconcile(context.Background()); err != nil {
+					t.Fatalf("Reconcile after withdrawal: %v", err)
+				}
+				if got := api.txtContents("mail.example.com"); len(got) != 0 {
+					t.Fatalf("TXT after withdrawal = %q, want none", got)
+				}
+			})
+		}
+	}
+}
+
+// verbatimTXT hides the Cloudflare provider's TXTPresentationText, which is
+// how earlier releases saw it when they wrote compact ownership entries.
+type verbatimTXT struct{ provider.Provider }
+
+func TestReconcile_CloudflareCompactEntryFromEarlierReleaseKeepsOwnership(t *testing.T) {
+	const host = "mail.example.com"
+	api := &fakeCloudflareAPI{quoteTXT: true}
+	api.add("TXT", host, `"v=spf1 -all"`, 300, false)
+
+	// An earlier release published the claim for the quoted declaration as a
+	// compact entry holding the declared spelling.
+	server := httptest.NewServer(api.handler())
+	t.Cleanup(server.Close)
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+	cf, err := cloudflare.New("external", &cloudflare.Config{Token: "test-token", ZoneID: "zone-123", TTL: 300},
+		cloudflare.WithProviderHTTPClient(&http.Client{Transport: rewriteTransport{base: base}}),
+		cloudflare.WithProviderLogger(quietLogger()))
+	if err != nil {
+		t.Fatalf("cloudflare.New: %v", err)
+	}
+	earlier, err := provider.NewCompactOwnershipProvider(verbatimTXT{cf}, "", "example.com", quietLogger(), nil)
+	if err != nil {
+		t.Fatalf("NewCompactOwnershipProvider: %v", err)
+	}
+	member := provider.Record{Hostname: host, Type: provider.RecordTypeTXT, Target: `"v=spf1 -all"`}
+	if err := earlier.Create(context.Background(), provider.MemberOwnershipRecord(host, 300, "", member, nil)); err != nil {
+		t.Fatalf("publishing the earlier compact entry: %v", err)
+	}
+
+	seeded := api.mutationCount(http.MethodPost, "TXT")
+	r, lister := newCloudflareStorageFixture(t, api, false, "203.0.113.10", "compact")
+	lister.AddWorkload("app", map[string]string{
+		"dnsweaver.records.txt.hostname": host,
+		"dnsweaver.records.txt.type":     "TXT",
+		"dnsweaver.records.txt.target":   member.Target,
+	})
+	if _, err := r.Reconcile(context.Background()); err != nil {
+		t.Fatalf("Reconcile after upgrade: %v", err)
+	}
+	if posts := api.mutationCount(http.MethodPost, "TXT") - seeded; posts != 0 {
+		t.Fatalf("upgrade wrote %d TXT records, want the earlier claim recognized as is", posts)
+	}
+	if got := api.txtContents(host); len(got) != 1 {
+		t.Fatalf("data TXT after upgrade = %q, want the one existing record", got)
+	}
+
+	lister.workloads = nil
+	if _, err := r.Reconcile(context.Background()); err != nil {
+		t.Fatalf("Reconcile after withdrawal: %v", err)
+	}
+	if got := api.txtContents(host); len(got) != 0 {
+		t.Fatalf("TXT after withdrawal = %q, want the owned record retired", got)
 	}
 }

@@ -54,9 +54,17 @@ type TXTPresentationText interface {
 }
 
 // DeclaredTXT returns the TXT Record.Target a declared value stands for on p.
+// Decorators expose their backend with Unwrap.
 func DeclaredTXT(p Provider, value string) string {
-	if _, ok := p.(TXTPresentationText); ok {
-		return TXTPayload(value)
+	for p != nil {
+		if _, ok := p.(TXTPresentationText); ok {
+			return TXTPayload(value)
+		}
+		wrapper, ok := p.(interface{ Unwrap() Provider })
+		if !ok {
+			break
+		}
+		p = wrapper.Unwrap()
 	}
 	return value
 }

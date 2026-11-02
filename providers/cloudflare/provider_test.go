@@ -1461,3 +1461,77 @@ func TestCloudflareRecordMatches_MXAndNS(t *testing.T) {
 		})
 	}
 }
+
+func TestListedTXTContent(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"quoted value", `"protonmail-verification=abc123"`, "protonmail-verification=abc123"},
+		{"unquoted value", "protonmail-verification=abc123", "protonmail-verification=abc123"},
+		{"split long value", `"v=DKIM1; k=rsa; p=MIIB" "IjANBgkq"`, "v=DKIM1; k=rsa; p=MIIBIjANBgkq"},
+		{"escaped quote", `"say \"hi\""`, `say "hi"`},
+		{"unterminated", `"unterminated`, `"unterminated`},
+		{"trailing quote only", `unterminated"`, `unterminated"`},
+		{"a lone quote", `"`, `"`},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := listedTXTContent("example.com", tt.input)
+			if err != nil || got != tt.want {
+				t.Errorf("listedTXTContent(%q) = %q, %v; want %q", tt.input, got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCloudflareRecordMatches_QuotedTXT(t *testing.T) {
+	record := provider.Record{Hostname: "example.com", Type: provider.RecordTypeTXT, Target: "v=spf1 -all"}
+	if !cloudflareRecordMatches(dnsRecord{Name: "example.com", Type: "TXT", Content: `"v=spf1 -all"`}, record) {
+		t.Error("quoted TXT read back did not match its declared value")
+	}
+	if cloudflareRecordMatches(dnsRecord{Name: "example.com", Type: "TXT", Content: `"v=spf1 ~all"`}, record) {
+		t.Error("a different TXT value matched")
+	}
+}
+
+func TestCloudflareRecordMatches_TXTDataContainingQuotes(t *testing.T) {
+	quotedData := provider.Record{Hostname: "example.com", Type: provider.RecordTypeTXT, Target: `"hello"`}
+	plain := provider.Record{Hostname: "example.com", Type: provider.RecordTypeTXT, Target: "hello"}
+	stored := dnsRecord{Name: "example.com", Type: "TXT", Content: `"\"hello\""`}
+	if !cloudflareRecordMatches(stored, quotedData) {
+		t.Error("stored quoted data did not match its record")
+	}
+	if cloudflareRecordMatches(stored, plain) {
+		t.Error("stored quoted data matched the plain value")
+	}
+	if cloudflareRecordMatches(dnsRecord{Name: "example.com", Type: "TXT", Content: `"hello"`}, quotedData) {
+		t.Error("stored plain value matched the quoted data")
+	}
+	if got := apiContent(quotedData); got != `"\"hello\""` {
+		t.Errorf("apiContent(%q) = %q, want quoted presentation", quotedData.Target, got)
+	}
+}
+
+func TestTXTMemberMarkerPresentation(t *testing.T) {
+	member := provider.Record{Hostname: "example.com", Type: provider.RecordTypeTXT, Target: `"hello"`}
+	marker := provider.MemberOwnershipRecord(member.Hostname, 300, "x", member, nil)
+
+	written := apiContent(marker)
+	if !provider.MatchesMemberOwnership(written, "x", provider.Record{Type: provider.RecordTypeTXT, Target: `"\"hello\""`}) {
+		t.Fatalf("written marker %q does not record the presentation text", written)
+	}
+	listed, err := listedTXTContent(marker.Hostname, written)
+	if err != nil || listed != marker.Target {
+		t.Fatalf("listed marker = %q, %v; want %q", listed, err, marker.Target)
+	}
+	// Earlier releases recorded the declared spelling, which on Cloudflare is
+	// presentation text of the data.
+	legacy := provider.MakeMemberOwnershipValue("x", provider.Record{Type: provider.RecordTypeTXT, Target: `"v=spf1 -all"`}, nil)
+	listed, err = listedTXTContent(marker.Hostname, legacy)
+	if err != nil || !provider.MatchesMemberOwnership(listed, "x", provider.Record{Type: provider.RecordTypeTXT, Target: "v=spf1 -all"}) {
+		t.Fatalf("legacy marker listed as %q, %v; want ownership of v=spf1 -all", listed, err)
+	}
+}

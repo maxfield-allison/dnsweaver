@@ -389,7 +389,7 @@ func (p *Provider) ListOwnershipState(ctx context.Context) ([]provider.Record, e
 	}
 	records := make([]provider.Record, 0, len(raw))
 	for _, r := range raw {
-		content, err := compactTXTContent(r.Name, r.Content)
+		content, err := listedTXTContent(r.Name, r.Content)
 		if err != nil {
 			return nil, err
 		}

@@ -37,7 +37,8 @@ func TestTXTPayloadAndPresentation(t *testing.T) {
 		{"quoted", `"v=spf1 -all"`, "v=spf1 -all", "v=spf1 -all"},
 		{"split", `"p=MIIB" "IjAN"`, "p=MIIBIjAN", "p=MIIBIjAN"},
 		{"data containing quotes", `"\"hello\""`, `"hello"`, `"\"hello\""`},
-		{"malformed quoting is data", `"open`, `"open`, `"open`},
+		{"malformed quoting is data", `"open`, `"open`, `"\"open"`},
+		{"empty data", `""`, "", `""`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

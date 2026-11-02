@@ -184,6 +184,12 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 		cfg.LogFormat = DefaultLogFormat
 	}
 	if cfg.DockerHost == "" {
+		// Honour the standard Docker variable (e.g. tcp://host:2375) so the
+		// default socket does not override it; TLS comes from DOCKER_CERT_PATH
+		// and DOCKER_TLS_VERIFY via the Docker SDK.
+		cfg.DockerHost = getEnv("DOCKER_HOST")
+	}
+	if cfg.DockerHost == "" {
 		cfg.DockerHost = DefaultDockerHost
 	}
 	if cfg.DockerMode == "" {

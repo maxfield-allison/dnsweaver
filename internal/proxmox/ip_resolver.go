@@ -77,7 +77,7 @@ func ResolveIPWithInterfacePreferences(ctx context.Context, client *Client, reso
 func ResolveIPs(ctx context.Context, client *Client, resource ClusterResource, logger *slog.Logger, opts ResolveOptions) (ResolvedIPs, error) {
 	switch resource.Type {
 	case resourceTypeLXC:
-		return resolveLXCIPs(ctx, client, resource, logger, opts)
+		return resolveLXCIPs(ctx, client, resource, opts)
 	case resourceTypeQEMU:
 		return resolveVMIPs(ctx, client, resource, logger, opts)
 	default:
@@ -87,7 +87,7 @@ func ResolveIPs(ctx context.Context, client *Client, resource ClusterResource, l
 
 // resolveLXCIPs resolves container addresses from the static config, then
 // consults the live interfaces endpoint for anything still missing.
-func resolveLXCIPs(ctx context.Context, client *Client, resource ClusterResource, logger *slog.Logger, opts ResolveOptions) (ResolvedIPs, error) {
+func resolveLXCIPs(ctx context.Context, client *Client, resource ClusterResource, opts ResolveOptions) (ResolvedIPs, error) {
 	cfg, err := client.GetLXCConfig(ctx, resource.Node, resource.VMID)
 	if err != nil {
 		return ResolvedIPs{}, fmt.Errorf("fetching config for LXC %d on %s: %w", resource.VMID, resource.Node, err)
@@ -102,17 +102,14 @@ func resolveLXCIPs(ctx context.Context, client *Client, resource ClusterResource
 	// the normal case for DHCP containers, whose config records "ip=dhcp".
 	ifaces, err := client.GetLXCInterfaces(ctx, resource.Node, resource.VMID)
 	if err != nil {
-		// The interfaces endpoint is missing on older PVE releases and absent
-		// from the API index on some versions. Treat any failure as "no extra
-		// information" rather than failing the whole resource — the statically
-		// configured address, if there was one, is still good.
-		logger.Debug("lxc interfaces lookup failed; using config-derived addresses only",
-			slog.String("node", resource.Node),
-			slog.Int("vmid", resource.VMID),
-			slog.String("name", resource.Name),
-			slog.String("error", err.Error()),
-		)
-		return resolved, nil
+		if errors.Is(err, errLXCInterfacesUnsupported) {
+			// Older servers explicitly lack this optional endpoint. Retain the
+			// established config-only fallback for that capability response.
+			return resolved, nil
+		}
+		// The missing family may already have DNS records. A partial address
+		// snapshot cannot establish their removal, even if config supplied V4.
+		return resolved, fmt.Errorf("fetching live interfaces for LXC %d on %s: %w", resource.VMID, resource.Node, err)
 	}
 
 	live := resolveLXCFromInterfaces(ifaces, opts)

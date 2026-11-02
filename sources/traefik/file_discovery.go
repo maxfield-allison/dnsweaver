@@ -35,12 +35,6 @@ func (p *Parser) DiscoverFromFiles(ctx context.Context, paths []string, pattern 
 	for _, path := range paths {
 		info, err := os.Stat(path)
 		if err != nil {
-			if os.IsNotExist(err) {
-				p.logger.Warn("traefik config path does not exist",
-					"path", path,
-				)
-				continue
-			}
 			return nil, fmt.Errorf("stat %s: %w", path, err)
 		}
 
@@ -81,11 +75,7 @@ func (p *Parser) DiscoverFromFiles(ctx context.Context, paths []string, pattern 
 
 		extractions, err := p.parseConfigFile(file)
 		if err != nil {
-			p.logger.Warn("failed to parse traefik config file",
-				"file", file,
-				"error", err.Error(),
-			)
-			continue
+			return nil, fmt.Errorf("reading traefik config %s: %w", file, err)
 		}
 
 		for _, e := range extractions {

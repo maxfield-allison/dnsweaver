@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/client"
 )
@@ -333,23 +332,9 @@ func (c *Client) ListContainers(ctx context.Context) ([]Container, error) {
 		return nil, ErrNotStandaloneMode
 	}
 
-	listOpts := container.ListOptions{}
-	if c.cleanupOnStop {
-		// Only list running containers (stopped containers = orphans)
-		listOpts.Filters = filters.NewArgs(
-			filters.Arg("status", "running"),
-		)
-	} else {
-		// Include both running and stopped containers
-		// Only truly removed containers will be orphans
-		listOpts.All = true
-		listOpts.Filters = filters.NewArgs(
-			filters.Arg("status", "running"),
-			filters.Arg("status", "paused"),
-			filters.Arg("status", "exited"),
-			filters.Arg("status", "created"),
-		)
-	}
+	// Docker's running set includes paused and restarting containers. A status
+	// allow-list would narrow that set and miss new states in removal-only mode.
+	listOpts := container.ListOptions{All: !c.cleanupOnStop}
 
 	containers, err := c.docker.ContainerList(ctx, listOpts)
 	if err != nil {

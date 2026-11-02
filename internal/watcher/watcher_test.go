@@ -412,11 +412,11 @@ func TestWatcher_BuildEventFilters_StandaloneMode(t *testing.T) {
 		t.Errorf("expected type filter 'container', got %v", typeFilters)
 	}
 
-	// Should include start, stop, die, destroy actions
+	// Every state transition that can change the discovery result must wake reconciliation.
 	eventFilters := filters.Get("event")
-	expectedEvents := map[string]bool{"start": true, "stop": true, "die": true, "destroy": true}
-	if len(eventFilters) != 4 {
-		t.Errorf("expected 4 event filters, got %d: %v", len(eventFilters), eventFilters)
+	expectedEvents := map[string]bool{"create": true, "start": true, "restart": true, "pause": true, "unpause": true, "stop": true, "die": true, "destroy": true}
+	if len(eventFilters) != len(expectedEvents) {
+		t.Errorf("expected %d event filters, got %d: %v", len(expectedEvents), len(eventFilters), eventFilters)
 	}
 	for _, e := range eventFilters {
 		if !expectedEvents[e] {

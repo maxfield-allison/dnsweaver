@@ -79,15 +79,15 @@ func buildRESTConfig(kubeconfig string) (*rest.Config, error) {
 
 // HasAPIGroup checks whether a specific API group is available in the cluster.
 // This is used for CRD auto-detection (e.g., checking if traefik.io is installed).
-func HasAPIGroup(disc discovery.DiscoveryInterface, group string) bool {
+func HasAPIGroup(disc discovery.DiscoveryInterface, group string) (bool, error) {
 	groups, err := disc.ServerGroups()
 	if err != nil {
-		return false
+		return false, fmt.Errorf("discovering kubernetes API groups: %w", err)
 	}
 	for _, g := range groups.Groups {
 		if g.Name == group {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }

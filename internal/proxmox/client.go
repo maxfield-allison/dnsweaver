@@ -28,6 +28,7 @@ package proxmox
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -313,10 +314,26 @@ func (c *Client) GetLXCInterfaces(ctx context.Context, node string, vmid int) ([
 
 	path := fmt.Sprintf("/api2/json/nodes/%s/lxc/%d/interfaces", node, vmid)
 	if err := c.get(ctx, path, &result); err != nil {
+		var apiErr *apiError
+		if errors.As(err, &apiErr) && apiErr.status == http.StatusNotImplemented {
+			return nil, fmt.Errorf("%w: %w", errLXCInterfacesUnsupported, err)
+		}
 		return nil, fmt.Errorf("getting LXC interfaces for %s/%d: %w", node, vmid, err)
 	}
 
 	return result.Data, nil
+}
+
+var errLXCInterfacesUnsupported = errors.New("proxmox live LXC interfaces endpoint is unsupported")
+
+type apiError struct {
+	status int
+	path   string
+	body   string
+}
+
+func (e *apiError) Error() string {
+	return fmt.Sprintf("proxmox api error: status %d for %s: %s", e.status, e.path, e.body)
 }
 
 // GetVMAgentNetworks returns network interface information from the qemu-guest-agent.
@@ -388,7 +405,7 @@ func (c *Client) get(ctx context.Context, path string, dst any) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("proxmox api error: status %d for %s: %s", resp.StatusCode, path, truncate(string(body), 200))
+		return &apiError{status: resp.StatusCode, path: path, body: truncate(string(body), 200)}
 	}
 
 	if err := json.Unmarshal(body, dst); err != nil {

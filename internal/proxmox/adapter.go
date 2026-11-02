@@ -154,15 +154,9 @@ func (a *WorkloadListerAdapter) ListWorkloads(ctx context.Context) ([]workload.W
 			WantV6:              a.cfg.IPVersion.wantsV6(),
 		})
 		if err != nil {
-			a.logger.Warn("could not resolve IP for proxmox resource",
-				slog.String(metaKeyNode, r.Node),
-				slog.Int(metaKeyVMID, r.VMID),
-				slog.String("name", r.Name),
-				slog.String("error", err.Error()),
-			)
-			// Continue processing remaining resources; a single IP resolution
-			// failure should not abort the entire listing.
-			continue
+			// A successful partial list would turn an unavailable guest into an
+			// orphan. Let reconciliation preserve the last complete snapshot.
+			return nil, fmt.Errorf("resolving IP for proxmox resource %s/%d: %w", r.Node, r.VMID, err)
 		}
 
 		w := toWorkload(r, ips, a.cfg.IPVersion)

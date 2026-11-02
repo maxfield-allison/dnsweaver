@@ -164,9 +164,9 @@ func TestParser_DiscoverFromFiles_NonExistentPath(t *testing.T) {
 		"*.yml",
 	)
 
-	// Should not error, just return empty (with a warning logged)
-	if err != nil {
-		t.Fatalf("DiscoverFromFiles returned unexpected error: %v", err)
+	// A missing configured root cannot establish authoritative absence.
+	if err == nil {
+		t.Fatal("missing discovery root was reported as a successful empty snapshot")
 	}
 
 	if len(extractions) != 0 {

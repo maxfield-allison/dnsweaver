@@ -95,6 +95,7 @@ type Watcher struct {
 	mu       sync.Mutex
 	cancel   context.CancelFunc
 	running  bool
+	synced   bool
 	debounce *time.Timer
 }
 
@@ -135,15 +136,31 @@ func (w *Watcher) Start(ctx context.Context) error {
 
 	ctx, w.cancel = context.WithCancel(ctx)
 	w.running = true
+	w.synced = false
 	w.mu.Unlock()
+	initialized := false
+	defer func() {
+		if !initialized {
+			w.Stop()
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	if !w.config.WatchesAnything() {
 		w.logger.Warn("kubernetes watcher started but no resource types enabled")
+		w.mu.Lock()
+		w.synced = true
+		w.mu.Unlock()
+		initialized = true
 		return nil
 	}
 
 	// Auto-detect CRDs.
-	w.detectCRDs()
+	if err := w.detectCRDs(); err != nil {
+		return err
+	}
 
 	// Create informer factories.
 	w.createFactories()
@@ -164,11 +181,26 @@ func (w *Watcher) Start(ctx context.Context) error {
 	// Wait for initial cache sync.
 	w.logger.Info("waiting for kubernetes informer cache sync")
 	for _, factory := range w.typedFactories {
-		factory.WaitForCacheSync(ctx.Done())
+		for _, synced := range factory.WaitForCacheSync(ctx.Done()) {
+			if !synced {
+				return fmt.Errorf("syncing kubernetes informer cache: %w", ctx.Err())
+			}
+		}
 	}
 	for _, factory := range w.dynamicFactories {
-		factory.WaitForCacheSync(ctx.Done())
+		for _, synced := range factory.WaitForCacheSync(ctx.Done()) {
+			if !synced {
+				return fmt.Errorf("syncing kubernetes dynamic informer cache: %w", ctx.Err())
+			}
+		}
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	w.mu.Lock()
+	w.synced = true
+	w.mu.Unlock()
+	initialized = true
 
 	w.logger.Info("kubernetes watcher started",
 		slog.Bool("ingress", w.config.WatchIngress),
@@ -197,6 +229,7 @@ func (w *Watcher) Stop() {
 	}
 
 	w.running = false
+	w.synced = false
 	w.logger.Info("kubernetes watcher stopped")
 }
 
@@ -213,6 +246,14 @@ func (w *Watcher) IsRunning() bool {
 // This implements the workload.Lister interface. It reads from the informer
 // cache (no API calls) and applies namespace/annotation filtering.
 func (w *Watcher) ListWorkloads(ctx context.Context) ([]workload.Workload, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.running || !w.synced {
+		return nil, fmt.Errorf("kubernetes informer caches are not synchronized")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var result []workload.Workload
 
 	selector := labels.Everything()
@@ -313,9 +354,13 @@ func (w *Watcher) TriggerNow() {
 }
 
 // detectCRDs checks which CRDs are available in the cluster.
-func (w *Watcher) detectCRDs() {
+func (w *Watcher) detectCRDs() error {
+	var err error
 	if w.config.WatchIngressRoute {
-		w.hasIngressRoute = HasAPIGroup(w.clients.Discovery, IngressRouteGVR.Group)
+		w.hasIngressRoute, err = HasAPIGroup(w.clients.Discovery, IngressRouteGVR.Group)
+		if err != nil {
+			return err
+		}
 		if w.hasIngressRoute {
 			w.logger.Info("CRD detected: Traefik IngressRoute")
 		} else {
@@ -324,13 +369,17 @@ func (w *Watcher) detectCRDs() {
 	}
 
 	if w.config.WatchHTTPRoute {
-		w.hasHTTPRoute = HasAPIGroup(w.clients.Discovery, HTTPRouteGVR.Group)
+		w.hasHTTPRoute, err = HasAPIGroup(w.clients.Discovery, HTTPRouteGVR.Group)
+		if err != nil {
+			return err
+		}
 		if w.hasHTTPRoute {
 			w.logger.Info("CRD detected: Gateway API HTTPRoute")
 		} else {
 			w.logger.Info("CRD not found: Gateway API HTTPRoute (gateway.networking.k8s.io group not available)")
 		}
 	}
+	return nil
 }
 
 // createFactories initializes the informer factories.

@@ -219,7 +219,11 @@ func (w *Watcher) buildEventFilters(isSwarm bool) filters.Args {
 	} else {
 		// Standalone mode: watch container events
 		filterArgs.Add("type", string(events.ContainerEventType))
+		filterArgs.Add("event", "create")
 		filterArgs.Add("event", "start")
+		filterArgs.Add("event", "restart")
+		filterArgs.Add("event", "pause")
+		filterArgs.Add("event", "unpause")
 		filterArgs.Add("event", "stop")
 		filterArgs.Add("event", "die")
 		filterArgs.Add("event", "destroy")

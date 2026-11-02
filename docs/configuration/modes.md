@@ -142,7 +142,7 @@ These global settings interact with operational modes:
 | Setting | Effect |
 |---------|--------|
 | `DNSWEAVER_CLEANUP_ORPHANS` | If `false`, disables deletion globally (overrides managed/authoritative) |
-| `DNSWEAVER_CLEANUP_ON_STOP` | If `false`, only delete records when containers are removed, not stopped |
+| `DNSWEAVER_CLEANUP_ON_STOP` | Docker only: if `false`, retain records for every existing container until removal. With the default `true`, paused and restarting containers still count as running. Proxmox and Incus use their own state filters. |
 | `DNSWEAVER_OWNERSHIP_TRACKING` | If `false`, dnsweaver can't distinguish its own records from others |
 | `DNSWEAVER_ADOPT_EXISTING` | Global default for claiming pre-existing records. Managed mode without adoption leaves unowned records untouched, including records with the wrong target or a conflicting type. |
 | `DNSWEAVER_{NAME}_ADOPT_EXISTING` | Overrides the global adoption policy for one provider instance. |

@@ -35,7 +35,7 @@ dnsweaver --config /etc/dnsweaver/config.yml
 | `DNSWEAVER_LOG_COMPRESS` | `true` | Compress rotated log files |
 | `DNSWEAVER_DRY_RUN` | `false` | Preview changes without modifying DNS |
 | `DNSWEAVER_CLEANUP_ORPHANS` | `true` | Delete DNS records when workloads are removed |
-| `DNSWEAVER_CLEANUP_ON_STOP` | `true` | Delete DNS records when containers stop |
+| `DNSWEAVER_CLEANUP_ON_STOP` | `true` | Docker: delete DNS records when containers stop. Paused and restarting containers remain discoverable; `false` retains all existing containers until removal. Proxmox and Incus use their own state filters. |
 | `DNSWEAVER_OWNERSHIP_TRACKING` | `true` | Use TXT records to track record ownership |
 | `DNSWEAVER_OWNERSHIP_STORAGE` | `legacy` | Ownership representation: per-member TXT or opt-in `compact` DNS pages. See [migration and active writers](ownership.md). |
 | `DNSWEAVER_ADOPT_EXISTING` | `false` | Global default for adopting existing DNS records. In managed mode, adoption permits ownership creation and updates or replacement of matching unowned records. |

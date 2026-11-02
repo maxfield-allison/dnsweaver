@@ -49,8 +49,8 @@ func WithLogger(logger *slog.Logger) Option {
 
 // WithCleanupOnStop controls whether stopped containers are considered orphans.
 //
-// When true (default): Only running containers are discovered. Stopped containers
-// are treated as orphans and their DNS records are cleaned up.
+// When true (default): Docker's running set is discovered, including paused and
+// restarting containers. Stopped containers are treated as orphans.
 //
 // When false: Both running and stopped containers are discovered. DNS records
 // are only cleaned up when containers are removed, not when they're stopped.

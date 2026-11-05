@@ -205,9 +205,6 @@ func mergeGlobalConfig(base *GlobalConfig) (*GlobalConfig, []*ConfigError) {
 
 	if v := getEnv("DNSWEAVER_DOCKER_HOST"); v != "" {
 		cfg.DockerHost = v
-	} else if v := getEnv("DOCKER_HOST"); v != "" && cfg.DockerHost == DefaultDockerHost {
-		// Standard Docker variable (e.g. tcp://host:2375); TLS via DOCKER_CERT_PATH/DOCKER_TLS_VERIFY.
-		cfg.DockerHost = v
 	}
 
 	if v := getEnv("DNSWEAVER_DOCKER_MODE"); v != "" {

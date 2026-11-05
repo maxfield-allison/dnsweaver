@@ -184,13 +184,7 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 		cfg.LogFormat = DefaultLogFormat
 	}
 	if cfg.DockerHost == "" {
-		// Honour the standard Docker variable (e.g. tcp://host:2375) so the
-		// default socket does not override it; TLS comes from DOCKER_CERT_PATH
-		// and DOCKER_TLS_VERIFY via the Docker SDK.
-		cfg.DockerHost = getEnv("DOCKER_HOST")
-	}
-	if cfg.DockerHost == "" {
-		cfg.DockerHost = DefaultDockerHost
+		cfg.DockerHost = defaultDockerHost()
 	}
 	if cfg.DockerMode == "" {
 		cfg.DockerMode = DefaultDockerMode
@@ -632,4 +626,15 @@ func validateInstanceID(id string) error {
 		return fmt.Errorf("invalid format %q (must be alphanumeric, hyphens, underscores, dots; must start with alphanumeric)", id)
 	}
 	return nil
+}
+
+// defaultDockerHost is the standard DOCKER_HOST (e.g. tcp://host:2375) when set,
+// else the local socket. It is only a fallback: DNSWEAVER_DOCKER_HOST and an
+// explicit YAML docker.host both override it. TLS comes from DOCKER_CERT_PATH
+// and DOCKER_TLS_VERIFY via the Docker SDK.
+func defaultDockerHost() string {
+	if v := getEnv("DOCKER_HOST"); v != "" {
+		return v
+	}
+	return DefaultDockerHost
 }

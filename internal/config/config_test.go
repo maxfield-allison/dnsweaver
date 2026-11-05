@@ -476,3 +476,18 @@ func TestDockerHostFromStandardEnv(t *testing.T) {
 		t.Errorf("DNSWEAVER_DOCKER_HOST should win, got %q", cfg.DockerHost)
 	}
 }
+
+func TestDockerHostYAMLPrecedence(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "tcp://remote:2375")
+	cases := []struct{ name, host, want string }{
+		{"omitted", "", "tcp://remote:2375"},
+		{"explicit default socket", DefaultDockerHost, DefaultDockerHost},
+		{"custom tcp", "tcp://yaml:2375", "tcp://yaml:2375"},
+	}
+	for _, c := range cases {
+		f := &FileConfig{Docker: &FileDockerConfig{Host: c.host}}
+		if got := f.ToGlobalConfig().DockerHost; got != c.want {
+			t.Errorf("%s: DockerHost = %q, want %q", c.name, got, c.want)
+		}
+	}
+}

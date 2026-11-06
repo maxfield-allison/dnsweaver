@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## [3.3.0] - 2026-11-06
+
+### Added
+
+- Declare MX and NS records with native labels. `priority` sets the MX preference, a name can carry several MX records, including one exchanger at several preferences, and the Cloudflare provider supports both types. Existing MX and NS records are only taken over through explicit adoption or an exact member ownership marker. ([#248](https://github.com/maxfield-allison/dnsweaver/issues/248))
+
+### Fixed
+
+- Stop rewriting Cloudflare data TXT records on every cycle. Decode DNS decimal escapes and preserve empty, quoted and Unicode payloads. Keep exact-member ownership through legacy/compact migration, reversal and restart, including markers written by earlier releases. Other providers keep storing and matching declared TXT values verbatim. ([#250](https://github.com/maxfield-allison/dnsweaver/issues/250))
+- Accept Cloudflare account API tokens in the provider connectivity check, which now reads the configured zone instead of calling the user token verify endpoint. Tokens need no permission beyond DNS Read or DNS Write on the zone. ([#252](https://github.com/maxfield-allison/dnsweaver/issues/252))
+- Accept underscored labels such as `_dmarc` and `_domainkey` in record hostnames without SRV hints. ([#254](https://github.com/maxfield-allison/dnsweaver/issues/254))
+- Keep DNS records for Docker containers through pauses and restart loops, and honor removal-only cleanup for every container state. Reconcile on additional lifecycle events. Preserve existing records when Proxmox guest lookup, Kubernetes discovery/cache initialization, or Traefik file discovery is incomplete instead of treating unavailable data as removal. ([#256](https://github.com/maxfield-allison/dnsweaver/issues/256))
+- Honour `DOCKER_HOST` (including `tcp://` and TLS via `DOCKER_CERT_PATH` / `DOCKER_TLS_VERIFY`): `DNSWEAVER_DOCKER_HOST` wins, then an explicit YAML `docker.host`, then `DOCKER_HOST`, then the default socket. An explicit YAML default socket is preserved. Previously the default socket was always passed explicitly and overrode `DOCKER_HOST`. In `standalone` mode dnsweaver now pings the daemon at startup instead of calling `/info`, so a locked-down docker-socket-proxy (`INFO=0`) works.
+
+
 ## [3.2.3] - 2026-10-28
 
 ### Changed

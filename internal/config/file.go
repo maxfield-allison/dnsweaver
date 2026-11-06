@@ -270,7 +270,7 @@ func (c *FileConfig) ToGlobalConfig() *GlobalConfig {
 		HealthAddress:        DefaultHealthAddress,
 		HealthAllowNetwork:   DefaultHealthAllowNetwork,
 		Platform:             DefaultPlatform,
-		DockerHost:           DefaultDockerHost,
+		DockerHost:           defaultDockerHost(),
 		DockerMode:           DefaultDockerMode,
 		DockerConnectTimeout: DefaultDockerConnectTimeout,
 		K8sWatchIngress:      true,

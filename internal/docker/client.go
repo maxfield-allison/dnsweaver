@@ -205,6 +205,16 @@ func isTerminalModeErr(err error) bool {
 
 // initializeMode detects or verifies the Docker mode based on configuration.
 func (c *Client) initializeMode(ctx context.Context) error {
+	// Standalone needs nothing from /info, which a locked-down socket proxy
+	// (e.g. docker-socket-proxy with INFO=0) refuses: a ping proves the daemon is there.
+	if c.mode == ModeStandalone {
+		if _, err := c.docker.Ping(ctx); err != nil {
+			return fmt.Errorf("pinging docker: %w", err)
+		}
+		c.detectedMode = ModeStandalone
+		return nil
+	}
+
 	info, err := c.docker.Info(ctx)
 	if err != nil {
 		return fmt.Errorf("getting docker info: %w", err)

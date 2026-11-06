@@ -460,3 +460,34 @@ func TestLoadInstanceConfig_AutoHTTPSRecords(t *testing.T) {
 		t.Errorf("AUTO_HTTPS_ALPN = %q, want %q", got, "h2,h3")
 	}
 }
+
+func TestDockerHostFromStandardEnv(t *testing.T) {
+	t.Setenv("DNSWEAVER_DOCKER_HOST", "")
+	t.Setenv("DOCKER_HOST", "tcp://10.0.0.5:2375")
+	cfg, errs := loadGlobalConfig()
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if cfg.DockerHost != "tcp://10.0.0.5:2375" {
+		t.Errorf("DockerHost = %q, want DOCKER_HOST value", cfg.DockerHost)
+	}
+	t.Setenv("DNSWEAVER_DOCKER_HOST", "tcp://other:2375")
+	if cfg, _ = loadGlobalConfig(); cfg.DockerHost != "tcp://other:2375" {
+		t.Errorf("DNSWEAVER_DOCKER_HOST should win, got %q", cfg.DockerHost)
+	}
+}
+
+func TestDockerHostYAMLPrecedence(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "tcp://remote:2375")
+	cases := []struct{ name, host, want string }{
+		{"omitted", "", "tcp://remote:2375"},
+		{"explicit default socket", DefaultDockerHost, DefaultDockerHost},
+		{"custom tcp", "tcp://yaml:2375", "tcp://yaml:2375"},
+	}
+	for _, c := range cases {
+		f := &FileConfig{Docker: &FileDockerConfig{Host: c.host}}
+		if got := f.ToGlobalConfig().DockerHost; got != c.want {
+			t.Errorf("%s: DockerHost = %q, want %q", c.name, got, c.want)
+		}
+	}
+}

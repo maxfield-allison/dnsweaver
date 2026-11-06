@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
-## [3.3.0] - 2026-11-06
+## [3.3.1] - 2026-11-06
 
 ### Added
 
@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep DNS records for Docker containers through pauses and restart loops, and honor removal-only cleanup for every container state. Reconcile on additional lifecycle events. Preserve existing records when Proxmox guest lookup, Kubernetes discovery/cache initialization, or Traefik file discovery is incomplete instead of treating unavailable data as removal. ([#256](https://github.com/maxfield-allison/dnsweaver/issues/256))
 - Honour `DOCKER_HOST` (including `tcp://` and TLS via `DOCKER_CERT_PATH` / `DOCKER_TLS_VERIFY`): `DNSWEAVER_DOCKER_HOST` wins, then an explicit YAML `docker.host`, then `DOCKER_HOST`, then the default socket. An explicit YAML default socket is preserved. Previously the default socket was always passed explicitly and overrode `DOCKER_HOST`. In `standalone` mode dnsweaver now pings the daemon at startup instead of calling `/info`, so a locked-down docker-socket-proxy (`INFO=0`) works.
 
+### Changed
+
+- Refresh the locked Alpine package inventories for current repository updates, including timezone data 2026f. Release builds still verify the complete installed package sets.
+
+## [3.3.0] - 2026-11-06
+
+No release artifacts were published for this tag. Its changes are included in 3.3.1.
 
 ## [3.2.3] - 2026-10-28
 

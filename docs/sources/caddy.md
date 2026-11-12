@@ -65,6 +65,11 @@ labels:
 Only labels named exactly `caddy` or beginning with `caddy_` without a dot
 declare hostnames. Dotted directive keys are ignored, including indexed directives.
 
+Snippet names such as `(authentication)` and named routes such as `&(app-route)`
+are also ignored. They define reusable Caddy configuration rather than DNS names,
+so they do not need an `EXCLUDE_DOMAINS` entry. Site hostnames on other labels
+continue to be discovered.
+
 ## Supported Record Types
 
 Caddy labels only declare **hostnames**. dnsweaver pairs each hostname

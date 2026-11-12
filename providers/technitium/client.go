@@ -58,7 +58,11 @@ func (v *svcParamsValue) UnmarshalJSON(data []byte) error {
 		var valArr []string
 		if err := json.Unmarshal(obj[k], &valArr); err == nil {
 			parts = append(parts, k+"|"+strings.Join(valArr, ","))
+			continue
 		}
+		// Preserve unfamiliar representations so a custom parameter cannot
+		// disappear and make a manual record look like a generated companion.
+		parts = append(parts, k+"|"+string(obj[k]))
 	}
 	*v = svcParamsValue(strings.Join(parts, " "))
 	return nil
@@ -520,8 +524,31 @@ func (c *Client) AddHTTPSRecord(ctx context.Context, zone, hostname string, svcP
 	return nil
 }
 
-// DeleteHTTPSRecord removes an HTTPS (SVCB Type 65) record from the specified zone.
-// Note: implemented earlier; duplicate guard to ensure compile stability when patching.
+// UpdateHTTPSRecord changes one exact HTTPS member through the native update
+// API, preserving availability if the request fails before applying the change.
+func (c *Client) UpdateHTTPSRecord(ctx context.Context, zone string, existing, desired apiRecord) error {
+	params := url.Values{}
+	params.Set("zone", zone)
+	params.Set("domain", existing.Name)
+	params.Set("newDomain", desired.Name)
+	params.Set("type", "HTTPS")
+	params.Set("ttl", strconv.Itoa(desired.TTL))
+	params.Set("svcPriority", strconv.Itoa(existing.RData.SvcPriority))
+	params.Set("newSvcPriority", strconv.Itoa(desired.RData.SvcPriority))
+	params.Set("svcTargetName", existing.RData.SvcTargetName)
+	params.Set("newSvcTargetName", desired.RData.SvcTargetName)
+	for key, value := range map[string]svcParamsValue{"svcParams": existing.RData.SvcParams, "newSvcParams": desired.RData.SvcParams} {
+		if value == "" {
+			params.Set(key, "false")
+		} else {
+			params.Set(key, string(value))
+		}
+	}
+	if _, err := c.doRequest(ctx, "/api/zones/records/update", params); err != nil {
+		return fmt.Errorf("updating HTTPS record for %s: %w", existing.Name, err)
+	}
+	return nil
+}
 
 // parseSvcParams splits svcParams into key/value pairs for future use.
 // Input: "alpn|h2" → map{"alpn":"h2"}

@@ -58,7 +58,7 @@ func TestCompanionSkippedForCNAME(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/zones/records/get":
-			_, _ = w.Write([]byte(`{"status":"ok","response":{"zone":{"name":"zone"},"name":"app.example.com","records":[]}}`))
+			_, _ = w.Write([]byte(`{"status":"ok","response":{"zone":{"name":"zone"},"name":"app.example.com","records":[{"name":"app.example.com","type":"HTTPS","ttl":300,"rData":{"svcPriority":1,"svcTargetName":".","svcParams":"alpn|h2"}}]}}`))
 		case "/api/zones/records/add":
 			addCalls++
 			_, _ = w.Write([]byte(`{"status":"ok"}`))

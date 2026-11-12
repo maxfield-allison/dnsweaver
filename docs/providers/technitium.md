@@ -216,7 +216,7 @@ app.example.com  300  IN  HTTPS  1 . alpn="h2"
 
 - **Enabled by default** — no configuration needed
 - **Reconciled with the parent** — ALPN and TTL changes apply even when the address is unchanged. Missing companions are recreated.
-- **Matching format** — a single enabled HTTPS record with priority 1, target `.` and only an ALPN parameter is treated as a companion when dnsweaver manages the parent address. This includes manually created records with that same format. Different priorities, targets, extra parameters, disabled records and multiple HTTPS records are left alone.
+- **Matching format** — a single enabled HTTPS record with priority 1, target `.` and only a nonempty ALPN parameter is treated as a companion when dnsweaver manages the parent address. This includes manually created records with that same format. Different priorities, targets, extra parameters, disabled records and multiple HTTPS records are left alone.
 - **Ownership policy applies** — an existing parent must be owned or eligible for adoption before its companion can change. Dry-run makes no writes.
 - **Lifecycle-managed** — a companion is kept while any A or AAAA member remains. Final-member cleanup uses the companion's stored ALPN, even if the configured value has changed.
 - **Idempotent** — unchanged companions produce no writes. Disabling automatic companions leaves existing HTTPS records in place.

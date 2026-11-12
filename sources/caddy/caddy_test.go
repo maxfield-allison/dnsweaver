@@ -130,6 +130,31 @@ func TestCaddy_Extract_Cases(t *testing.T) {
 			want: nil,
 		},
 		{
+			name: "snippet beside authentication site",
+			labels: map[string]string{
+				"caddy_0":               "auth.example.com",
+				"caddy_0.reverse_proxy": "{{upstreams 9091}}",
+				"caddy_1":               "(authentication)",
+				"caddy_1.forward_auth":  "authelia:9091",
+			},
+			want: []string{"auth.example.com"},
+		},
+		{
+			name:   "unindexed snippet",
+			labels: map[string]string{"caddy": "  (authentication)  "},
+			want:   nil,
+		},
+		{
+			name:   "named route",
+			labels: map[string]string{"caddy": "&(app-route)"},
+			want:   nil,
+		},
+		{
+			name:   "snippet tokens mixed with hostnames",
+			labels: map[string]string{"caddy": "(authentication), app.example.com &(app-route) www.example.com"},
+			want:   []string{"app.example.com", "www.example.com"},
+		},
+		{
 			name: "empty value",
 			labels: map[string]string{
 				"caddy":   "",

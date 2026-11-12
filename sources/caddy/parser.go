@@ -54,7 +54,7 @@ func NewParser(opts ...ParserOption) *Parser {
 //
 // Results are returned in a deterministic order (sorted by label key, then
 // by hostname) with duplicates removed across labels. Empty values and
-// whitespace-only values are silently skipped.
+// whitespace-only values, snippet names and named routes are silently skipped.
 func (p *Parser) ExtractHostnames(labels map[string]string) []Extraction {
 	if len(labels) == 0 {
 		return nil
@@ -110,6 +110,12 @@ func splitHostnames(value string) []string {
 	for _, f := range fields {
 		h := strings.ToLower(strings.TrimSpace(f))
 		if h == "" {
+			continue
+		}
+		// Caddy snippets and named routes define reusable configuration, not
+		// site addresses. Exclude them before hostname validation downstream.
+		name := strings.TrimPrefix(h, "&")
+		if strings.HasPrefix(name, "(") && strings.HasSuffix(name, ")") {
 			continue
 		}
 		out = append(out, h)

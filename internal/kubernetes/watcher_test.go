@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/wait"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 )
 
@@ -69,18 +70,26 @@ func TestWatcherScopesInformerRequestsToConfiguredNamespaces(t *testing.T) {
 	}
 	t.Cleanup(watcher.Stop)
 
-	listed := make(map[string]bool)
-	watched := make(map[string]bool)
-	for _, action := range client.Actions() {
-		if action.GetResource().Resource != "ingresses" {
-			continue
+	// Initial cache sync can finish before the reflector starts its watch.
+	// Wait for the requests being asserted rather than relying on scheduling.
+	var listed, watched map[string]bool
+	if err := wait.PollUntilContextTimeout(ctx, time.Millisecond, 5*time.Second, true, func(_ context.Context) (bool, error) {
+		listed = make(map[string]bool)
+		watched = make(map[string]bool)
+		for _, action := range client.Actions() {
+			if action.GetResource().Resource != "ingresses" {
+				continue
+			}
+			switch action.GetVerb() {
+			case "list":
+				listed[action.GetNamespace()] = true
+			case "watch":
+				watched[action.GetNamespace()] = true
+			}
 		}
-		switch action.GetVerb() {
-		case "list":
-			listed[action.GetNamespace()] = true
-		case "watch":
-			watched[action.GetNamespace()] = true
-		}
+		return watched["apps"] && watched["edge"], nil
+	}); err != nil {
+		t.Fatalf("waiting for namespaced Ingress watch requests: %v (watched %v)", err, watched)
 	}
 
 	for _, namespace := range []string{"apps", "edge"} {

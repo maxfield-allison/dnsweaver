@@ -218,6 +218,26 @@ func (p *Provider) List(ctx context.Context) ([]provider.Record, error) {
 		// Skip other record types (NS, SOA, etc.)
 	}
 
+	// Attach the complete companion snapshot to each address, so an unchanged
+	// address can still trigger an ownership-gated companion repair.
+	byName := make(map[string][]apiRecord)
+	for _, record := range apiRecords {
+		name := strings.ToLower(strings.TrimSuffix(record.Name, "."))
+		byName[name] = append(byName[name], record)
+	}
+	for i := range records {
+		if !needsCompanionHTTPS(records[i].Type) {
+			continue
+		}
+		name := strings.ToLower(strings.TrimSuffix(records[i].Hostname, "."))
+		companion, protected := companionHTTPS(byName[name], records[i].Hostname)
+		state := companionState(companion)
+		if protected {
+			state = protectedCompanionState
+		}
+		records[i].Metadata = map[string]string{companionStateKey: state}
+	}
+
 	p.logger.Debug("listed records",
 		slog.String("provider", p.name),
 		slog.String("zone", p.zone),
@@ -358,12 +378,16 @@ func (p *Provider) Update(ctx context.Context, existing, desired provider.Record
 	// Technitium's update API requires identifying the old record and specifying new values
 	switch desired.Type {
 	case provider.RecordTypeA:
-		if err := p.client.UpdateARecord(ctx, p.zone, existing.Hostname, existing.Target, desired.Target, ttl); err != nil {
-			return fmt.Errorf("updating A record: %w", err)
+		if existing.Target != desired.Target || existing.TTL != ttl {
+			if err := p.client.UpdateARecord(ctx, p.zone, existing.Hostname, existing.Target, desired.Target, ttl); err != nil {
+				return fmt.Errorf("updating A record: %w", err)
+			}
 		}
 	case provider.RecordTypeAAAA:
-		if err := p.client.UpdateAAAARecord(ctx, p.zone, existing.Hostname, existing.Target, desired.Target, ttl); err != nil {
-			return fmt.Errorf("updating AAAA record: %w", err)
+		if existing.Target != desired.Target || existing.TTL != ttl {
+			if err := p.client.UpdateAAAARecord(ctx, p.zone, existing.Hostname, existing.Target, desired.Target, ttl); err != nil {
+				return fmt.Errorf("updating AAAA record: %w", err)
+			}
 		}
 	case provider.RecordTypeCNAME:
 		if err := p.client.UpdateCNAMERecord(ctx, p.zone, existing.Hostname, existing.Target, desired.Target, ttl); err != nil {
@@ -384,7 +408,7 @@ func (p *Provider) Update(ctx context.Context, existing, desired provider.Record
 			return fmt.Errorf("creating new SRV record for update: %w", err)
 		}
 	case provider.RecordTypeHTTPS:
-		// HTTPS records: delete+create (Technitium has no native HTTPS update API)
+		// Explicit HTTPS records use the existing delete+create path.
 		if existing.HTTPS == nil || desired.HTTPS == nil {
 			return fmt.Errorf("updating HTTPS record: HTTPS data is required")
 		}
@@ -407,6 +431,10 @@ func (p *Provider) Update(ctx context.Context, existing, desired provider.Record
 		}
 	default:
 		return fmt.Errorf("unsupported record type: %s", desired.Type)
+	}
+
+	if err := p.createCompanionHTTPS(ctx, desired.Hostname, desired.Type, ttl); err != nil {
+		return fmt.Errorf("reconciling companion HTTPS record: %w", err)
 	}
 
 	p.logger.Info("updated record",

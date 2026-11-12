@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## [3.3.2] - 2026-11-12
+
+### Fixed
+
+- Caddy snippet and named-route labels no longer produce invalid hostname warnings. Site hostnames declared alongside them are still discovered.
+- Technitium companion HTTPS records now follow ALPN and TTL configuration changes even when the parent address is unchanged, and missing companions are repaired. A single enabled priority-1 HTTPS record with target `.` and only a nonempty ALPN parameter is managed with its owned parent, including an existing manual record with that shape. Customized or ambiguous HTTPS records are preserved. Cleanup uses the companion's observed ALPN rather than the current setting.
+
+### Security
+
+- Builds now use Go 1.26.11, which fixes the net/http race reported as GO-2026-6859 (CVE-2026-97054).
+
+
 ## [3.3.1] - 2026-11-06
 
 ### Added

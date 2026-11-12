@@ -1,1 +1,0 @@
-Technitium companion HTTPS records now follow ALPN and TTL configuration changes even when the parent address is unchanged, and missing companions are repaired. Matching generated records are managed with their parent; customized or ambiguous HTTPS records are preserved. Cleanup uses the companion's observed ALPN rather than the current setting.

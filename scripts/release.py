@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "release"
 ARCHES = ("amd64", "arm64")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
+STABLE_VERSION = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
 VERSION = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\Z")
 
 
@@ -77,6 +78,15 @@ class Registry:
 
     def resolve(self, ref):
         return digest(self.raw(ref))
+
+    def optional_resolve(self, ref: str) -> str | None:
+        """Return no digest only for an explicitly missing registry manifest."""
+        result = run("skopeo", "inspect", "--raw", "docker://" + ref, check=False)
+        if result.returncode == 0:
+            return digest(result.stdout.encode())
+        if any(marker in result.stderr for marker in ("manifest unknown", "MANIFEST_UNKNOWN", "name unknown")):
+            return None
+        raise RuntimeError("cannot establish whether alias exists")
 
     def copy(self, source, destination):
         run("skopeo", "copy", "--all", "--preserve-digests", "docker://" + source, "docker://" + destination)
@@ -433,6 +443,20 @@ class GitHub:
         if release["draft"]:
             raise RuntimeError("release is still draft")
 
+    def published_stable_versions(self) -> list[str]:
+        """Enumerate published stable releases, stopping rather than truncating."""
+        versions = []
+        for page in range(1, 101):
+            batch = self.request(f"/releases?per_page=100&page={page}")
+            if not isinstance(batch, list):
+                raise TypeError("invalid GitHub releases response")
+            for release in batch:
+                if not release["draft"] and not release["prerelease"] and STABLE_VERSION.fullmatch(release["tag_name"]):
+                    versions.append(release["tag_name"])
+            if len(batch) < 100:
+                return versions
+        raise ValueError("GitHub release enumeration exceeded 100 pages")
+
     def latest(self):
         return self.request("/releases/latest")["id"]
 
@@ -442,17 +466,55 @@ class GitHub:
             raise RuntimeError("GitHub latest release did not update")
 
 
+def release_aliases(version: str, published: list[str]) -> list[str]:
+    """Select channels whose newest published stable version is this candidate."""
+    match = STABLE_VERSION.fullmatch(version)
+    if match is None:
+        if not VERSION.fullmatch(version) or "-" not in version:
+            raise ValueError("release tag must be a semantic version")
+        return []
+    candidate = tuple(map(int, match.groups()))
+    versions = [candidate]
+    for tag in published:
+        stable = STABLE_VERSION.fullmatch(tag)
+        if stable is None:
+            raise ValueError("published stable version is invalid")
+        versions.append(tuple(map(int, stable.groups())))
+    major, minor, _ = candidate
+    aliases = []
+    if candidate == max(v for v in versions if v[:2] == candidate[:2]):
+        aliases.append(f"v{major}.{minor}")
+    if candidate == max(v for v in versions if v[0] == major):
+        aliases.append(f"v{major}")
+    if candidate == max(versions):
+        aliases.append("latest")
+    return aliases
+
+
 def promote(plan, registries, github, registry, notes, assets, journal):
     if github.tag_commit(plan["version"]) != plan["source"]:
         raise ValueError("public tag does not match qualified source")
     if registry.resolve(plan["image"]) != plan["digest"]:
         raise ValueError("qualified index digest mismatch")
-    # Existing latest is required for rollback. First publication/bootstrap is
-    # deliberately a separate operator action, not an implicit unsafe fallback.
+    # Inspect every immutable destination before the first public write. The
+    # final immutable_copy checks again because another writer may race us.
+    for repository in registries:
+        existing = registry.optional_resolve(repository + ":" + plan["version"])
+        if existing is not None and existing != plan["digest"]:
+            raise ValueError("immutable destination tag already has different content")
     stable = "-" not in plan["version"]
-    previous = {r: registry.resolve(r + ":latest") for r in registries} if stable else {}
-    previous_release = github.latest() if stable else None
-    state = {"source": plan["source"], "version": plan["version"], "previous_latest": previous, "previous_release": previous_release}
+    aliases = release_aliases(plan["version"], github.published_stable_versions() if stable else [])
+    previous = {}
+    for repository in registries:
+        for alias in aliases:
+            ref = repository + ":" + alias
+            # Existing latest is still required: first-ever bootstrap remains
+            # an explicit operator action outside ordinary promotion.
+            previous[ref] = registry.resolve(ref) if alias == "latest" else registry.optional_resolve(ref)
+    previous_release = github.latest() if "latest" in aliases else None
+    state = {"source": plan["source"], "version": plan["version"], "digest": plan["digest"],
+        "previous_aliases": previous, "previous_release": previous_release,
+        "previous_latest": {r: previous[r + ":latest"] for r in registries if r + ":latest" in previous}}
     write_json(journal, {**state, "phase": "prepared"})
     for repository in registries:
         registry.immutable_copy(plan["image"], repository + ":" + plan["version"])
@@ -462,10 +524,10 @@ def promote(plan, registries, github, registry, notes, assets, journal):
     changed = []
     release_changed = False
     try:
-        for repository in previous:
-            changed.append(repository)  # include an ambiguous failed write
-            registry.copy(repository + ":" + plan["version"], repository + ":latest")
-        if stable:
+        for ref in previous:
+            changed.append(ref)  # include an ambiguous failed write
+            registry.copy(plan["image"], ref)
+        if "latest" in aliases:
             release_changed = True
             github.set_latest(release["id"])
     except Exception:
@@ -473,14 +535,27 @@ def promote(plan, registries, github, registry, notes, assets, journal):
         if release_changed:
             try:
                 github.set_latest(previous_release)
-            except Exception:
+            except Exception:  # noqa: BLE001
+                # Protocol read-back can fail after applying the compensation.
+                # Record any ordinary error and continue all registry restores;
+                # the outer handler re-raises the original promotion failure.
                 failures.append("github-latest")
-        for repository in reversed(changed):
+        retained = []
+        for ref in reversed(changed):
+            if previous[ref] is None:
+                # Registry deletion is by digest and could remove the immutable
+                # version too. Preserve first-time aliases for operator read-back.
+                retained.append(ref)
+                continue
             try:
-                registry.copy(repository + "@" + previous[repository], repository + ":latest")
-            except Exception:
-                failures.append(repository)
-        write_json(journal, {**state, "phase": "latest-update-failed", "rollback_failures": failures})
+                repository = ref.rsplit(":", 1)[0]
+                registry.copy(repository + "@" + previous[ref], ref)
+            except Exception:  # noqa: BLE001
+                # A malformed response must not skip the other compensations
+                # or replace the original error; the journal records this one.
+                failures.append(ref)
+        write_json(journal, {**state, "phase": "latest-update-failed",
+            "rollback_failures": failures, "retained_new_aliases": retained})
         raise
     write_json(journal, {**state, "phase": "complete"})
 

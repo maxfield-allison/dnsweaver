@@ -1,1 +1,0 @@
-Apply environment overrides consistently when using a YAML configuration file, including Proxmox, Incus, logging, timeouts, provider routing and source discovery settings. Providers inherit the effective default TTL, and invalid provider overrides fail validation. Pass documented dnsmasq SSH/file settings and Pi-hole API version settings through the provider factory.

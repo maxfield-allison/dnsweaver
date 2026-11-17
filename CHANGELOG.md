@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- towncrier release notes start -->
 
+## [3.4.0] - 2026-11-17
+
+### Added
+
+- Stable container releases now provide `vX` and `vX.Y` aliases, such as `v3` and `v3.4`, alongside immutable `vX.Y.Z` tags. Major, minor and `latest` aliases select the newest published stable version in their stream, so backport releases do not downgrade users tracking a newer stream. Prereleases leave these aliases unchanged.
+
+### Fixed
+
+- Apply environment overrides consistently when using a YAML configuration file, including Proxmox, Incus, logging, timeouts, provider routing and source discovery settings. Providers inherit the effective default TTL, and invalid provider overrides fail validation. Pass documented dnsmasq SSH/file settings and Pi-hole API version settings through the provider factory.
+- Recognize Proxmox's disabled guest-agent response so VMs without an agent no longer prevent discovery of other guests. Guest-agent errors now report the correct node and VM ID.
+- Reject incomplete OPNsense search responses and unsuccessful pfSense response envelopes instead of treating them as empty DNS inventories.
+
+### Security
+
+- Upgrade the OpenTelemetry dependency cohort to 1.47.0 and use the official crypto commit that separates the obsolete OpenPGP module. This removes the crypto finding without changing SSH behavior. The five existing Docker exception scopes were revalidated; their original acceptance and hard expiry remain unchanged, with the next review on 2026-12-01.
+
+
 ## [3.3.2] - 2026-11-12
 
 ### Fixed

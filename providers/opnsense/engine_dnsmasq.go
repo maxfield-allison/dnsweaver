@@ -85,6 +85,11 @@ func (dnsmasqEngine) DecodeSearchResponse(body []byte) ([]hostRecord, error) {
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("decoding dnsmasq search response: %w", err)
 	}
+	// A failed API envelope must not become an authoritative empty inventory.
+	if resp.Rows == nil {
+		return nil, fmt.Errorf("dnsmasq search response is missing the rows array")
+	}
+
 	records := make([]hostRecord, 0, len(resp.Rows))
 	for _, row := range resp.Rows {
 		rrType := "A"

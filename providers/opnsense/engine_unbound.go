@@ -84,6 +84,11 @@ func (unboundEngine) DecodeSearchResponse(body []byte) ([]hostRecord, error) {
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("decoding unbound search response: %w", err)
 	}
+	// A failed API envelope must not become an authoritative empty inventory.
+	if resp.Rows == nil {
+		return nil, fmt.Errorf("unbound search response is missing the rows array")
+	}
+
 	records := make([]hostRecord, 0, len(resp.Rows))
 	for _, row := range resp.Rows {
 		// OPNsense sometimes returns the RR name with a trailing description,

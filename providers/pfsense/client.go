@@ -73,9 +73,8 @@ func newClient(baseURL, apiKey string, res resolver, opts ...clientOption) *clie
 }
 
 // envelope is the common pfrest v2 response wrapper. The HTTP status code
-// mirrors Code, so transport-level status handling stays authoritative and the
-// envelope is used mainly for surfacing Message on errors and reading Data on
-// success.
+// normally mirrors Code. Validate both so an error envelope or an unrelated
+// JSON response cannot be mistaken for a successful inventory.
 type envelope struct {
 	Code       int             `json:"code"`
 	Status     string          `json:"status"`
@@ -150,6 +149,12 @@ func (c *client) do(ctx context.Context, method, path, rawQuery string, body any
 	if decodeErr != nil {
 		return nil, fmt.Errorf("decoding pfsense response: %w (body: %s)", decodeErr, truncate(string(respBody)))
 	}
+	if env.Code < http.StatusOK || env.Code >= http.StatusMultipleChoices {
+		if err := mapStatusError(env.Code, env.Message, respBody); err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("pfsense response is missing a successful envelope code")
+	}
 	return env.Data, nil
 }
 
@@ -161,10 +166,11 @@ func (c *client) list(ctx context.Context) ([]hostOverride, error) {
 		return nil, err
 	}
 	var rows []wireOverride
-	if len(data) > 0 {
-		if err := json.Unmarshal(data, &rows); err != nil {
-			return nil, fmt.Errorf("decoding pfsense host override list: %w", err)
-		}
+	if err := json.Unmarshal(data, &rows); err != nil {
+		return nil, fmt.Errorf("decoding pfsense host override list: %w", err)
+	}
+	if rows == nil {
+		return nil, fmt.Errorf("pfsense host override list is missing the data array")
 	}
 	out := make([]hostOverride, 0, len(rows))
 	for _, row := range rows {

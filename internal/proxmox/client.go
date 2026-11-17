@@ -36,6 +36,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/maxfield-allison/dnsweaver/pkg/httputil"
@@ -389,13 +390,18 @@ func (c *Client) get(ctx context.Context, path string, dst any) error {
 		return fmt.Errorf("reading response body from %s: %w", path, err)
 	}
 
-	if resp.StatusCode == http.StatusInternalServerError {
+	if resp.StatusCode == http.StatusInternalServerError && strings.HasSuffix(path, "/agent/network-get-interfaces") {
 		// PVE returns 500 when the guest agent is not running.
-		// Attempt to detect this specific case from the error message.
+		// Disabled agents use a top-level message; stopped agents may use
+		// an errors map. Only this optional VM endpoint permits that skip.
 		var errResp struct {
-			Errors map[string]string `json:"errors"`
+			Errors  map[string]string `json:"errors"`
+			Message string            `json:"message"`
 		}
 		if jsonErr := json.Unmarshal(body, &errResp); jsonErr == nil {
+			if containsAgentError(errResp.Message) {
+				return parseAgentNotRunning(path)
+			}
 			for _, msg := range errResp.Errors {
 				if containsAgentError(msg) {
 					return parseAgentNotRunning(path)
@@ -435,14 +441,18 @@ func containsAgentError(msg string) bool {
 	return false
 }
 
-// parseAgentNotRunning extracts node and vmid from an agent API path and
-// returns ErrAgentNotRunning. Falls back to a generic error if parsing fails.
+// parseAgentNotRunning extracts the guest identity without scanning a slash-
+// delimited path with %s (which would consume every remaining path segment).
 func parseAgentNotRunning(path string) error {
-	var node string
-	var vmid int
-	//nolint:errcheck // best-effort parse; fallback to generic message
-	_, _ = fmt.Sscanf(path, "/api2/json/nodes/%s/qemu/%d/agent/", &node, &vmid)
-	return &ErrAgentNotRunning{Node: node, VMID: vmid}
+	parts := strings.Split(strings.TrimPrefix(path, "/api2/json/nodes/"), "/")
+	if len(parts) != 5 || parts[0] == "" || parts[1] != "qemu" || parts[3] != "agent" || parts[4] != "network-get-interfaces" {
+		return fmt.Errorf("proxmox: guest agent unavailable at %s", path)
+	}
+	vmid, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return fmt.Errorf("proxmox: invalid VM ID in agent path: %w", err)
+	}
+	return &ErrAgentNotRunning{Node: parts[0], VMID: vmid}
 }
 
 // truncate returns s truncated to at most n bytes.

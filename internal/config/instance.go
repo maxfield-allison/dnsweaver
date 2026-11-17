@@ -124,22 +124,36 @@ func parseInstances() []string {
 // loadInstanceConfig loads configuration for a single provider instance.
 // It reads all DNSWEAVER_{INSTANCE_NAME}_* environment variables.
 func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceConfig, []*ConfigError) {
-	var errs []*ConfigError
-	prefix := envPrefix(instanceName)
-
 	cfg := &ProviderInstanceConfig{
 		Name:           instanceName,
+		TTL:            defaultTTL,
 		ProviderConfig: make(map[string]string),
+	}
+	errs := applyProviderEnv(cfg)
+	errs = append(errs, validateProviderRequired(cfg)...)
+	return cfg, errs
+}
+
+// applyProviderEnv applies the same environment contract to file-backed and
+// environment-only instances. Required fields are checked after merging.
+func applyProviderEnv(cfg *ProviderInstanceConfig) []*ConfigError {
+	var errs []*ConfigError
+	instanceName := cfg.Name
+	prefix := envPrefix(instanceName)
+	if cfg.ProviderConfig == nil {
+		cfg.ProviderConfig = make(map[string]string)
 	}
 
 	// TYPE is required
-	cfg.TypeName = strings.ToLower(getEnv(prefix + "TYPE"))
-	if cfg.TypeName == "" {
-		errs = append(errs, configErrFull(prefix+"TYPE", "required but not set", fmt.Sprintf("Provider %q needs a type (e.g., technitium, cloudflare, pihole)", instanceName), prefix+"TYPE=technitium"))
+	if v := getEnv(prefix + "TYPE"); v != "" {
+		cfg.TypeName = strings.ToLower(v)
 	}
 
 	// RECORD_TYPE (default: A)
-	recordTypeStr := strings.ToUpper(getEnv(prefix + "RECORD_TYPE"))
+	recordTypeStr := string(cfg.RecordType)
+	if v := getEnv(prefix + "RECORD_TYPE"); v != "" {
+		recordTypeStr = strings.ToUpper(v)
+	}
 	switch recordTypeStr {
 	case "", "A":
 		cfg.RecordType = provider.RecordTypeA
@@ -153,13 +167,14 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 
 	// TARGET_MODE (optional): enables dynamic target resolution. When set,
 	// TARGET becomes an optional fallback rather than required.
-	cfg.TargetMode = strings.TrimSpace(getEnv(prefix + "TARGET_MODE"))
+	if v := getEnv(prefix + "TARGET_MODE"); v != "" {
+		cfg.TargetMode = strings.TrimSpace(v)
+	}
 
 	// TARGET is required unless a dynamic TARGET_MODE is configured, in which
 	// case it is an optional fallback used until the first resolution succeeds.
-	cfg.Target = getEnv(prefix + "TARGET")
-	if cfg.Target == "" && cfg.TargetMode == "" {
-		errs = append(errs, configErrFull(prefix+"TARGET", "required but not set", fmt.Sprintf("Provider %q needs a target IP or hostname for DNS records (or set %sTARGET_MODE for dynamic resolution)", instanceName, prefix), prefix+"TARGET=10.0.0.1"))
+	if v := getEnv(prefix + "TARGET"); v != "" {
+		cfg.Target = v
 	}
 
 	// TARGET_REFRESH_INTERVAL (optional): how often to re-resolve a dynamic
@@ -190,20 +205,18 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 		} else {
 			cfg.TTL = ttl
 		}
-	} else {
-		cfg.TTL = defaultTTL
 	}
 
-	// MODE (optional, defaults to "managed")
-	if modeStr := getEnv(prefix + "MODE"); modeStr != "" {
-		mode, err := provider.ParseOperationalMode(modeStr)
-		if err != nil {
-			errs = append(errs, configErrFull(prefix+"MODE", err.Error(), "Must be one of: managed, authoritative, additive", prefix+"MODE=managed"))
-		} else {
-			cfg.Mode = mode
-		}
+	// Validate the effective mode after the environment has overridden the file.
+	modeStr := string(cfg.Mode)
+	if v := getEnv(prefix + "MODE"); v != "" {
+		modeStr = v
+	}
+	mode, err := provider.ParseOperationalMode(modeStr)
+	if err != nil {
+		errs = append(errs, configErrFull(prefix+"MODE", err.Error(), "Must be one of: managed, authoritative, additive", prefix+"MODE=managed"))
 	} else {
-		cfg.Mode = provider.ModeManaged
+		cfg.Mode = mode
 	}
 
 	// ADOPT_EXISTING (optional) overrides the global setting for this instance.
@@ -229,26 +242,23 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 	domainsStr := getEnv(prefix + "DOMAINS")
 	domainsRegexStr := getEnv(prefix + "DOMAINS_REGEX")
 
-	if domainsStr != "" && domainsRegexStr != "" {
-		errs = append(errs, configErrHelp(prefix[:len(prefix)-1], "cannot set both DOMAINS and DOMAINS_REGEX", "Use either glob patterns (DOMAINS) or regex patterns (DOMAINS_REGEX), not both"))
-	} else if domainsStr == "" && domainsRegexStr == "" {
-		errs = append(errs, configErrFull(prefix+"DOMAINS", "required but not set", fmt.Sprintf("Provider %q needs at least one domain pattern to match", instanceName), prefix+"DOMAINS=*.example.com"))
-	} else if domainsStr != "" {
+	if domainsStr != "" || domainsRegexStr != "" {
 		cfg.Domains = splitPatterns(domainsStr)
-	} else {
 		cfg.DomainsRegex = splitPatterns(domainsRegexStr)
 	}
+	if len(cfg.Domains) > 0 && len(cfg.DomainsRegex) > 0 {
+		errs = append(errs, configErrHelp(prefix[:len(prefix)-1], "cannot set both DOMAINS and DOMAINS_REGEX", "Use either glob patterns (DOMAINS) or regex patterns (DOMAINS_REGEX), not both"))
+	}
 
-	// Exclude patterns - either EXCLUDE_DOMAINS or EXCLUDE_DOMAINS_REGEX
+	// Changing pattern kinds in the environment replaces the file's kind.
 	excludeDomainsStr := getEnv(prefix + "EXCLUDE_DOMAINS")
 	excludeDomainsRegexStr := getEnv(prefix + "EXCLUDE_DOMAINS_REGEX")
-
-	if excludeDomainsStr != "" && excludeDomainsRegexStr != "" {
-		errs = append(errs, configErrHelp(prefix[:len(prefix)-1], "cannot set both EXCLUDE_DOMAINS and EXCLUDE_DOMAINS_REGEX", "Use either glob patterns or regex patterns for exclusions, not both"))
-	} else if excludeDomainsStr != "" {
+	if excludeDomainsStr != "" || excludeDomainsRegexStr != "" {
 		cfg.ExcludeDomains = splitPatterns(excludeDomainsStr)
-	} else if excludeDomainsRegexStr != "" {
 		cfg.ExcludeDomainsRegex = splitPatterns(excludeDomainsRegexStr)
+	}
+	if len(cfg.ExcludeDomains) > 0 && len(cfg.ExcludeDomainsRegex) > 0 {
+		errs = append(errs, configErrHelp(prefix[:len(prefix)-1], "cannot set both EXCLUDE_DOMAINS and EXCLUDE_DOMAINS_REGEX", "Use either glob patterns or regex patterns for exclusions, not both"))
 	}
 
 	// ENTRYPOINTS — Traefik-source filter that scopes the instance to one or
@@ -293,7 +303,23 @@ func loadInstanceConfig(instanceName string, defaultTTL int) (*ProviderInstanceC
 	// the map so downstream consumers see only the canonical TLS_* keys.
 	resolveLegacyTLSSkipVerify(cfg.ProviderConfig, instanceName)
 
-	return cfg, errs
+	return errs
+}
+
+// validateProviderRequired runs after both file and environment values are known.
+func validateProviderRequired(cfg *ProviderInstanceConfig) []*ConfigError {
+	var errs []*ConfigError
+	prefix := envPrefix(cfg.Name)
+	if cfg.TypeName == "" {
+		errs = append(errs, configErrFull(prefix+"TYPE", "required but not set", fmt.Sprintf("Provider %q needs a type (e.g., technitium, cloudflare, pihole)", cfg.Name), prefix+"TYPE=technitium"))
+	}
+	if cfg.Target == "" && cfg.TargetMode == "" {
+		errs = append(errs, configErrFull(prefix+"TARGET", "required but not set", fmt.Sprintf("Provider %q needs a target IP or hostname for DNS records (or set %sTARGET_MODE for dynamic resolution)", cfg.Name, prefix), prefix+"TARGET=10.0.0.1"))
+	}
+	if len(cfg.Domains) == 0 && len(cfg.DomainsRegex) == 0 {
+		errs = append(errs, configErrFull(prefix+"DOMAINS", "required but not set", fmt.Sprintf("Provider %q needs at least one domain pattern to match", cfg.Name), prefix+"DOMAINS=*.example.com"))
+	}
+	return errs
 }
 
 // resolveLegacyTLSSkipVerify migrates DNSWEAVER_{NAME}_INSECURE_SKIP_VERIFY
@@ -335,12 +361,22 @@ var providerConfigFields = []struct {
 	{"ZONE_ID", false},
 	{"API_KEY", true},
 	{"API_EMAIL", false},
-	{"PROXIED", false},              // Cloudflare-specific
-	{"AUTH_HEADER", false},          // Webhook-specific
-	{"AUTH_TOKEN", true},            // Webhook-specific
-	{"TIMEOUT", false},              // Webhook-specific
-	{"RETRIES", false},              // Webhook-specific
-	{"RETRY_DELAY", false},          // Webhook-specific
+	{"PROXIED", false},     // Cloudflare-specific
+	{"AUTH_HEADER", false}, // Webhook-specific
+	{"AUTH_TOKEN", true},   // Webhook-specific
+	{"TIMEOUT", false},     // Webhook-specific
+	{"RETRIES", false},     // Webhook-specific
+	{"RETRY_DELAY", false}, // Webhook-specific
+	{"CONFIG_DIR", false},
+	{"CONFIG_FILE", false},
+	{"API_VERSION", false}, // Pi-hole: auto, v5, v6
+	{"SSH_HOST", false},
+	{"SSH_PORT", false},
+	{"SSH_USER", false},
+	{"SSH_KEY_FILE", false},
+	{"SSH_PASSWORD", true},
+	{"SSH_KNOWN_HOSTS_FILE", false},
+	{"SSH_STRICT_HOST_KEY_CHECKING", false},
 	{"HOST_FILE", false},            // dnsmasq-specific
 	{"BACKUP", false},               // dnsmasq-specific
 	{"INCLUDE_MARKER", false},       // dnsmasq-specific
@@ -390,92 +426,7 @@ var providerConfigFields = []struct {
 //
 // Any env var that is set will override the corresponding YAML value.
 func mergeProviderEnvOverrides(cfg *ProviderInstanceConfig) []*ConfigError {
-	var errs []*ConfigError
-	prefix := envPrefix(cfg.Name)
-
-	// Ensure ProviderConfig map exists
-	if cfg.ProviderConfig == nil {
-		cfg.ProviderConfig = make(map[string]string)
-	}
-
-	// Check for provider-specific config field overrides
-	for _, field := range providerConfigFields {
-		var value string
-		configured := false
-		if field.isSecret {
-			var err error
-			value, configured, err = getEnvWithFileFallback(prefix, field.name)
-			if err != nil {
-				errs = append(errs, configErrHelp(prefix+field.name+"_FILE", err.Error(), "Ensure the configured secret file exists and is readable by the dnsweaver process"))
-				continue
-			}
-		} else {
-			value = getEnv(prefix + field.name)
-			configured = value != ""
-		}
-		// Only override if env var is explicitly set
-		if configured {
-			slog.Debug("env override applied to provider config",
-				slog.String("provider", cfg.Name),
-				slog.String("field", field.name),
-			)
-			cfg.ProviderConfig[field.name] = value
-		}
-	}
-
-	// Also check for top-level provider settings that might be overridden
-	// TARGET override
-	if target := getEnv(prefix + "TARGET"); target != "" {
-		slog.Debug("env override applied to provider target",
-			slog.String("provider", cfg.Name),
-			slog.String("target", target),
-		)
-		cfg.Target = target
-	}
-
-	// TTL override
-	if ttlStr := getEnv(prefix + "TTL"); ttlStr != "" {
-		if ttl, err := strconv.Atoi(ttlStr); err == nil && ttl >= 1 {
-			slog.Debug("env override applied to provider TTL",
-				slog.String("provider", cfg.Name),
-				slog.Int("ttl", ttl),
-			)
-			cfg.TTL = ttl
-		}
-	}
-
-	// MODE override
-	if modeStr := getEnv(prefix + "MODE"); modeStr != "" {
-		if mode, err := provider.ParseOperationalMode(modeStr); err == nil {
-			slog.Debug("env override applied to provider mode",
-				slog.String("provider", cfg.Name),
-				slog.String("mode", modeStr),
-			)
-			cfg.Mode = mode
-		}
-	}
-
-	if value := getEnv(prefix + "ADOPT_EXISTING"); value != "" {
-		if parsed, ok := parseBoolValue(value); ok {
-			cfg.AdoptExisting = &parsed
-		} else {
-			errs = append(errs, configErrFull(prefix+"ADOPT_EXISTING", fmt.Sprintf("invalid boolean %q", value), "Use true or false", prefix+"ADOPT_EXISTING=false"))
-		}
-	}
-
-	if value := getEnv(prefix + "ADOPT_EXISTING_ALLOW_OVERRIDES"); value != "" {
-		if parsed, ok := parseBoolValue(value); ok {
-			cfg.AdoptExistingAllowOverrides = parsed
-		} else {
-			errs = append(errs, configErrFull(prefix+"ADOPT_EXISTING_ALLOW_OVERRIDES", fmt.Sprintf("invalid boolean %q", value), "Use true or false", prefix+"ADOPT_EXISTING_ALLOW_OVERRIDES=false"))
-		}
-	}
-
-	// Migrate the legacy INSECURE_SKIP_VERIFY alias (whether it arrived
-	// from YAML or env vars) to the canonical TLS_SKIP_VERIFY key.
-	resolveLegacyTLSSkipVerify(cfg.ProviderConfig, cfg.Name)
-
-	return errs
+	return applyProviderEnv(cfg)
 }
 
 // splitPatterns splits a comma-separated pattern string into individual patterns.

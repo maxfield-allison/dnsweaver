@@ -96,12 +96,19 @@ func sourceEnvPrefix(name string) string {
 
 // loadSourceInstanceConfig loads configuration for a single source.
 func loadSourceInstanceConfig(name string) *SourceInstanceConfig {
-	prefix := sourceEnvPrefix(name)
-
 	cfg := &SourceInstanceConfig{
 		Name:          name,
 		FileDiscovery: source.DefaultFileDiscoveryConfig(),
 	}
+
+	applySourceEnv(cfg)
+	return cfg
+}
+
+// applySourceEnv preserves YAML discovery settings unless an environment
+// override is supplied, using the same parser as env-only source loading.
+func applySourceEnv(cfg *SourceInstanceConfig) {
+	prefix := sourceEnvPrefix(cfg.Name)
 
 	// FILE_PATHS - comma-separated list of paths to watch
 	// Per design: presence implies enablement (no ENABLED flag needed)
@@ -148,8 +155,6 @@ func loadSourceInstanceConfig(name string) *SourceInstanceConfig {
 		}
 		cfg.DefaultEntryPoints = out
 	}
-
-	return cfg
 }
 
 // GetSourceInstance returns the configuration for a specific source by name.

@@ -62,6 +62,9 @@ class FakeRegistry:
     def resolve(self, ref):
         return self.values[ref]
 
+    def optional_resolve(self, ref):
+        return self.values.get(ref)
+
     def copy(self, source, destination):
         self.values[destination] = self.resolve(source)
         self.writes.append(destination)
@@ -82,6 +85,7 @@ class FakeGitHub:
     def __init__(self):
         self.source = SOURCE
         self.latest_id = 1
+        self.versions = ["v2.9.0"]
         self.fail = None
         self.release = {"id": 2, "draft": True}
 
@@ -97,6 +101,9 @@ class FakeGitHub:
         if self.fail == "publish":
             raise RuntimeError("publish failed")
         release["draft"] = False
+
+    def published_stable_versions(self):
+        return self.versions
 
     def latest(self):
         return self.latest_id
@@ -130,7 +137,7 @@ class PromotionTests(unittest.TestCase):
         self.assertEqual(self.github.latest(), 2)
         writes = list(self.registry.writes)
         self.promote()
-        self.assertEqual(self.registry.writes, writes + [p + ":latest" for p in REPOS])
+        self.assertEqual(self.registry.writes, writes + [p + ":" + alias for p in REPOS for alias in ("v3.0", "v3", "latest")])
         self.assertEqual(r.read_json(self.journal)["phase"], "complete")
 
     def test_tag_mismatch_has_no_writes(self):
@@ -194,6 +201,245 @@ class PromotionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.promote()
         self.assertFalse(self.registry.writes)
+
+    def test_stable_creates_major_and_minor_aliases_from_qualified_digest(self):
+        self.promote()
+        for repo in REPOS:
+            for alias in ("v3.0.0", "v3.0", "v3", "latest"):
+                self.assertEqual(self.registry.resolve(repo + ":" + alias), NEW)
+            self.assertNotIn(repo + ":3", self.registry.values)
+        state = r.read_json(self.journal)
+        self.assertIsNone(state["previous_aliases"][REPOS[0] + ":v3"])
+        self.assertEqual(state["previous_aliases"][REPOS[0] + ":latest"], OLD)
+
+    def test_new_patch_advances_existing_major_and_minor_aliases(self):
+        self.plan["version"] = "v3.4.1"
+        self.github.versions = ["v3.4.0"]
+        for repo in REPOS:
+            self.registry.values[repo + ":v3"] = OLD
+            self.registry.values[repo + ":v3.4"] = OLD
+        self.promote()
+        for repo in REPOS:
+            for alias in ("v3.4.1", "v3.4", "v3", "latest"):
+                self.assertEqual(self.registry.resolve(repo + ":" + alias), NEW)
+        self.assertEqual(self.github.latest(), 2)
+
+    def test_existing_aliases_restore_their_independent_digests(self):
+        other = "sha256:" + "e" * 64
+        for repo in REPOS:
+            self.registry.values[repo + ":v3"] = OLD
+            self.registry.values[repo + ":v3.0"] = other
+            self.registry.values[repo + "@" + other] = other
+        self.registry.fail = REPOS[1] + ":latest"
+        with self.assertRaises(RuntimeError):
+            self.promote()
+        for repo in REPOS:
+            self.assertEqual(self.registry.resolve(repo + ":v3"), OLD)
+            self.assertEqual(self.registry.resolve(repo + ":v3.0"), other)
+        self.assertEqual(r.read_json(self.journal)["retained_new_aliases"], [])
+
+    def test_partial_first_alias_write_is_retained_and_reported(self):
+        self.registry.fail = REPOS[0] + ":v3"
+        with self.assertRaises(RuntimeError):
+            self.promote()
+        state = r.read_json(self.journal)
+        self.assertEqual(state["retained_new_aliases"], [REPOS[0] + ":v3", REPOS[0] + ":v3.0"])
+        self.assertEqual(state["rollback_failures"], [])
+        self.assertEqual(self.registry.resolve(REPOS[0] + ":v3"), NEW)
+        self.assert_latest(OLD)
+        self.promote()
+        self.assert_latest(NEW)
+
+    def test_alias_read_error_stops_before_any_public_write(self):
+        with (
+            patch.object(self.registry, "optional_resolve", side_effect=RuntimeError("unauthorized")),
+            self.assertRaisesRegex(RuntimeError, "unauthorized"),
+        ):
+            self.promote()
+        self.assertEqual(self.registry.writes, [])
+        self.assertTrue(self.github.release["draft"])
+
+    def test_backport_advances_only_its_minor_stream(self):
+        self.plan["version"] = "v3.3.5"
+        self.github.versions = ["v3.3.4", "v3.4.0"]
+        for repo in REPOS:
+            self.registry.values[repo + ":v3"] = OLD
+            self.registry.values[repo + ":v3.3"] = OLD
+        self.promote()
+        for repo in REPOS:
+            self.assertEqual(self.registry.resolve(repo + ":v3.3"), NEW)
+            self.assertEqual(self.registry.resolve(repo + ":v3"), OLD)
+        self.assert_latest(OLD)
+        self.assertEqual(self.github.latest(), 1)
+
+    def test_older_major_can_advance_its_own_stream(self):
+        self.plan["version"] = "v2.10.0"
+        self.github.versions = ["v2.9.9", "v3.4.0"]
+        self.promote()
+        for repo in REPOS:
+            self.assertEqual(self.registry.resolve(repo + ":v2.10"), NEW)
+            self.assertEqual(self.registry.resolve(repo + ":v2"), NEW)
+        self.assert_latest(OLD)
+        self.assertEqual(self.github.latest(), 1)
+
+    def test_older_patch_cannot_rewind_any_stream(self):
+        self.plan["version"] = "v3.0.0"
+        self.github.versions = ["v3.0.1"]
+        self.promote()
+        self.assertEqual(self.registry.writes, [repo + ":v3.0.0" for repo in REPOS])
+        self.assert_latest(OLD)
+
+    def test_prerelease_does_not_inspect_or_write_mutable_aliases(self):
+        self.plan["version"] = "v3.1.0-rc.1"
+        with patch.object(self.github, "published_stable_versions", side_effect=AssertionError("unexpected stable read")):
+            self.promote()
+        self.assertEqual(self.registry.writes, [repo + ":v3.1.0-rc.1" for repo in REPOS])
+        self.assertEqual(r.read_json(self.journal)["previous_aliases"], {})
+
+    def test_staging_receives_the_same_aliases_and_digest(self):
+        staging = "staging.invalid/example/dnsweaver"
+        self.registry.values[staging + ":latest"] = OLD
+        self.registry.values[staging + "@" + OLD] = OLD
+        r.promote(self.plan, REPOS + [staging], self.github, self.registry, "notes", [], self.journal)
+        for alias in ("v3.0.0", "v3.0", "v3", "latest"):
+            self.assertEqual(self.registry.resolve(staging + ":" + alias), NEW)
+
+    def test_late_alias_read_error_also_stops_before_writes(self):
+        with (
+            patch.object(self.registry, "optional_resolve", side_effect=[None, None, OLD, OLD, RuntimeError("network unavailable")]),
+            self.assertRaisesRegex(RuntimeError, "network unavailable"),
+        ):
+            self.promote()
+        self.assertEqual(self.registry.writes, [])
+        self.assertTrue(self.github.release["draft"])
+
+    def test_failed_compensation_is_recorded_without_skipping_other_aliases(self):
+        for repo in REPOS:
+            for alias in ("v3.0", "v3"):
+                self.registry.values[repo + ":" + alias] = OLD
+        original = self.registry.copy
+
+        def fail_restore(source, destination):
+            if source.endswith("@" + OLD) and destination == REPOS[0] + ":v3":
+                raise RuntimeError("rollback unavailable")
+            return original(source, destination)
+
+        self.github.fail = "latest"
+        with (
+            patch.object(self.registry, "copy", side_effect=fail_restore),
+            self.assertRaisesRegex(RuntimeError, "latest response failed"),
+        ):
+            self.promote()
+        self.assertEqual(r.read_json(self.journal)["rollback_failures"], [REPOS[0] + ":v3"])
+        self.assertEqual(self.registry.resolve(REPOS[0] + ":v3"), NEW)
+        self.assertEqual(self.registry.resolve(REPOS[0] + ":v3.0"), OLD)
+        self.assertEqual(self.registry.resolve(REPOS[1] + ":v3"), OLD)
+        self.assert_latest(OLD)
+
+    def test_malformed_github_rollback_records_failure_and_restores_registries(self):
+        for repo in REPOS:
+            for alias in ("v3.0", "v3"):
+                self.registry.values[repo + ":" + alias] = OLD
+        original_error = RuntimeError("ambiguous GitHub latest update")
+
+        def malformed_latest(release_id):
+            self.github.latest_id = release_id
+            if release_id == 2:
+                raise original_error
+            raise KeyError("id")
+
+        with (
+            patch.object(self.github, "set_latest", side_effect=malformed_latest),
+            self.assertRaises(RuntimeError) as failure,
+        ):
+            self.promote()
+        self.assertIs(failure.exception, original_error)
+        state = r.read_json(self.journal)
+        self.assertEqual(state["phase"], "latest-update-failed")
+        self.assertEqual(state["rollback_failures"], ["github-latest"])
+        for repo in REPOS:
+            for alias in ("v3.0", "v3", "latest"):
+                self.assertEqual(self.registry.resolve(repo + ":" + alias), OLD)
+
+    def test_malformed_registry_rollback_records_failure_and_continues(self):
+        for repo in REPOS:
+            for alias in ("v3.0", "v3"):
+                self.registry.values[repo + ":" + alias] = OLD
+        original_copy = self.registry.copy
+        original_error = RuntimeError("ambiguous GitHub latest update")
+
+        def fail_latest(release_id):
+            self.github.latest_id = release_id
+            if release_id == 2:
+                raise original_error
+
+        def malformed_copy(source, destination):
+            original_copy(source, destination)
+            if source.endswith("@" + OLD) and destination == REPOS[1] + ":latest":
+                raise TypeError("invalid registry read-back")
+
+        with (
+            patch.object(self.github, "set_latest", side_effect=fail_latest),
+            patch.object(self.registry, "copy", side_effect=malformed_copy),
+            self.assertRaises(RuntimeError) as failure,
+        ):
+            self.promote()
+        self.assertIs(failure.exception, original_error)
+        state = r.read_json(self.journal)
+        self.assertEqual(state["phase"], "latest-update-failed")
+        self.assertEqual(state["rollback_failures"], [REPOS[1] + ":latest"])
+        for repo in REPOS:
+            for alias in ("v3.0", "v3", "latest"):
+                self.assertEqual(self.registry.resolve(repo + ":" + alias), OLD)
+        self.assertEqual(self.github.latest(), 1)
+
+    def test_later_conflicting_immutable_destination_prevents_every_write(self):
+        self.registry.values[REPOS[1] + ":v3.0.0"] = OLD
+        with self.assertRaises(ValueError):
+            self.promote()
+        self.assertEqual(self.registry.writes, [])
+        self.assertNotIn(REPOS[0] + ":v3.0.0", self.registry.values)
+        self.assertTrue(self.github.release["draft"])
+
+    def test_later_immutable_inspection_error_prevents_every_write(self):
+        original_resolve = self.registry.optional_resolve
+
+        def unavailable_version(ref):
+            if ref == REPOS[1] + ":v3.0.0":
+                raise RuntimeError("registry inspection unavailable")
+            return original_resolve(ref)
+
+        with (
+            patch.object(self.registry, "optional_resolve", side_effect=unavailable_version),
+            self.assertRaisesRegex(RuntimeError, "registry inspection unavailable"),
+        ):
+            self.promote()
+        self.assertEqual(self.registry.writes, [])
+        self.assertNotIn(REPOS[0] + ":v3.0.0", self.registry.values)
+        self.assertTrue(self.github.release["draft"])
+
+    def test_semver_order_compares_integers_and_rejects_leading_zeroes(self):
+        self.assertEqual(r.release_aliases("v3.10.0", ["v3.9.9"]), ["v3.10", "v3", "latest"])
+        with self.assertRaises(ValueError):
+            r.release_aliases("v03.1.0", [])
+
+
+class RegistryAliasTests(unittest.TestCase):
+    def test_missing_manifest_is_distinct_from_auth_and_network_errors(self):
+        for message in ("manifest unknown", "MANIFEST_UNKNOWN", "name unknown"):
+            with self.subTest(message=message), patch.object(r, "run", return_value=subprocess.CompletedProcess([], 1, "", message)):
+                self.assertIsNone(r.Registry().optional_resolve("example.invalid/image:v3"))
+        for message in ("unauthorized", "connection refused", "403 Forbidden", "404 Not Found"):
+            with (
+                self.subTest(message=message),
+                patch.object(r, "run", return_value=subprocess.CompletedProcess([], 1, "", message)),
+                self.assertRaises(RuntimeError),
+            ):
+                r.Registry().optional_resolve("example.invalid/image:v3")
+
+    def test_existing_manifest_returns_its_actual_digest(self):
+        with patch.object(r, "run", return_value=subprocess.CompletedProcess([], 0, "manifest bytes", "")):
+            self.assertEqual(r.Registry().optional_resolve("example.invalid/image:v3"), r.digest(b"manifest bytes"))
 
 
 class SBOMScanTests(unittest.TestCase):
@@ -554,6 +800,32 @@ class GitHubAPITests(unittest.TestCase):
         self.plan = {"version": "v3.0.0", "source": SOURCE}
         self.draft = {"id": 2, "tag_name": "v3.0.0", "body": "notes", "draft": True,
                       "prerelease": False, "upload_url": "https://uploads.github.com/repos/example/dnsweaver/releases/2/assets{?name}"}
+
+    def test_published_versions_paginate_and_exclude_previews_and_drafts(self):
+        stable = {"tag_name": "v3.4.0", "draft": False, "prerelease": False}
+        preview = {**stable, "tag_name": "v4.0.0-rc.1", "prerelease": True}
+        draft = {**stable, "tag_name": "v5.0.0", "draft": True}
+        invalid = {**stable, "tag_name": "v03.4.0"}
+        with patch.object(self.client, "request", side_effect=[[preview] * 100, [stable, draft, invalid]]) as request:
+            self.assertEqual(self.client.published_stable_versions(), ["v3.4.0"])
+        self.assertEqual([call.args[0] for call in request.call_args_list], ["/releases?per_page=100&page=1", "/releases?per_page=100&page=2"])
+
+    def test_release_enumeration_cap_fails_instead_of_truncating_history(self):
+        preview = {"tag_name": "v4.0.0-rc.1", "draft": False, "prerelease": True}
+        with (
+            patch.object(self.client, "request", return_value=[preview] * 100) as request,
+            self.assertRaisesRegex(ValueError, "exceeded 100 pages"),
+        ):
+            self.client.published_stable_versions()
+        self.assertEqual(request.call_count, 100)
+
+    def test_release_enumeration_errors_are_not_an_empty_history(self):
+        error = urllib.error.HTTPError("https://api.github.com", 403, "forbidden", {}, None)
+        with (
+            patch.object(self.client, "request", side_effect=error),
+            self.assertRaises(urllib.error.HTTPError),
+        ):
+            self.client.published_stable_versions()
 
     def test_retry_finds_existing_draft(self):
         missing = urllib.error.HTTPError("https://api.github.com", 404, "not found", {}, None)

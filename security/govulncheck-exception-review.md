@@ -2,7 +2,21 @@
 
 This record explains the dependency exceptions enforced by [`govulncheck-exceptions.json`](govulncheck-exceptions.json). It is evidence for a bounded decision, not a claim that the affected dependencies are free of vulnerabilities.
 
-## Scan evidence
+## 2026-11-17 technical revalidation
+
+The current release keeps `github.com/docker/docker@v28.5.2+incompatible` and its Docker API behavior. A fresh symbol-level scan with Go 1.26.11 and govulncheck v1.8.0 reported the same five Docker scopes listed below, with no change in module, version, package set or reachability. The initial scan failed because the 2026-11-16 review was due. The module, version, package and reachability fields of all five findings were compared with the existing accepted policy and matched exactly. This is a technical revalidation of those scopes; it does not create a new acceptance or advance its original date.
+
+The dependency update brings the OpenTelemetry trace, metric and SDK cohort to v1.47.0. `golang.org/x/crypto` moves to `v0.58.1-0.20261009181718-2f1f834330b2`, the exact official commit that ends the affected parent-module range for [GO-2026-5932](https://vuln.go.dev/ID/GO-2026-5932.json). Its [entire diff from v0.58.0](https://github.com/golang/crypto/compare/v0.58.0...2f1f834330b2d36ab3db8bfb33aaa1ac16794588) adds only `openpgp/go.mod`; SSH implementation and defaults are unchanged. No v0.58.1 release tag exists at this review. v0.59.0 was deferred because it removes DSA algorithms from defaults and private-key parsing used by dnsweaver's SSH providers. The fresh scan no longer reports GO-2026-5932, so its exception is removed rather than renewed. The obsolete standalone OpenPGP module is not added.
+
+The fresh dependency package closure contains the same 22 Docker client/API packages listed in the historical evidence below and no Docker daemon, plugin or API-server implementation. dnsweaver's Docker operations remain read-only: ping, info, service/container listing and inspection, and event subscription; there is no plugin-install, archive-copy or daemon authorization implementation call.
+
+The current official [plugin privilege advisory](https://github.com/moby/moby/security/advisories/GHSA-pxq6-2prw-chj9) concerns a daemon's privilege comparison during plugin installation. The [authorization advisory](https://github.com/moby/moby/security/advisories/GHSA-x744-4wpc-v9h2) concerns a daemon forwarding oversized request bodies to authorization plugins. The remaining [archive race](https://vuln.go.dev/ID/GO-2026-5617.json), [file creation race](https://vuln.go.dev/ID/GO-2026-5668.json) and [archive extraction](https://vuln.go.dev/ID/GO-2026-5746.json) advisories name daemon functions absent from this dependency closure. The first two advisories retain module-wide Go metadata and the scanner still reports the client packages as symbol-reachable; that ambiguity remains a bounded residual risk, not a fixed vulnerability claim.
+
+A maintained replacement exists: `github.com/moby/moby/client@v0.6.3` and `github.com/moby/moby/api@v1.57.0`. The [split client](https://github.com/moby/moby/releases/tag/client/v0.6.3) raises automatic negotiation's minimum to API 1.40, so it was deferred to a separately evaluated compatibility change. There is no newer release on the legacy Docker module path. This revalidation addresses the existing migration-availability trigger. The maintainer's current release direction is to keep the legacy SDK unless a meaningful user feature warrants bundling a compatibility change; the SDK migration is therefore deferred rather than included merely to remove scanner exceptions.
+
+The policy retains the original 2026-10-15 accepted decision for these five unchanged Docker scopes and its 2026-12-16 hard expiry. Following this 2026-11-17 technical revalidation, the next review is 2026-12-01; all prior scope-change triggers remain. This records maintenance of the existing bounded acceptance and the current instruction to retain the SDK, not a claim that the maintainer issued a new blanket vulnerability acceptance. GO-2026-5932 is removed because the dependency upgrade eliminates its finding.
+
+## Historical scan evidence
 
 The accepted policy was revalidated on 2026-10-15 with:
 
@@ -60,6 +74,9 @@ GO-2026-5617, GO-2026-5668, and GO-2026-5746 were module-only findings. Their af
 GO-2026-5932 was a module-only finding for `golang.org/x/crypto/openpgp`. dnsweaver imports `golang.org/x/crypto/ssh` and `golang.org/x/crypto/ssh/knownhosts`, not an OpenPGP package. Updating `golang.org/x/crypto` from v0.57.0 to v0.58.0 leaves the finding module-only with an empty package set.
 
 ## Maintainer decision
+
+The paragraph below records the historical acceptance. The 2026-11-17 technical revalidation above now covers only the five unchanged Docker scopes; the OpenPGP scope was removed, the next review is 2026-12-01, and the hard expiry remains 2026-12-16. No new acceptance date is asserted.
+
 
 Maintainer Max Allison first accepted these exceptions on 2026-09-16 and renewed the six exact scopes above on 2026-10-15, with `golang.org/x/crypto` at v0.58.0. The next review date is 2026-11-16 and the hard expiry remains 2026-12-16. For a reported finding, a missing accepted decision, due review, expired entry, or mismatch in module, version, package set, or reachability fails the gate.
 

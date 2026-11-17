@@ -164,16 +164,24 @@ func normalizePlatform(v string) string {
 // loadGlobalConfig loads global configuration from environment variables.
 // Returns a list of validation errors (may be empty).
 func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
-	var errs []*ConfigError
+	return mergeGlobalConfig(nil)
+}
 
-	cfg := &GlobalConfig{
-		LogLevel:   getEnv("DNSWEAVER_LOG_LEVEL"),
-		LogFormat:  getEnv("DNSWEAVER_LOG_FORMAT"),
-		LogFile:    getEnv("DNSWEAVER_LOG_FILE"),
-		DockerHost: getEnv("DNSWEAVER_DOCKER_HOST"),
-		DockerMode: getEnv("DNSWEAVER_DOCKER_MODE"),
-		Source:     DefaultSource, // Deprecated: derived from DNSWEAVER_SOURCES via parseSources()
-		Platform:   getEnv("DNSWEAVER_PLATFORM"),
+// applyGlobalEnv is the single environment parser for both env-only and YAML
+// configurations. Unset variables retain the supplied file values or defaults.
+func applyGlobalEnv(cfg *GlobalConfig) []*ConfigError {
+	var errs []*ConfigError
+	for key, dst := range map[string]*string{
+		"DNSWEAVER_LOG_LEVEL":   &cfg.LogLevel,
+		"DNSWEAVER_LOG_FORMAT":  &cfg.LogFormat,
+		"DNSWEAVER_LOG_FILE":    &cfg.LogFile,
+		"DNSWEAVER_DOCKER_HOST": &cfg.DockerHost,
+		"DNSWEAVER_DOCKER_MODE": &cfg.DockerMode,
+		"DNSWEAVER_PLATFORM":    &cfg.Platform,
+	} {
+		if value := getEnv(key); value != "" {
+			*dst = value
+		}
 	}
 
 	// Apply defaults for empty values
@@ -233,8 +241,6 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 		} else {
 			cfg.LogMaxSize = maxSize
 		}
-	} else {
-		cfg.LogMaxSize = DefaultLogMaxSize
 	}
 
 	if maxBackupsStr := getEnv("DNSWEAVER_LOG_MAX_BACKUPS"); maxBackupsStr != "" {
@@ -246,8 +252,6 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 		} else {
 			cfg.LogMaxBackups = maxBackups
 		}
-	} else {
-		cfg.LogMaxBackups = DefaultLogMaxBackups
 	}
 
 	if maxAgeStr := getEnv("DNSWEAVER_LOG_MAX_AGE"); maxAgeStr != "" {
@@ -259,14 +263,10 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 		} else {
 			cfg.LogMaxAge = maxAge
 		}
-	} else {
-		cfg.LogMaxAge = DefaultLogMaxAge
 	}
 
 	if compressStr := getEnv("DNSWEAVER_LOG_COMPRESS"); compressStr != "" {
-		cfg.LogCompress = parseBool(compressStr, DefaultLogCompress)
-	} else {
-		cfg.LogCompress = DefaultLogCompress
+		cfg.LogCompress = parseBool(compressStr, cfg.LogCompress)
 	}
 
 	// Validate Docker mode
@@ -280,33 +280,27 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 
 	// Parse DRY_RUN
 	if dryRunStr := getEnv("DNSWEAVER_DRY_RUN"); dryRunStr != "" {
-		cfg.DryRun = parseBool(dryRunStr, DefaultDryRun)
-	} else {
-		cfg.DryRun = DefaultDryRun
+		cfg.DryRun = parseBool(dryRunStr, cfg.DryRun)
 	}
 
 	// Parse CLEANUP_ORPHANS
 	if cleanupStr := getEnv("DNSWEAVER_CLEANUP_ORPHANS"); cleanupStr != "" {
-		cfg.CleanupOrphans = parseBool(cleanupStr, DefaultCleanupOrphans)
-	} else {
-		cfg.CleanupOrphans = DefaultCleanupOrphans
+		cfg.CleanupOrphans = parseBool(cleanupStr, cfg.CleanupOrphans)
 	}
 
 	// Parse CLEANUP_ON_STOP
 	if cleanupOnStopStr := getEnv("DNSWEAVER_CLEANUP_ON_STOP"); cleanupOnStopStr != "" {
-		cfg.CleanupOnStop = parseBool(cleanupOnStopStr, DefaultCleanupOnStop)
-	} else {
-		cfg.CleanupOnStop = DefaultCleanupOnStop
+		cfg.CleanupOnStop = parseBool(cleanupOnStopStr, cfg.CleanupOnStop)
 	}
 
 	// Parse OWNERSHIP_TRACKING
 	if ownershipStr := getEnv("DNSWEAVER_OWNERSHIP_TRACKING"); ownershipStr != "" {
-		cfg.OwnershipTracking = parseBool(ownershipStr, DefaultOwnershipTracking)
-	} else {
-		cfg.OwnershipTracking = DefaultOwnershipTracking
+		cfg.OwnershipTracking = parseBool(ownershipStr, cfg.OwnershipTracking)
 	}
 
-	cfg.OwnershipStorage = getEnv("DNSWEAVER_OWNERSHIP_STORAGE")
+	if value := getEnv("DNSWEAVER_OWNERSHIP_STORAGE"); value != "" {
+		cfg.OwnershipStorage = value
+	}
 	if cfg.OwnershipStorage == "" {
 		cfg.OwnershipStorage = DefaultOwnershipStorage
 	}
@@ -316,9 +310,7 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 
 	// Parse ADOPT_EXISTING
 	if adoptStr := getEnv("DNSWEAVER_ADOPT_EXISTING"); adoptStr != "" {
-		cfg.AdoptExisting = parseBool(adoptStr, DefaultAdoptExisting)
-	} else {
-		cfg.AdoptExisting = DefaultAdoptExisting
+		cfg.AdoptExisting = parseBool(adoptStr, cfg.AdoptExisting)
 	}
 
 	// Parse DEFAULT_TTL
@@ -331,8 +323,6 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 		} else {
 			cfg.DefaultTTL = ttl
 		}
-	} else {
-		cfg.DefaultTTL = DefaultTTL
 	}
 
 	// Parse RECONCILE_INTERVAL (supports Go duration format: 60s, 5m, etc.)
@@ -345,8 +335,6 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 		} else {
 			cfg.ReconcileInterval = interval
 		}
-	} else {
-		cfg.ReconcileInterval = DefaultReconcileInterval
 	}
 
 	// Parse SHUTDOWN_TIMEOUT (supports Go duration format: 30s, 1m, etc.)
@@ -359,8 +347,6 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 		} else {
 			cfg.ShutdownTimeout = timeout
 		}
-	} else {
-		cfg.ShutdownTimeout = DefaultShutdownTimeout
 	}
 
 	// Parse DOCKER_CONNECT_TIMEOUT (supports Go duration format: 30s, 1m, etc.)
@@ -378,17 +364,15 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 		} else {
 			cfg.DockerConnectTimeout = timeout
 		}
-	} else {
-		cfg.DockerConnectTimeout = DefaultDockerConnectTimeout
 	}
 
 	// Parse HEALTH_PORT
 	var healthPortErr *ConfigError
-	cfg.HealthPort, healthPortErr = healthPortFromEnvironment(DefaultHealthPort)
+	cfg.HealthPort, healthPortErr = healthPortFromEnvironment(cfg.HealthPort)
 	if healthPortErr != nil {
 		errs = append(errs, healthPortErr)
 	}
-	healthAddress, healthAllowNetwork, healthListenerErrs := healthListenerFromEnvironment(DefaultHealthAddress, DefaultHealthAllowNetwork)
+	healthAddress, healthAllowNetwork, healthListenerErrs := healthListenerFromEnvironment(cfg.HealthAddress, cfg.HealthAllowNetwork)
 	cfg.HealthAddress = healthAddress
 	cfg.HealthAllowNetwork = healthAllowNetwork
 	errs = append(errs, healthListenerErrs...)
@@ -403,31 +387,31 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	}
 
 	// Parse Kubernetes settings (only relevant when platform includes kubernetes)
-	cfg.K8sKubeconfig = getEnv("DNSWEAVER_K8S_KUBECONFIG")
-	cfg.K8sNamespaces = getEnv("DNSWEAVER_K8S_NAMESPACES")
-	cfg.K8sLabelSelector = getEnv("DNSWEAVER_K8S_LABEL_SELECTOR")
-	cfg.K8sAnnotationFilter = getEnv("DNSWEAVER_K8S_ANNOTATION_FILTER")
+	if value := getEnv("DNSWEAVER_K8S_KUBECONFIG"); value != "" {
+		cfg.K8sKubeconfig = value
+	}
+	if value := getEnv("DNSWEAVER_K8S_NAMESPACES"); value != "" {
+		cfg.K8sNamespaces = value
+	}
+	if value := getEnv("DNSWEAVER_K8S_LABEL_SELECTOR"); value != "" {
+		cfg.K8sLabelSelector = value
+	}
+	if value := getEnv("DNSWEAVER_K8S_ANNOTATION_FILTER"); value != "" {
+		cfg.K8sAnnotationFilter = value
+	}
 
 	// K8s boolean settings with defaults matching kubernetes.DefaultConfig()
 	if v := getEnv("DNSWEAVER_K8S_WATCH_INGRESS"); v != "" {
-		cfg.K8sWatchIngress = parseBool(v, true)
-	} else {
-		cfg.K8sWatchIngress = true
+		cfg.K8sWatchIngress = parseBool(v, cfg.K8sWatchIngress)
 	}
 	if v := getEnv("DNSWEAVER_K8S_WATCH_INGRESSROUTE"); v != "" {
-		cfg.K8sWatchIngressRoute = parseBool(v, true)
-	} else {
-		cfg.K8sWatchIngressRoute = true
+		cfg.K8sWatchIngressRoute = parseBool(v, cfg.K8sWatchIngressRoute)
 	}
 	if v := getEnv("DNSWEAVER_K8S_WATCH_HTTPROUTE"); v != "" {
-		cfg.K8sWatchHTTPRoute = parseBool(v, true)
-	} else {
-		cfg.K8sWatchHTTPRoute = true
+		cfg.K8sWatchHTTPRoute = parseBool(v, cfg.K8sWatchHTTPRoute)
 	}
 	if v := getEnv("DNSWEAVER_K8S_WATCH_SERVICES"); v != "" {
-		cfg.K8sWatchServices = parseBool(v, false)
-	} else {
-		cfg.K8sWatchServices = false
+		cfg.K8sWatchServices = parseBool(v, cfg.K8sWatchServices)
 	}
 
 	// Proxmox VE settings
@@ -549,7 +533,7 @@ func loadGlobalConfig() (*GlobalConfig, []*ConfigError) {
 	cfg.IncusTrustToken = getEnv("DNSWEAVER_INCUS_TRUST_TOKEN")
 	cfg.IncusCertStore = getEnv("DNSWEAVER_INCUS_CERT_STORE")
 
-	return cfg, errs
+	return errs
 }
 
 func healthListenerFromEnvironment(fallbackAddress string, fallbackAllowNetwork bool) (string, bool, []*ConfigError) {

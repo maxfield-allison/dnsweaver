@@ -171,15 +171,8 @@ func TestApprovedPolicyIsExactAndCurrent(t *testing.T) {
 		"a supported fixed release on the current Docker module path becomes available",
 		"a stable github.com/moby/moby/v2 client module becomes available",
 	}
-	cryptoModuleTriggers := []string{
-		"dnsweaver imports any x/crypto/openpgp package",
-		"advisory or Go vulnerability database scope changes",
-		"the dependency graph changes package reachability",
-		"a supported fixed x/crypto release becomes available",
-	}
 	const dockerSymbolRationale = "Advisory metadata describes Docker daemon plugin and authorization behavior; the inspected dnsweaver paths use the Docker client and do not import daemon, plugin, or server code. Acceptance is limited to this exact scanner scope and retains the residual metadata ambiguity."
 	const dockerModuleRationale = "The scanner reports only module reachability. The affected unexported Docker daemon archive and copy functions are not imported or called by dnsweaver."
-	const cryptoModuleRationale = "The scanner reports only module reachability for x/crypto/openpgp. dnsweaver imports x/crypto/ssh and ssh/knownhosts, not openpgp."
 	type scope struct {
 		module       string
 		version      string
@@ -194,7 +187,6 @@ func TestApprovedPolicyIsExactAndCurrent(t *testing.T) {
 		"GO-2026-5617": {"github.com/docker/docker", "v28.5.2+incompatible", "module", nil, dockerModuleRationale, dockerModuleTriggers},
 		"GO-2026-5668": {"github.com/docker/docker", "v28.5.2+incompatible", "module", nil, dockerModuleRationale, dockerModuleTriggers},
 		"GO-2026-5746": {"github.com/docker/docker", "v28.5.2+incompatible", "module", nil, dockerModuleRationale, dockerModuleTriggers},
-		"GO-2026-5932": {"golang.org/x/crypto", "v0.58.0", "module", nil, cryptoModuleRationale, cryptoModuleTriggers},
 	}
 
 	reviewPath := filepath.Join("..", "..", "security", "govulncheck-exception-review.md")
@@ -214,7 +206,7 @@ func TestApprovedPolicyIsExactAndCurrent(t *testing.T) {
 	if len(policy.Exceptions) != len(expected) {
 		t.Fatalf("approved exceptions = %d, want %d", len(policy.Exceptions), len(expected))
 	}
-	asOf := time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)
+	asOf := time.Date(2026, 11, 17, 0, 0, 0, 0, time.UTC)
 	for _, item := range policy.Exceptions {
 		want, ok := expected[item.ID]
 		if !ok {
@@ -223,7 +215,7 @@ func TestApprovedPolicyIsExactAndCurrent(t *testing.T) {
 		if item.Module != want.module || item.ModuleVersion != want.version || item.Reachability != want.reachability || !equalStrings(item.Packages, want.packages) {
 			t.Fatalf("scope for %s = %s@%s %s %v, want %s@%s %s %v", item.ID, item.Module, item.ModuleVersion, item.Reachability, item.Packages, want.module, want.version, want.reachability, want.packages)
 		}
-		if item.Status != "accepted" || item.Owner != "Max Allison" || item.Rationale != want.rationale || item.EvidenceRevision != evidenceRevision || item.DecisionReference != decisionReference || item.DecisionDate != "2026-10-15" || item.ReviewDate != "2026-11-16" || item.ExpiresAt != "2026-12-16" {
+		if item.Status != "accepted" || item.Owner != "Max Allison" || item.Rationale != want.rationale || item.EvidenceRevision != evidenceRevision || item.DecisionReference != decisionReference || item.DecisionDate != "2026-10-15" || item.ReviewDate != "2026-12-01" || item.ExpiresAt != "2026-12-16" {
 			t.Fatalf("authority metadata for %s changed: %+v", item.ID, item)
 		}
 		if !equalStrings(item.ReviewTriggers, want.triggers) {

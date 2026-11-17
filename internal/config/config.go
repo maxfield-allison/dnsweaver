@@ -72,11 +72,11 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Merge global config with env var overrides
+	// File globals already include environment overrides.
 	var global *GlobalConfig
 	var globalErrs []*ConfigError
 	if fileGlobal != nil {
-		global, globalErrs = mergeGlobalConfig(fileGlobal)
+		global = fileGlobal
 	} else {
 		global, globalErrs = loadGlobalConfig()
 	}
@@ -100,8 +100,6 @@ func Load() (*Config, error) {
 		// Use file providers with env var overrides for secrets and other settings
 		for _, fp := range fileProviders {
 			providerNames = append(providerNames, fp.Name)
-			// Apply env var overrides to file-based provider config
-			allErrors = append(allErrors, mergeProviderEnvOverrides(fp)...)
 			instances = append(instances, fp)
 		}
 	} else {
@@ -115,7 +113,7 @@ func Load() (*Config, error) {
 
 	// Determine sources: env vars take precedence
 	var sources *SourceConfig
-	if getEnv("DNSWEAVER_SOURCES") != "" {
+	if getEnv("DNSWEAVER_SOURCES") != "" || getEnv("DNSWEAVER_SOURCE") != "" {
 		// Env vars define sources
 		sources = loadSourceConfig()
 	} else if fileSources != nil {

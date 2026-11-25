@@ -564,6 +564,15 @@ func (c *Config) HasFileDiscovery() bool {
 	return c.Sources != nil && c.Sources.HasFileDiscovery()
 }
 
+// FileDiscoveryPollInterval returns the shortest configured file discovery
+// polling interval, or 0 if no source has file discovery enabled.
+func (c *Config) FileDiscoveryPollInterval() time.Duration {
+	if c.Sources == nil {
+		return 0
+	}
+	return c.Sources.FileDiscoveryPollInterval()
+}
+
 // String returns a summary of the configuration (without secrets).
 func (c *Config) String() string {
 	sourceNames := "[]"

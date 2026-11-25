@@ -1,0 +1,1 @@
+Honour `DNSWEAVER_SOURCE_<NAME>_POLL_INTERVAL` / `file_discovery.poll_interval`. The file watcher was always created with its 60s default, so configured intervals were parsed but had no effect; it now polls at the shortest interval among sources with file discovery enabled.

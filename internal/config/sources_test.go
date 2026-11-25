@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/maxfield-allison/dnsweaver/pkg/source"
 )
 
 func TestParseSources(t *testing.T) {
@@ -405,5 +407,46 @@ func TestLoadSourceConfig_DefaultEntryPoints(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestFileDiscoveryPollInterval(t *testing.T) {
+	enabled := func(name string, d time.Duration) *SourceInstanceConfig {
+		inst := &SourceInstanceConfig{Name: name, FileDiscovery: source.DefaultFileDiscoveryConfig()}
+		inst.FileDiscovery.FilePaths = []string{"/rules"}
+		inst.FileDiscovery.PollInterval = d
+		return inst
+	}
+	disabled := &SourceInstanceConfig{Name: "caddy", FileDiscovery: source.DefaultFileDiscoveryConfig()}
+	disabled.FileDiscovery.PollInterval = time.Second // ignored: no file paths
+
+	tests := []struct {
+		name      string
+		instances []*SourceInstanceConfig
+		want      time.Duration
+	}{
+		{name: "no file discovery", instances: []*SourceInstanceConfig{disabled}, want: 0},
+		{name: "single source", instances: []*SourceInstanceConfig{enabled("traefik", 15*time.Second)}, want: 15 * time.Second},
+		{name: "default interval", instances: []*SourceInstanceConfig{enabled("traefik", 60*time.Second)}, want: 60 * time.Second},
+		{name: "shortest enabled wins", instances: []*SourceInstanceConfig{enabled("traefik", 45*time.Second), disabled, enabled("caddy", 20*time.Second)}, want: 20 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &SourceConfig{Instances: tt.instances}
+			if got := cfg.FileDiscoveryPollInterval(); got != tt.want {
+				t.Fatalf("FileDiscoveryPollInterval() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFileDiscoveryPollIntervalFromEnv(t *testing.T) {
+	clearAllEnv(t)
+	defer clearAllEnv(t)
+	t.Setenv("DNSWEAVER_SOURCES", "traefik")
+	t.Setenv("DNSWEAVER_SOURCE_TRAEFIK_FILE_PATHS", "/rules")
+	t.Setenv("DNSWEAVER_SOURCE_TRAEFIK_POLL_INTERVAL", "15s")
+	if got := (&Config{Sources: loadSourceConfig()}).FileDiscoveryPollInterval(); got != 15*time.Second {
+		t.Fatalf("FileDiscoveryPollInterval() = %v, want 15s", got)
 	}
 }

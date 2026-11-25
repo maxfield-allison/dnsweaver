@@ -49,9 +49,18 @@ func companionState(record *apiRecord) string {
 	return strconv.Itoa(record.TTL) + ":" + string(record.RData.SvcParams)
 }
 
-// RecordNeedsUpdate exposes companion drift to the normal ownership-gated
-// update path, including when the parent address itself has not changed.
+// RecordNeedsUpdate exposes provider-side drift to the normal ownership-gated
+// update path: a changed TTL on an A, AAAA or CNAME record, and companion
+// HTTPS drift, including when the parent address itself has not changed.
 func (p *Provider) RecordNeedsUpdate(existing, desired provider.Record) bool {
+	ttl := desired.TTL
+	if ttl <= 0 {
+		ttl = p.ttl
+	}
+	if ttlDrifted(existing, desired.Type, ttl) {
+		return true
+	}
+
 	if !p.autoHTTPSRecords || !needsCompanionHTTPS(desired.Type) {
 		return false
 	}
@@ -59,11 +68,21 @@ func (p *Provider) RecordNeedsUpdate(existing, desired provider.Record) bool {
 	if !known || state == protectedCompanionState {
 		return false
 	}
-	ttl := desired.TTL
-	if ttl <= 0 {
-		ttl = p.ttl
-	}
 	return state != strconv.Itoa(ttl)+":"+buildSvcParams(p.autoHTTPSALPN)
+}
+
+// ttlDrifted reports whether an existing record's TTL differs from the TTL
+// that would be written for it. Technitium lists the real per-record TTL, so a
+// changed instance TTL (DNSWEAVER_{NAME}_TTL / providers[].ttl) is drift that
+// Update applies in place. Only record types that Update rewrites natively are
+// considered; a zero listed TTL is treated as unknown rather than drift.
+func ttlDrifted(existing provider.Record, recordType provider.RecordType, ttl int) bool {
+	switch recordType {
+	case provider.RecordTypeA, provider.RecordTypeAAAA, provider.RecordTypeCNAME:
+		return existing.TTL > 0 && existing.TTL != ttl
+	default:
+		return false
+	}
 }
 
 // needsCompanionHTTPS returns true if the given record type should trigger

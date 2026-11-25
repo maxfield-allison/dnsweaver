@@ -540,7 +540,17 @@ func run() error {
 	// Initialize file watcher for sources with file discovery (#22)
 	var fileWatcher *source.FileWatcher
 	if cfg.HasFileDiscovery() {
-		logger.Info("file discovery enabled, starting file watcher")
+		// The watcher is shared by all sources, so it polls at the shortest
+		// configured interval (DNSWEAVER_SOURCE_<NAME>_POLL_INTERVAL /
+		// file_discovery.poll_interval).
+		watcherOpts := []source.FileWatcherOption{source.WithWatcherLogger(logger)}
+		pollInterval := cfg.FileDiscoveryPollInterval()
+		if pollInterval > 0 {
+			watcherOpts = append(watcherOpts, source.WithPollInterval(pollInterval))
+		}
+		logger.Info("file discovery enabled, starting file watcher",
+			slog.Duration("poll_interval", pollInterval),
+		)
 		fileWatcher = source.NewFileWatcher(sourceRegistry,
 			func(sourceName string, hostnames []source.Hostname) {
 				logger.Info("file watcher detected changes",
@@ -549,7 +559,7 @@ func run() error {
 				)
 				triggerReconcile()
 			},
-			source.WithWatcherLogger(logger),
+			watcherOpts...,
 		)
 	}
 

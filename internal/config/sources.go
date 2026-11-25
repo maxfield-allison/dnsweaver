@@ -176,3 +176,20 @@ func (c *SourceConfig) HasFileDiscovery() bool {
 	}
 	return false
 }
+
+// FileDiscoveryPollInterval returns the polling interval for the shared file
+// watcher: the shortest PollInterval among sources with file discovery
+// enabled. Returns 0 if no source has file discovery enabled.
+func (c *SourceConfig) FileDiscoveryPollInterval() time.Duration {
+	var shortest time.Duration
+	for _, inst := range c.Instances {
+		d := inst.FileDiscovery.PollInterval
+		if !inst.FileDiscovery.IsEnabled() || d <= 0 {
+			continue
+		}
+		if shortest == 0 || d < shortest {
+			shortest = d
+		}
+	}
+	return shortest
+}

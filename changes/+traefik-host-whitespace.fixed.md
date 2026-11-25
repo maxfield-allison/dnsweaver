@@ -1,0 +1,1 @@
+Extract hostnames from Traefik rules that contain whitespace inside `Host()`, such as ``Host( `app.example.com` )``, which Traefik accepts and commonly produces from `defaultRule` templates. `HostRegexp` and `HostSNI` matchers are still ignored.

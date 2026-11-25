@@ -8,7 +8,13 @@ import (
 
 // hostRegex matches Host(`hostname`) patterns in Traefik router rules.
 // Captures the hostname inside the backticks.
-var hostRegex = regexp.MustCompile(`Host\(` + "`" + `([^` + "`" + `]+)` + "`" + `\)`)
+//
+// Whitespace is tolerated between the parentheses and the backticks
+// (Host( `app.example.com` )) because Traefik accepts it and rules rendered
+// from a `defaultRule` template commonly contain it. The opening parenthesis
+// must still follow "Host" directly, so HostRegexp(...) and HostSNI(...) never
+// match.
+var hostRegex = regexp.MustCompile(`Host\(\s*` + "`" + `([^` + "`" + `]+)` + "`" + `\s*\)`)
 
 // routerLabelPrefix is the prefix for Traefik HTTP router labels.
 const routerLabelPrefix = "traefik.http.routers."

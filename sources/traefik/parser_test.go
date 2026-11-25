@@ -356,6 +356,26 @@ func TestExtractHostsFromRule(t *testing.T) {
 			rule: "HostRegexp(`{subdomain:[a-z]+}.example.com`)",
 			want: nil,
 		},
+		{
+			name: "whitespace inside parentheses",
+			rule: "Host( `app.example.com` )",
+			want: []string{"app.example.com"},
+		},
+		{
+			name: "defaultRule-style rule with whitespace and HostRegexp",
+			rule: "Host( `app.example.com` ) || Host( `app.node.example.com` ) || HostRegexp( `^app\\.example\\.lan$` )",
+			want: []string{"app.example.com", "app.node.example.com"},
+		},
+		{
+			name: "whitespace host combined with PathPrefix",
+			rule: "PathPrefix( `/dns-query` ) && ( Host( `ns.example.com` ) || HostRegexp( `^ns\\.example\\.lan$` ) )",
+			want: []string{"ns.example.com"},
+		},
+		{
+			name: "HostSNI not matched",
+			rule: "HostSNI(`db.example.com`)",
+			want: nil,
+		},
 	}
 
 	for _, tt := range tests {
